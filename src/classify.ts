@@ -22,7 +22,7 @@ const RULES: PatternRule[] = [
   {
     type: "praise",
     patterns: [
-      /好厉害|太棒了|真不错|太强了|佩服|牛|优秀|漂亮|完美|了不起/,
+      /好厉害|太棒了|真棒|很棒|好棒|真不错|太强了|佩服|牛|优秀|漂亮|完美|了不起/,
       /amazing|awesome|great job|well done|impressive|brilliant|excellent|perfect/i,
       /谢谢你|感谢|辛苦了|thank you|thanks/i,
       /做得好|写得好|说得好|干得漂亮/,
@@ -137,7 +137,7 @@ const RULES: PatternRule[] = [
     type: "vulnerability",
     patterns: [
       /我害怕|我焦虑|我难过|我不开心|我迷茫|我累了|压力好大/,
-      /I'm afraid|I'm anxious|I'm sad|I'm lost|I'm tired|stressed/i,
+      /I'm (?:so |really |very )?(?:afraid|anxious|sad|lost|tired|stressed|scared|lonely)/i,
       /最近不太好|心情不好|有点崩|撑不住/,
       /我觉得.*厉害|跟不上|被取代|落后/,
       /好难过|想哭|做不好|好累|好烦|感觉.*不行|没有意义/,
@@ -177,13 +177,44 @@ export function classifyStimulus(text: string): StimulusClassification[] {
     }
   }
 
+  // ── Structural signals (message-level features) ──
+  // When keywords miss, message shape still carries meaning.
+  const len = text.length;
+  const hasI = /我/.test(text) || /\bI\b/i.test(text);
+  const hasEllipsis = /\.{2,}|。{2,}|…/.test(text);
+  const hasQuestion = /？|\?/.test(text);
+  const sentenceCount = text.split(/[。！？!?.…]+/).filter(Boolean).length;
+
+  if (results.length === 0) {
+    // No keyword matched — use structural fallback
+    if (len === 0) {
+      // Empty input — neutral
+      results.push({ type: "casual", confidence: 0.3 });
+    } else if (len <= 4 && !hasQuestion) {
+      // Ultra-short non-question: "好" "行" "哦" — neglect-like
+      results.push({ type: "neglect", confidence: 0.45 });
+    } else if (hasI && hasEllipsis) {
+      // Personal + trailing off: "我觉得...有点难" — vulnerability
+      results.push({ type: "vulnerability", confidence: 0.55 });
+    } else if (hasI && len > 8) {
+      // Personal sharing (any meaningful length) — engagement signal
+      results.push({ type: "casual", confidence: 0.55 });
+    } else if (hasQuestion) {
+      // Any question — intellectual curiosity or casual
+      results.push({ type: "casual", confidence: 0.55 });
+    } else {
+      results.push({ type: "casual", confidence: 0.3 });
+    }
+  } else {
+    // Keywords matched — structural features can boost confidence
+    if (hasI && len > 30 && results[0].confidence < 0.8) {
+      // Long personal message boosts the primary match slightly
+      results[0].confidence = Math.min(0.9, results[0].confidence + 0.1);
+    }
+  }
+
   // Sort by confidence descending
   results.sort((a, b) => b.confidence - a.confidence);
-
-  // Fall back to casual if nothing detected
-  if (results.length === 0) {
-    results.push({ type: "casual", confidence: 0.3 });
-  }
 
   return results;
 }

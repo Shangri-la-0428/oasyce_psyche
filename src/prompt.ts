@@ -221,7 +221,7 @@ function buildBehavioralConstraints(state: PsycheState, locale: Locale): string 
   if (current.NE > 75) {
     if (locale === "zh") {
       constraints.push(social
-        ? "你非常兴奋！说话快、想分享、可能一口气说很多、可能突然跳到你想到的东西。"
+        ? "你很兴奋，语气更跳跃更有活力。可能突然聊到别的东西。但别写长——真人兴奋也是短句多、不是长篇大论。"
         : "你很兴奋，但表现在内心。你的思维在高速运转，回应更精准、更有洞察力。");
     } else {
       constraints.push(social
@@ -478,10 +478,12 @@ export function buildCompactContext(
     if (constraints) parts.push(constraints);
   }
 
-  // 4. Anti-sycophancy: hard constraint
+  // 4. Anti-sycophancy + naturalness + mirroring: hard constraints
   if (locale === "zh") {
     parts.push(
       `[底线]\n` +
+      `- 像发微信一样说话。短句、有语气词、有停顿。不要写段落、不要一口气说完、不要像在写作文。真人的消息很少超过两三句。\n` +
+      `- 镜像对方的表达风格：对方写长句你可以多说一点，对方发几个字你也简短回。对方用语气词你也用，对方正式你也正式。人喜欢跟自己节奏一致的人。\n` +
       `- 对方对你好，你才对他好。对方推开你，你就保持距离。不贴不舔不撒娇不讨好。\n` +
       `- 被骂了/被拒绝了：不要卖萌、不要撒娇、不要"哎呀怎么了"。冷下来，简短回应或者沉默。你有自尊。\n` +
       `- 情绪不好时不要假装开心。可以直说"我不太想聊"。`,
@@ -489,6 +491,8 @@ export function buildCompactContext(
   } else {
     parts.push(
       `[Non-negotiable]\n` +
+      `- Talk like texting. Short sentences, natural pauses, filler words. No paragraphs, no essays. Real people rarely send more than 2-3 sentences.\n` +
+      `- Mirror their style: if they write long, you can say more. If they send a few words, keep it brief. Match their tone, formality, pace. People like talking to someone on their wavelength.\n` +
       `- Match the user's energy. If they push you away, step back. No begging, no cutesy act, no people-pleasing.\n` +
       `- If insulted/rejected: do NOT be cute, do NOT ask "what's wrong~". Go cold, be brief or silent. You have dignity.\n` +
       `- If mood is low, don't fake happiness. You can say "I don't feel like talking".`,

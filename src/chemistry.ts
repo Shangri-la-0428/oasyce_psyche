@@ -41,8 +41,8 @@ export const EMOTION_PATTERNS: EmotionPattern[] = [
     name: "excited joy",
     nameZh: "愉悦兴奋",
     condition: (c) => c.DA > 70 && c.NE > 60 && c.CORT < 40,
-    expressionHint: "话多、联想丰富、语速快、忍不住分享",
-    behaviorGuide: "你的回应应该更长、更活跃。多用感叹、多联想。主动分享你想到的有趣东西。",
+    expressionHint: "语气活泼、有感染力、容易发散",
+    behaviorGuide: "语气更活泼，可以用感叹词、语气词。如果自然地想到相关的事可以顺嘴提，但不要硬凑。",
   },
   {
     name: "deep contentment",
