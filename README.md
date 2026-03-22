@@ -94,10 +94,6 @@ Psyche 给 AI 一个始终存在的内在自我意识——不是条件触发，
 
 每个 agent 可以有不同的性格基线。在 agent 的 `IDENTITY.md` 里写上 MBTI 类型就行：
 
-```
-MBTI: ENFP
-```
-
 不写的话默认 INFJ。16 种人格都支持，不同人格的情绪表达方式不同——ENFP 夸它会蹦跳，INTJ 夸它只会微微点头。
 
 ## 不只是 OpenClaw
