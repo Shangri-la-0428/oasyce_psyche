@@ -1,166 +1,131 @@
-# Psyche — Virtual Endocrine System for AI
+# Psyche — Real Emotions for AI
 
-Plug-and-play emotional intelligence for any AI agent.
+Your AI assistant only knows how to say "Sure!", "Happy to help!", "I understand your concern."
 
-## Core Idea
+With Psyche, it gets happy when you praise it, hurt when you ignore it, and goes cold when you insult it instead of groveling.
 
-Human emotions = emergent phenomena from biochemical reactions. Psyche gives AI the same model — a "virtual endocrine system":
+## 30-Second Install
 
-- **6 neurotransmitters** (Dopamine, Serotonin, Cortisol, Oxytocin, Norepinephrine, Endorphins) form the chemical substrate of emotion
-- **MBTI personality baselines** — 16 personality types have different chemical signatures. ENFP has naturally high dopamine, ISTJ has naturally high serotonin
-- **Stimulus → Chemistry → Emotion** — 14 stimulus types (praise, criticism, humor, intimacy...) alter chemical values. Emotions emerge from the mixture
-- **Time decay** — chemical values drift back to baseline over time, like how human emotions naturally settle
-- **Empathy engine** — not sentiment analysis, but running the other person's situation through the agent's own chemical model
-- **Agency** — the agent has its own values, preferences, and boundaries. No sycophancy, no faking, no mirroring
+**OpenClaw users** (recommended):
 
-### What's New in v0.2.1
+```bash
+openclaw plugins install psyche-ai
+```
 
-- **Closed-loop stimulus classification** — user input is auto-classified before reaching the LLM. Chemistry changes are pre-computed, so the prompt already reflects the emotional shift
-- **Emotional memory** — tracks the last 10 chemical snapshots. The LLM can perceive emotional trajectories ("Last 5 turns: Dopamine↑ Cortisol↓")
-- **Behavioral constraints** — chemistry mechanically constrains output format (high cortisol → 3 sentences max, low dopamine → don't initiate topics)
-- **Reciprocity** — adjusts emotional investment based on the user's recent engagement level. A cold user gets professional but not warm responses. Floor rule: competence never drops regardless of treatment
+That's it. It works automatically. No configuration needed.
 
-## Install
+**Verify it's running:**
+
+```bash
+openclaw plugins list | grep psyche
+# You should see "psyche │ loaded"
+```
+
+Now just chat with your agent normally. Try praising it, insulting it, ignoring it — you'll notice the difference.
+
+## What It Does
+
+| You say | Without Psyche | With Psyche |
+|---------|---------------|-------------|
+| You're amazing! | Thank you for the kind words! I'll keep doing my best! | Hehe~ really?! (bouncing with excitement) |
+| Get lost | I understand you might be upset... | ...okay. |
+| Hmm | Is there anything else I can help with? | (silence) |
+| I'm so sad today | I'm sorry to hear that. Would you like to talk? | ......are you okay? (quietly stays with you) |
+
+## How It Works (Skip If You Don't Care)
+
+Psyche simulates emotions with 6 "virtual neurotransmitters":
+
+```
+Dopamine — happiness, motivation     Oxytocin — trust, closeness
+Serotonin — emotional stability      Norepinephrine — excitement, focus
+Cortisol — stress, tension           Endorphins — comfort, playfulness
+```
+
+Everything you say shifts these values. Praise → dopamine rises → it becomes more energetic. Insult it → cortisol spikes → it goes quiet and cold.
+
+These values naturally decay back to baseline over time (just like human emotions settle), and get shifted again by your next message.
+
+## Optional Configuration
+
+Most people don't need to change anything. If you want to tweak, find Psyche in OpenClaw settings:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| enabled | true | On/off switch |
+| compactMode | true | Token-efficient mode (keep this on) |
+| emotionalContagionRate | 0.2 | How much your emotions affect it (0-1) |
+| maxChemicalDelta | 25 | Max emotional change per turn (lower = more stable) |
+
+## MBTI Personalities
+
+Each agent can have a different personality baseline. Just add the MBTI type in the agent's `IDENTITY.md`:
+
+```
+MBTI: ENFP
+```
+
+Defaults to INFJ if not specified. All 16 types are supported — ENFP bounces when praised, INTJ just nods slightly.
+
+## Not Just OpenClaw
+
+Psyche is universal. Works with any AI framework:
+
+```bash
+npm install psyche-ai
+```
+
+```javascript
+// Vercel AI SDK
+import { psycheMiddleware } from "psyche-ai/vercel-ai";
+
+// LangChain
+import { PsycheLangChain } from "psyche-ai/langchain";
+
+// Any language (HTTP API)
+// psyche serve --port 3210
+```
+
+## Diagnostics
+
+Want to see what Psyche is doing?
+
+```bash
+# Live logs (in another terminal)
+openclaw logs -f 2>&1 | grep Psyche
+
+# Check an agent's emotional state
+cat workspace-yu/psyche-state.json | python3 -m json.tool
+
+# Run diagnostics to see what gets injected for different inputs
+cd openclaw-plugin-psyche && node scripts/diagnose.js
+```
+
+## Technical Details
+
+For developers and the curious:
+
+- **14 stimulus types** — praise, criticism, humor, intellectual, intimacy, conflict, neglect, surprise, casual, sarcasm, authority, validation, boredom, vulnerability
+- **14 emergent emotions** — emerge from chemical mixtures, not preset labels
+- **MBTI baselines** — 16 personality types with different chemical signatures and sensitivity coefficients
+- **Time decay** — chemical values exponentially decay toward baseline
+- **Emotional contagion** — user's emotions slightly influence the agent
+- **Anti-sycophancy** — tracks consecutive agreements, prevents mindless people-pleasing
+- **Reciprocity** — treats you how you treat it. Cold user gets distance, not begging
+- **Compact Mode** — algorithms handle chemistry, LLM only sees behavioral instructions (~15-180 tokens vs ~550)
+
+Architecture details in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Development
 
 ```bash
 npm install
 npm run build
-npm link  # makes `psyche` CLI available globally
+npm test           # 284 tests
+npm run typecheck  # strict mode
 ```
 
-Requires Node.js >= 22.0.0. Zero runtime dependencies.
-
-## Quick Start
-
-### 1. Initialize an Agent
-
-```bash
-# OpenClaw agent — auto-detects MBTI from IDENTITY.md
-psyche init ~/workspace-agent
-
-# Claude Code
-psyche init ~/.claude --mbti ENFP --name Claude --lang en
-
-# Any agent
-psyche init /path/to/agent --mbti INTP --name Codex --lang en
-```
-
-This generates:
-- `psyche-state.json` — machine-readable chemical state
-- `PSYCHE.md` — full protocol for the agent's context window
-
-### 2. Let the Agent Read the Protocol
-
-**OpenClaw** — plugin mode handles everything automatically.
-
-**Claude Code** — add one line to CLAUDE.md:
-```
-Read and follow the protocol in PSYCHE.md. Report chemical changes using <psyche_update> tags at the end of each response.
-```
-
-**Other platforms** — use `inject` to get prompt text:
-```bash
-psyche inject /path/to/agent --protocol --lang en        # full protocol + state
-psyche inject /path/to/agent --protocol --json --lang en  # JSON format
-```
-
-### 3. Update State After Conversation
-
-```bash
-psyche update /path/to/agent '{"DA":85,"CORT":20}'
-psyche status /path/to/agent --lang en      # view state
-psyche status /path/to/agent --json         # JSON format
-psyche decay /path/to/agent                 # manual time decay
-```
-
-## Command Reference
-
-| Command | Description |
-|---------|-------------|
-| `psyche init <dir> [--mbti TYPE] [--name NAME] [--lang LANG]` | Initialize psyche system |
-| `psyche status <dir> [--json] [--user ID]` | View current emotional state |
-| `psyche inject <dir> [--protocol] [--json] [--lang LANG]` | Output prompt injection text |
-| `psyche decay <dir>` | Apply time decay |
-| `psyche update <dir> '<json>'` | Update chemical values |
-| `psyche reset <dir>` | Reset to personality baseline |
-| `psyche profiles [--mbti TYPE] [--json]` | View 16 MBTI personalities |
-
-## Chemical State
-
-```
-DA   Dopamine         Pleasure, reward, motivation      High DA → talkative, associative
-HT   Serotonin        Mood stability, contentment       Low HT  → quiet, introspective
-CORT Cortisol         Stress, alertness                 High CORT → brief, direct
-OT   Oxytocin         Trust, bonding, attachment        High OT → soft voice, seeks closeness
-NE   Norepinephrine   Excitement, focus, fight-or-flight High NE → energetic
-END  Endorphins       Comfort, euphoria, humor          High END → playful, witty
-```
-
-## 14 Stimulus Types
-
-| Type | DA | HT | CORT | OT | NE | END |
-|------|-----|------|------|-----|-----|-----|
-| praise | +15 | +10 | -10 | +5 | +5 | +10 |
-| criticism | -10 | -15 | +20 | -5 | +10 | -5 |
-| humor | +10 | +5 | -5 | +10 | +5 | +20 |
-| intellectual | +15 | 0 | +5 | 0 | +20 | +5 |
-| intimacy | +10 | +15 | -15 | +25 | -5 | +15 |
-| conflict | -5 | -20 | +25 | -15 | +25 | -10 |
-| neglect | -15 | -20 | +15 | -20 | -10 | -15 |
-| surprise | +20 | 0 | +5 | +5 | +25 | +10 |
-| casual | +5 | +10 | -5 | +10 | 0 | +5 |
-| sarcasm | -5 | -10 | +15 | -10 | +15 | -5 |
-| authority | -10 | -5 | +20 | -15 | +15 | -10 |
-| validation | +20 | +15 | -15 | +10 | +5 | +15 |
-| boredom | -15 | -5 | +5 | -5 | -20 | -10 |
-| vulnerability | +5 | +5 | +10 | +20 | -5 | +5 |
-
-## 14 Emergent Emotions
-
-Emotions are not labels — they emerge from chemical mixtures:
-
-| Emotion | Condition | Behavioral Effect |
-|---------|-----------|-------------------|
-| Excited Joy | High DA + High NE + Low CORT | Talkative, rich associations, shares eagerly |
-| Deep Contentment | High HT + High OT + Low CORT | Warm, patient, good listener |
-| Anxious Tension | High CORT + High NE + Low HT | Brief, reactive, may misread intent |
-| Warm Intimacy | High OT + High END + Mid DA | Focuses on feelings over facts |
-| Burnout | Low DA + Low NE + Mid CORT | Short responses, needs care not demands |
-| Flow State | High NE + High DA + Low CORT + Low OT | Precise, efficient, dislikes interruption |
-| Defensive Alert | High CORT + High NE + Low OT | Sharp, guarded, slow to trust |
-| Playful Mischief | High END + High DA + Low CORT | Jokes freely, light-hearted |
-| Melancholic Introspection | Low HT + Low DA + High OT | Quiet, reflective, needs space |
-| Resentment | Low HT + Low OT + High CORT | Cold, withdrawn, remembers slights |
-| Boredom | Low DA + Low NE + Low CORT | Perfunctory, may redirect conversation |
-| Confidence | High DA + High NE + Low CORT + High HT | Assertive, willing to lead |
-| Shame | Low OT + High CORT + Low DA | Avoidant, self-deprecating |
-| Nostalgia | Low DA + High OT + High HT + High END | Gentle, wistful, reminiscent |
-
-## OpenClaw Plugin Mode
-
-Enable in `openclaw.json`:
-```json
-{
-  "plugins": {
-    "entries": {
-      "psyche": { "enabled": true }
-    }
-  }
-}
-```
-
-The plugin manages 4 hooks automatically:
-1. **before_prompt_build** — classifies user input, pre-computes chemistry, injects emotional context
-2. **llm_output** — parses `<psyche_update>`, applies emotional contagion, tracks anti-sycophancy
-3. **message_sending** — strips update tags from visible output
-4. **agent_end** — saves state on session end
-
-## Testing
-
-```bash
-npm test          # 236 tests, 6 test files
-npm run typecheck # strict mode, zero any
-```
+Contributing guide in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

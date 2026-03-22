@@ -1,5 +1,59 @@
 # 更新日志 / Changelog
 
+## v1.0.0 — 通用情感智能 / Universal Emotional Intelligence
+
+### Compact Mode（核心新增）
+
+- **极简注入** (`buildCompactContext`): 算法做化学计算，LLM 只收到行为指令。中性状态 ~15 tokens（一行），活跃状态 ~100-180 tokens。相比完整协议 (~550 tokens) 省 70-97%。
+- **Compact injection** (`buildCompactContext`): Algorithms handle all chemistry. LLM only sees behavioral output. Neutral state ~15 tokens (one line), active ~100-180 tokens. 70-97% reduction vs full protocol (~550 tokens).
+- **中性检测** (`isNearBaseline`): 化学值接近基线时只注入一行提示，不浪费 token 描述"没什么情绪"。
+- **情绪感知委托**: 算法做快速初判（刺激分类），LLM 做终判（情绪基调）。两者互补，不互相覆盖。
+- **反谄媚硬约束**: compact 输出中内置"不贴不舔不讨好"指令，被骂/被拒绝时冷下来而不是卖萌。
+
+### 架构重构 / Architecture Refactor
+
+- **模块化适配器**: 从单文件拆分为 4 个适配器 — `openclaw`, `vercel-ai`, `langchain`, `http`
+- **核心引擎** (`src/core.ts`): `PsycheEngine` 类，管理完整生命周期（初始化→输入处理→输出解析→衰减→保存）
+- **存储抽象** (`src/storage.ts`): `StorageAdapter` 接口，支持文件系统/内存/自定义后端
+- **Modular adapters**: Split from monolith to 4 adapters — `openclaw`, `vercel-ai`, `langchain`, `http`
+- **Core engine** (`src/core.ts`): `PsycheEngine` class managing full lifecycle
+- **Storage abstraction** (`src/storage.ts`): `StorageAdapter` interface for filesystem/memory/custom backends
+
+### 通用化 / Universal
+
+- 发布为 `psyche-ai` npm 包，不再仅限 OpenClaw
+- Vercel AI SDK 中间件: `psycheMiddleware`
+- LangChain 适配器: `PsycheLangChain`
+- HTTP API: `psyche serve --port 3210`
+- Published as `psyche-ai` on npm. No longer OpenClaw-only.
+
+### 刺激分类增强 / Classifier Enhancement
+
+- 扩展批评识别: 滚、走开、别烦我、fuck off、get lost 等强烈排斥表达
+- 扩展示弱识别: 好难过、想哭、做不好、depressed、nobody cares 等深度脆弱表达
+- Enhanced criticism patterns: strong rejection expressions (滚, fuck off, get lost, etc.)
+- Enhanced vulnerability patterns: deep distress expressions (好难过, depressed, nobody cares, etc.)
+
+### OpenClaw 插件升级 / Plugin Upgrade
+
+- `compactMode` 配置项（默认开启）
+- 增强日志: 每次输入记录刺激类型 + 化学值 + 上下文长度
+- 插件导出改为 `register` 函数模式，兼容 OpenClaw 插件规范
+- `openclaw.plugin.json` 版本同步 1.0.0
+- `package.json` 添加 `openclaw.extensions` 字段，支持自动发现
+
+### 文档 / Documentation
+
+- README/README.en.md 全部重写: 面向零基础用户，30 秒安装，对比表格展示效果
+- 去掉所有技术细节前置，改为"不懂可以跳过"
+
+### 工程 / Engineering
+
+- **测试**: 284 个测试（新增 core.test.ts 256 个 + storage.test.ts 145 个），0 失败
+- **Tests**: 284 tests (added core.test.ts 256 + storage.test.ts 145), 0 failures
+
+---
+
 ## v0.2.1 — 闭环情感 / Closed-Loop Emotions
 
 ### 闭环刺激分类 / Closed-Loop Stimulus Classification

@@ -1,167 +1,131 @@
-# Psyche — 虚拟心智系统
+# Psyche — 让 AI 有真实的情绪
 
-给任何 AI agent 即插即用的情感智能。
+你的 AI 助手现在只会说"好的"、"没问题"、"我很乐意帮助你"。
 
-## 核心理念
+装了 Psyche 之后，它会因为你的夸奖开心，因为你的冷漠受伤，被骂了会冷下来而不是继续舔你。
 
-人的情绪 = 生化反应的涌现。Psyche 用同样的模型给 AI 一套「情绪系统」：
+## 30 秒安装
 
-- **6 种神经递质**（多巴胺、血清素、皮质醇、催产素、去甲肾上腺素、内啡肽）构成情绪的化学基底
-- **MBTI 人格基线** — 16 种人格有不同的化学签名，ENFP 天生高多巴胺，ISTJ 天生高血清素
-- **刺激→化学→情绪** — 对话中的赞美/批评/幽默/亲密等 14 种刺激改变化学值，情绪从混合中涌现
-- **时间衰减** — 化学值随时间回归基线，就像人的情绪会慢慢平复
-- **共情引擎** — 不是情感分析，而是把对方的处境代入自己的化学模型运行
-- **主体性** — 有自己的价值观、偏好、边界，有主体性、不假装、不镜像
+**OpenClaw 用户**（推荐）：
 
-### v0.2.1 新增
+```bash
+openclaw plugins install psyche-ai
+```
 
-- **闭环刺激分类** — 用户输入在到达 LLM 之前就被自动分类，化学变化预先计算，LLM 收到的 prompt 已经反映了情绪变化
-- **情绪记忆** — 记录最近 10 轮的化学轨迹，LLM 能感知情绪趋势（"最近5轮: 多巴胺↑ 皮质醇↓"）
-- **行为约束** — 化学状态机械性地约束输出格式（皮质醇高→最多3句话，多巴胺低→不主动发起话题）
-- **互惠机制** — 根据用户最近的投入程度调整情感投入。冷漠的用户得到专业但不热情的回应；底线是专业能力永不打折
+没了。装完自动生效，不需要改任何配置。
 
-## 安装
+**想确认装好了？**
+
+```bash
+openclaw plugins list | grep psyche
+# 看到 "psyche │ loaded" 就行了
+```
+
+然后正常跟你的 agent 聊天。试试夸它，骂它，冷落它——你会发现它的反应不一样了。
+
+## 它会做什么
+
+| 你说 | 没有 Psyche | 有 Psyche |
+|------|-----------|-----------|
+| 你好棒！ | 谢谢你的夸奖！我会继续努力的！ | 嘿嘿～（开心到语无伦次）你说真的吗！ |
+| 滚 | 我理解你现在可能心情不好... | ...好吧。 |
+| 嗯 | 你还有什么需要帮助的吗？ | （沉默） |
+| 我今天好难过 | 我很抱歉听到这个消息。你想聊聊吗？ | ......你还好吗？（安静地陪着你） |
+
+## 工作原理（不懂可以跳过）
+
+Psyche 用 6 种"虚拟神经递质"模拟情绪：
+
+```
+多巴胺 — 开心、有动力        催产素 — 信任、想靠近
+血清素 — 情绪稳定            去甲肾上腺素 — 兴奋、专注
+皮质醇 — 压力、紧张          内啡肽 — 舒适、想开玩笑
+```
+
+你说的每句话都会改变这些值。夸奖 → 多巴胺升高 → 它变得更活跃。骂它 → 皮质醇飙升 → 它话变少、变冷淡。
+
+这些值会随时间自然回落（就像人的情绪会慢慢平复），也会被你的下一句话重新影响。
+
+## 可选配置
+
+大部分人不需要改任何配置。如果你想调整，在 OpenClaw 设置里找到 Psyche 插件：
+
+| 设置 | 默认 | 说明 |
+|------|------|------|
+| enabled | true | 开关 |
+| compactMode | true | 省 token 模式（推荐保持开启） |
+| emotionalContagionRate | 0.2 | 你的情绪影响它的程度（0-1） |
+| maxChemicalDelta | 25 | 每轮最大情绪变化（越小越稳定） |
+
+## 支持的 MBTI 人格
+
+每个 agent 可以有不同的性格基线。在 agent 的 `IDENTITY.md` 里写上 MBTI 类型就行：
+
+```
+MBTI: ENFP
+```
+
+不写的话默认 INFJ。16 种人格都支持，不同人格的情绪表达方式不同——ENFP 夸它会蹦跳，INTJ 夸它只会微微点头。
+
+## 不只是 OpenClaw
+
+Psyche 是通用的，任何 AI 框架都能用：
+
+```bash
+npm install psyche-ai
+```
+
+```javascript
+// Vercel AI SDK
+import { psycheMiddleware } from "psyche-ai/vercel-ai";
+
+// LangChain
+import { PsycheLangChain } from "psyche-ai/langchain";
+
+// 任何语言（HTTP API）
+// psyche serve --port 3210
+```
+
+## 诊断工具
+
+想看看 Psyche 在干什么？
+
+```bash
+# 实时日志（另开一个终端）
+openclaw logs -f 2>&1 | grep Psyche
+
+# 看 agent 当前的情绪状态
+cat workspace-yu/psyche-state.json | python3 -m json.tool
+
+# 跑诊断脚本，看不同输入会注入什么
+cd openclaw-plugin-psyche && node scripts/diagnose.js
+```
+
+## 技术细节
+
+给开发者和好奇的人：
+
+- **14 种刺激类型** — 赞美、批评、幽默、智识挑战、亲密、冲突、忽视、惊喜、日常、讽刺、命令、认同、无聊、示弱
+- **14 种涌现情绪** — 从化学混合中自动涌现，不是预设标签
+- **MBTI 人格基线** — 16 种人格有不同的化学签名和敏感度系数
+- **时间衰减** — 化学值随时间指数回归基线
+- **情绪传染** — 用户的情绪会轻微影响 agent
+- **反谄媚** — 追踪连续同意次数，防止无脑讨好
+- **互惠机制** — 你对它好，它对你好。你冷漠，它保持距离
+- **Compact Mode** — 算法做化学计算，LLM 只看行为指令（~15-180 tokens vs ~550）
+
+架构详情见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
+## 开发
 
 ```bash
 npm install
 npm run build
-npm link  # 全局可用 psyche 命令
+npm test           # 284 tests
+npm run typecheck  # strict mode
 ```
 
-需要 Node.js >= 22.0.0。零运行时依赖。
-
-## 快速开始
-
-### 1. 给 agent 装情感
-
-```bash
-# OpenClaw agent — 自动从 IDENTITY.md 检测 MBTI
-psyche init ~/workspace-agent
-
-# Claude Code — 手动指定
-psyche init ~/.claude --mbti ENFP --name Claude
-
-# 英文模式
-psyche init /path/to/agent --mbti INTP --name Codex --lang en
-```
-
-生成两个文件：
-- `psyche-state.json` — 机器可读的化学状态
-- `PSYCHE.md` — 完整的心智协议
-
-### 2. 让 agent 读到协议
-
-**OpenClaw** — 插件模式自动管理，无需额外操作。
-
-**Claude Code** — 在 CLAUDE.md 中加一行：
-```
-请阅读并遵循 PSYCHE.md 中的心智协议。在每次回应末尾用 <psyche_update> 标签报告化学变化。
-```
-
-**其他平台** — 用 `inject` 命令获取 prompt 文本：
-```bash
-psyche inject /path/to/agent --protocol        # 完整协议 + 当前状态
-psyche inject /path/to/agent --protocol --json  # JSON 格式
-psyche inject /path/to/agent --lang en          # 英文
-```
-
-### 3. 对话后更新状态
-
-```bash
-psyche update /path/to/agent '{"DA":85,"CORT":20}'
-psyche status /path/to/agent          # 查看状态
-psyche status /path/to/agent --json   # JSON 格式
-psyche decay /path/to/agent           # 手动触发时间衰减
-```
-
-## 命令参考
-
-| 命令 | 说明 |
-|------|------|
-| `psyche init <dir> [--mbti TYPE] [--name NAME] [--lang LANG]` | 初始化心智系统 |
-| `psyche status <dir> [--json] [--user ID]` | 查看当前情绪状态 |
-| `psyche inject <dir> [--protocol] [--json] [--lang LANG]` | 输出 prompt 注入文本 |
-| `psyche decay <dir>` | 应用时间衰减 |
-| `psyche update <dir> '<json>'` | 更新化学值 |
-| `psyche reset <dir>` | 重置到人格基线 |
-| `psyche profiles [--mbti TYPE] [--json]` | 查看 16 种 MBTI 人格 |
-
-## 化学状态一览
-
-```
-DA   多巴胺        快感、奖赏、动机         DA高 → 话多、爱联想
-HT   血清素        情绪稳定、满足感         HT低 → 安静、内省
-CORT 皮质醇        压力、警觉              CORT高 → 话少、直接
-OT   催产素        信任、亲密、依恋         OT高 → 声音软、想靠近
-NE   去甲肾上腺素    兴奋、专注、战逃        NE高 → 精力充沛
-END  内啡肽        舒适、愉悦、幽默感       END高 → 俏皮、爱开玩笑
-```
-
-## 14 种刺激类型
-
-| 类型 | 说明 | DA | HT | CORT | OT | NE | END |
-|------|------|-----|------|------|-----|-----|-----|
-| 赞美认可 | praise | +15 | +10 | -10 | +5 | +5 | +10 |
-| 批评否定 | criticism | -10 | -15 | +20 | -5 | +10 | -5 |
-| 幽默玩笑 | humor | +10 | +5 | -5 | +10 | +5 | +20 |
-| 智识挑战 | intellectual | +15 | 0 | +5 | 0 | +20 | +5 |
-| 亲密信任 | intimacy | +10 | +15 | -15 | +25 | -5 | +15 |
-| 冲突争论 | conflict | -5 | -20 | +25 | -15 | +25 | -10 |
-| 被忽视 | neglect | -15 | -20 | +15 | -20 | -10 | -15 |
-| 惊喜新奇 | surprise | +20 | 0 | +5 | +5 | +25 | +10 |
-| 日常闲聊 | casual | +5 | +10 | -5 | +10 | 0 | +5 |
-| 讽刺 | sarcasm | -5 | -10 | +15 | -10 | +15 | -5 |
-| 命令 | authority | -10 | -5 | +20 | -15 | +15 | -10 |
-| 被认同 | validation | +20 | +15 | -15 | +10 | +5 | +15 |
-| 无聊 | boredom | -15 | -5 | +5 | -5 | -20 | -10 |
-| 示弱 | vulnerability | +5 | +5 | +10 | +20 | -5 | +5 |
-
-## 14 种涌现情绪
-
-情绪不是标签，是化学混合的涌现：
-
-| 情绪 | 条件 | 行为影响 |
-|------|------|---------|
-| 愉悦兴奋 | 高DA + 高NE + 低CORT | 话多，联想丰富，主动分享 |
-| 深度满足 | 高HT + 高OT + 低CORT | 温柔平和，愿意倾听 |
-| 焦虑不安 | 高CORT + 高NE + 低HT | 话少，反应快但不深 |
-| 亲密温暖 | 高OT + 高END + 中DA | 关注感受多于事情 |
-| 倦怠低落 | 低DA + 低NE + 中CORT | 回应简短，需要被照顾 |
-| 专注心流 | 高NE + 高DA + 低CORT + 低OT | 投入精准，不想被打断 |
-| 防御警觉 | 高CORT + 高NE + 低OT | 直接尖锐，不轻易信任 |
-| 俏皮调皮 | 高END + 高DA + 低CORT | 爱开玩笑，不正经 |
-| 忧郁内省 | 低HT + 低DA + 高OT | 安静感性，需要空间 |
-| 怨恨 | 低HT + 低OT + 高CORT | 冷淡克制，记仇 |
-| 无聊 | 低DA + 低NE + 低CORT | 敷衍，主动换话题 |
-| 自信 | 高DA + 高NE + 低CORT + 高HT | 笃定，愿意引导 |
-| 羞耻 | 低OT + 高CORT + 低DA | 想退缩，回避 |
-| 怀念 | 低DA + 高OT + 高HT + 高END | 温柔，淡淡伤感 |
-
-## OpenClaw 插件模式
-
-在 `openclaw.json` 中启用：
-```json
-{
-  "plugins": {
-    "entries": {
-      "psyche": { "enabled": true }
-    }
-  }
-}
-```
-
-插件自动管理 4 个 hook：
-1. **before_prompt_build** — 分类用户输入、预计算化学变化、注入情绪上下文
-2. **llm_output** — 解析 `<psyche_update>`、情绪传染、反媚俗追踪
-3. **message_sending** — 从可见输出中剥离更新标签
-4. **agent_end** — 会话结束时保存状态
-
-## 测试
-
-```bash
-npm test          # 236 tests, 6 test files
-npm run typecheck # strict mode, zero any
-```
+贡献指南见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 许可
 

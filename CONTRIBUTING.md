@@ -5,14 +5,28 @@
 ## 环境搭建
 
 ```bash
-git clone https://github.com/Shangri-la-0428/openclaw-plugin-psyche.git
-cd openclaw-plugin-psyche
+git clone https://github.com/Shangri-la-0428/psyche-ai.git
+cd psyche-ai
 npm install
 npm run build
 npm test
 ```
 
 需要 Node.js >= 22.0.0。
+
+## 项目结构
+
+```
+src/core.ts        — PsycheEngine 核心引擎
+src/adapters/      — 框架适配器（OpenClaw, Vercel AI, LangChain, HTTP）
+src/storage.ts     — 存储适配器
+src/prompt.ts      — prompt 注入（Compact + Full 模式）
+src/chemistry.ts   — 化学计算
+src/classify.ts    — 刺激分类器
+src/profiles.ts    — MBTI 人格
+```
+
+架构详情见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ## 添加新的刺激类型
 
@@ -46,7 +60,7 @@ npm test
 
 ## PR 准则
 
-- 所有 PR 必须通过 `npm test`（236+ 测试）和 `npx tsc --noEmit --strict`
+- 所有 PR 必须通过 `npm test`（284+ 测试）和 `npx tsc --noEmit --strict`
 - 新功能必须包含测试
 - 保持零依赖策略：不引入运行时依赖
 - 用户可见的字符串应通过 `src/i18n.ts`
@@ -59,14 +73,28 @@ npm test
 ## Setup
 
 ```bash
-git clone https://github.com/Shangri-la-0428/openclaw-plugin-psyche.git
-cd openclaw-plugin-psyche
+git clone https://github.com/Shangri-la-0428/psyche-ai.git
+cd psyche-ai
 npm install
 npm run build
 npm test
 ```
 
 Requires Node.js >= 22.0.0.
+
+## Project Structure
+
+```
+src/core.ts        — PsycheEngine core
+src/adapters/      — Framework adapters (OpenClaw, Vercel AI, LangChain, HTTP)
+src/storage.ts     — Storage adapters
+src/prompt.ts      — Prompt injection (Compact + Full modes)
+src/chemistry.ts   — Chemistry calculations
+src/classify.ts    — Stimulus classifier
+src/profiles.ts    — MBTI personalities
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for details.
 
 ## Adding a New Stimulus Type
 
@@ -100,7 +128,7 @@ Profiles live in `src/profiles.ts`. Each has:
 
 ## PR Guidelines
 
-- All PRs must pass `npm test` (236+ tests) and `npx tsc --noEmit --strict`
+- All PRs must pass `npm test` (284+ tests) and `npx tsc --noEmit --strict`
 - Include tests for new features
 - Keep the zero-dependency policy: no runtime dependencies
 - Strings that users will see should go through `src/i18n.ts`

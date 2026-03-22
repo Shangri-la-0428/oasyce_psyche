@@ -27,6 +27,6 @@ export { CHEMICAL_KEYS, CHEMICAL_NAMES, CHEMICAL_NAMES_ZH, DEFAULT_RELATIONSHIP 
 
 // Utilities (for advanced / custom adapter use)
 export { classifyStimulus, getPrimaryStimulus } from "./classify.js";
-export { buildProtocolContext, buildDynamicContext } from "./prompt.js";
+export { buildProtocolContext, buildDynamicContext, buildCompactContext, isNearBaseline } from "./prompt.js";
 export { describeEmotionalState, getExpressionHint, getBehaviorGuide } from "./chemistry.js";
 export { getBaseline, getTemperament, getSensitivity, getDefaultSelfModel } from "./profiles.js";

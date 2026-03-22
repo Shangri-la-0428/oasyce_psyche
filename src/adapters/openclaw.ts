@@ -55,6 +55,7 @@ interface OpenClawPsycheConfig {
   stripUpdateTags: boolean;
   emotionalContagionRate: number;
   maxChemicalDelta: number;
+  compactMode: boolean;
 }
 
 function resolveConfig(raw?: Record<string, unknown>): OpenClawPsycheConfig {
@@ -63,18 +64,13 @@ function resolveConfig(raw?: Record<string, unknown>): OpenClawPsycheConfig {
     stripUpdateTags: (raw?.stripUpdateTags as boolean) ?? true,
     emotionalContagionRate: (raw?.emotionalContagionRate as number) ?? 0.2,
     maxChemicalDelta: (raw?.maxChemicalDelta as number) ?? 25,
+    compactMode: (raw?.compactMode as boolean) ?? true,
   };
 }
 
 // ── Plugin Definition ────────────────────────────────────────
 
-const plugin = {
-  id: "psyche",
-  name: "Artificial Psyche",
-  description: "Virtual endocrine system, empathy engine, and agency for OpenClaw agents",
-  version: "1.0.0",
-
-  register(api: PluginApi) {
+export function register(api: PluginApi) {
     const config = resolveConfig(api.pluginConfig);
     const logger = api.logger;
 
@@ -104,6 +100,7 @@ const plugin = {
         stripUpdateTags: config.stripUpdateTags,
         emotionalContagionRate: config.emotionalContagionRate,
         maxChemicalDelta: config.maxChemicalDelta,
+        compactMode: config.compactMode,
       }, storage);
       await engine.initialize();
       engines.set(workspaceDir, engine);
@@ -119,6 +116,14 @@ const plugin = {
       try {
         const engine = await getEngine(workspaceDir);
         const result = await engine.processInput(event?.text ?? "", { userId: ctx.userId });
+
+        const state = engine.getState();
+        logger.info(
+          `Psyche [input] stimulus=${result.stimulus ?? "none"} | ` +
+          `DA:${Math.round(state.current.DA)} HT:${Math.round(state.current.HT)} ` +
+          `CORT:${Math.round(state.current.CORT)} OT:${Math.round(state.current.OT)} | ` +
+          `context=${result.dynamicContext.length}chars`,
+        );
 
         return {
           appendSystemContext: result.systemContext,
@@ -209,8 +214,7 @@ const plugin = {
         });
     }, { commands: ["psyche"] });
 
-    logger.info("Psyche plugin ready — 4 hooks registered");
-  },
-};
+  logger.info("Psyche plugin ready — 4 hooks registered");
+}
 
-export default plugin;
+export default { register };

@@ -13,7 +13,7 @@ import { DEFAULT_RELATIONSHIP } from "./types.js";
 import type { StorageAdapter } from "./storage.js";
 import { applyDecay, applyStimulus, applyContagion } from "./chemistry.js";
 import { classifyStimulus } from "./classify.js";
-import { buildDynamicContext, buildProtocolContext } from "./prompt.js";
+import { buildDynamicContext, buildProtocolContext, buildCompactContext } from "./prompt.js";
 import { getSensitivity, getBaseline, getDefaultSelfModel } from "./profiles.js";
 import { isStimulusType } from "./guards.js";
 import {
@@ -29,6 +29,8 @@ export interface PsycheEngineConfig {
   stripUpdateTags?: boolean;
   emotionalContagionRate?: number;
   maxChemicalDelta?: number;
+  /** Compact mode: algorithms handle chemistry, LLM only sees behavioral output. Default: true */
+  compactMode?: boolean;
 }
 
 export interface ProcessInputResult {
@@ -62,6 +64,7 @@ export class PsycheEngine {
     stripUpdateTags: boolean;
     emotionalContagionRate: number;
     maxChemicalDelta: number;
+    compactMode: boolean;
   };
   private readonly protocolCache = new Map<Locale, string>();
 
@@ -74,6 +77,7 @@ export class PsycheEngine {
       stripUpdateTags: config.stripUpdateTags ?? true,
       emotionalContagionRate: config.emotionalContagionRate ?? 0.2,
       maxChemicalDelta: config.maxChemicalDelta ?? 25,
+      compactMode: config.compactMode ?? true,
     };
   }
 
@@ -135,6 +139,18 @@ export class PsycheEngine {
     await this.storage.save(state);
 
     const locale = state.meta.locale ?? this.cfg.locale;
+
+    if (this.cfg.compactMode) {
+      return {
+        systemContext: "",
+        dynamicContext: buildCompactContext(state, opts?.userId, {
+          userText: text || undefined,
+          algorithmStimulus: appliedStimulus,
+        }),
+        stimulus: appliedStimulus,
+      };
+    }
+
     return {
       systemContext: this.getProtocol(locale),
       dynamicContext: buildDynamicContext(state, opts?.userId),

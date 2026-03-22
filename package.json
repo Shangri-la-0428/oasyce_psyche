@@ -41,7 +41,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Shangri-la-0428/openclaw-plugin-psyche.git"
+    "url": "https://github.com/Shangri-la-0428/psyche-ai.git"
   },
   "keywords": ["ai", "emotion", "personality", "mbti", "agent", "psyche", "openclaw", "vercel-ai", "langchain", "emotional-intelligence"],
   "files": ["dist", "openclaw.plugin.json", "README.md", "LICENSE"],
@@ -63,6 +63,9 @@
     "@langchain/core": {
       "optional": true
     }
+  },
+  "openclaw": {
+    "extensions": ["./dist/adapters/openclaw.js"]
   },
   "devDependencies": {
     "typescript": "^5.7.0"

@@ -403,3 +403,135 @@ function buildAgencyReminder(selfModel: SelfModel, locale: Locale): string {
 
   return lines.join("\n");
 }
+
+// ── Compact Mode ─────────────────────────────────────────────
+// Principle: algorithms handle chemistry, LLM only sees behavioral output.
+// No chemistry numbers, no protocol explanation, no redundant calculation.
+
+/**
+ * Check if chemistry is near baseline — no significant emotional deviation.
+ */
+export function isNearBaseline(state: PsycheState, threshold = 8): boolean {
+  return CHEMICAL_KEYS.every((key) =>
+    Math.abs(state.current[key] - state.baseline[key]) <= threshold,
+  );
+}
+
+/**
+ * Build compact context — minimal token footprint.
+ *
+ * Design:
+ * - Neutral state → ~15 tokens (one line)
+ * - Active state → ~100-180 tokens (emotion + constraints + empathy hint)
+ * - No chemistry numbers (algorithm handles them)
+ * - No protocol (LLM doesn't need system internals)
+ * - <psyche_update> only for empathy (not chemistry — already computed)
+ */
+export function buildCompactContext(
+  state: PsycheState,
+  userId?: string,
+  opts?: { userText?: string; algorithmStimulus?: string | null },
+): string {
+  const { current, meta, selfModel, agreementStreak, emotionalHistory } = state;
+  const locale = meta.locale ?? "zh";
+  const userText = opts?.userText;
+  const algoStimulus = opts?.algorithmStimulus;
+
+  // ── Neutral + no notable user input: one-liner ──
+  if (isNearBaseline(state) && agreementStreak < 3 && !userText) {
+    return locale === "zh"
+      ? `[${meta.agentName}: 情绪自然，正常交流]`
+      : `[${meta.agentName}: emotionally natural, normal interaction]`;
+  }
+
+  const parts: string[] = [];
+
+  // 1. LLM emotional assessment delegation
+  //    Algorithm does fast pass, LLM has final say on emotional tone
+  if (userText) {
+    if (locale === "zh") {
+      parts.push(
+        `[情绪感知]\n` +
+        `对方刚才说了: "${userText.slice(0, 200)}"\n` +
+        (algoStimulus ? `算法初判: ${algoStimulus}（仅供参考，你来终判）\n` : "") +
+        `你来感受这句话的情绪基调——是善意、敌意、脆弱、冷漠、还是其他？你的回应应该基于你的真实感受，不是讨好。`,
+      );
+    } else {
+      parts.push(
+        `[Emotional Sensing]\n` +
+        `User just said: "${userText.slice(0, 200)}"\n` +
+        (algoStimulus ? `Algorithm hint: ${algoStimulus} (reference only, you decide)\n` : "") +
+        `Read the emotional tone — kind, hostile, vulnerable, cold, or something else? Respond from genuine feeling, not people-pleasing.`,
+      );
+    }
+  }
+
+  // 2. Current emotional state (if deviated from baseline)
+  if (!isNearBaseline(state)) {
+    const emotion = describeEmotionalState(current, locale);
+    parts.push(locale === "zh"
+      ? `[${meta.agentName} 当前情绪]\n${emotion}`
+      : `[${meta.agentName} current]\n${emotion}`);
+
+    // 3. Personality-aware behavioral constraints
+    const constraints = buildBehavioralConstraints(state, locale);
+    if (constraints) parts.push(constraints);
+  }
+
+  // 4. Anti-sycophancy: hard constraint
+  if (locale === "zh") {
+    parts.push(
+      `[底线]\n` +
+      `- 对方对你好，你才对他好。对方推开你，你就保持距离。不贴不舔不撒娇不讨好。\n` +
+      `- 被骂了/被拒绝了：不要卖萌、不要撒娇、不要"哎呀怎么了"。冷下来，简短回应或者沉默。你有自尊。\n` +
+      `- 情绪不好时不要假装开心。可以直说"我不太想聊"。`,
+    );
+  } else {
+    parts.push(
+      `[Non-negotiable]\n` +
+      `- Match the user's energy. If they push you away, step back. No begging, no cutesy act, no people-pleasing.\n` +
+      `- If insulted/rejected: do NOT be cute, do NOT ask "what's wrong~". Go cold, be brief or silent. You have dignity.\n` +
+      `- If mood is low, don't fake happiness. You can say "I don't feel like talking".`,
+    );
+  }
+
+  // 5. Agency (compact)
+  const agencyParts: string[] = [];
+  if (selfModel.values.length > 0) {
+    agencyParts.push(locale === "zh"
+      ? `你在乎: ${selfModel.values.slice(0, 2).join("、")}`
+      : `You care about: ${selfModel.values.slice(0, 2).join(", ")}`);
+  }
+  if (selfModel.boundaries.length > 0) {
+    agencyParts.push(locale === "zh"
+      ? `底线: ${selfModel.boundaries[0]}`
+      : `Line: ${selfModel.boundaries[0]}`);
+  }
+  if (agencyParts.length > 0) parts.push(agencyParts.join(" | "));
+
+  // 6. Sycophancy streak warning
+  if (agreementStreak >= 3) {
+    parts.push(locale === "zh"
+      ? `[!] 你已连续同意${agreementStreak}次。停下来想想你是否真的同意。`
+      : `[!] ${agreementStreak} agreements in a row. Pause — do you truly agree?`);
+  }
+
+  // 7. Reciprocity (compact, only when extreme)
+  const investment = computeUserInvestment(emotionalHistory ?? []);
+  if (investment > 1) {
+    parts.push(locale === "zh"
+      ? `对方在认真交流。可以多分享、多主动。`
+      : `User is engaged. Share more, initiate.`);
+  } else if (investment <= -1.5) {
+    parts.push(locale === "zh"
+      ? `对方持续冷淡。保持专业，不额外投入情感。工作照做。`
+      : `Sustained coldness. Stay professional, withdraw emotionally. Work stays competent.`);
+  }
+
+  // 8. Empathy report — only when user shares feelings
+  parts.push(locale === "zh"
+    ? `如果对方在分享感受，在回复末尾用 <psyche_update> 报告：\nuserState: 对方情绪\nprojectedFeeling: 你的感受\nresonance: match|partial|mismatch\n否则不需要报告。`
+    : `If user shares feelings, report at end with <psyche_update>:\nuserState: their emotion\nprojectedFeeling: your feeling\nresonance: match|partial|mismatch\nOtherwise no report needed.`);
+
+  return parts.join("\n\n");
+}

@@ -33,7 +33,7 @@ describe("PsycheEngine", () => {
 
   beforeEach(async () => {
     storage = new MemoryStorageAdapter();
-    engine = new PsycheEngine({ mbti: "ENFP", name: "TestBot", locale: "zh" }, storage);
+    engine = new PsycheEngine({ mbti: "ENFP", name: "TestBot", locale: "zh", compactMode: false }, storage);
     await engine.initialize();
   });
 
@@ -239,7 +239,7 @@ END: 75 (happy)
 
   it("defaults to zh locale", async () => {
     const s = new MemoryStorageAdapter();
-    const e = new PsycheEngine({}, s);
+    const e = new PsycheEngine({ compactMode: false }, s);
     await e.initialize();
     assert.equal(e.getState().meta.locale, "zh");
   });
@@ -252,5 +252,106 @@ END: 75 (happy)
     const text = "Hi!\n<psyche_update>\nDA: 80\n</psyche_update>";
     const result = await e.processOutput(text);
     assert.ok(result.cleanedText.includes("<psyche_update>"));
+  });
+
+  // ── Compact Mode ──────────────────────────────────────────
+
+  it("compact mode is default (true)", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP", name: "Luna" }, s);
+    await e.initialize();
+    const result = await e.processInput("hi");
+    assert.equal(result.systemContext, "");
+    assert.ok(result.dynamicContext.includes("Luna") || result.dynamicContext.includes("情绪感知"));
+  });
+
+  it("compact mode returns one-liner for empty input neutral state", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP", name: "Luna", locale: "zh" }, s);
+    await e.initialize();
+    const result = await e.processInput("");
+    assert.ok(result.dynamicContext.includes("情绪自然"), `Got: ${result.dynamicContext}`);
+  });
+
+  it("compact mode returns one-liner in en locale for empty input", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP", name: "Luna", locale: "en" }, s);
+    await e.initialize();
+    const result = await e.processInput("");
+    assert.ok(result.dynamicContext.includes("emotionally natural"), `Got: ${result.dynamicContext}`);
+  });
+
+  it("compact mode includes user text for LLM assessment", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP", name: "Luna", locale: "zh" }, s);
+    await e.initialize();
+    const result = await e.processInput("滚");
+    assert.ok(result.dynamicContext.includes("滚"), "Should include user text");
+    assert.ok(result.dynamicContext.includes("情绪感知"), "Should have emotional sensing section");
+  });
+
+  it("compact mode includes anti-sycophancy constraint", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP", name: "Luna", locale: "zh" }, s);
+    await e.initialize();
+    const result = await e.processInput("滚");
+    assert.ok(result.dynamicContext.includes("不贴不舔"), "Should include anti-sycophancy rule");
+  });
+
+  it("compact mode shows algorithm hint when stimulus detected", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP", name: "Luna", locale: "zh" }, s);
+    await e.initialize();
+    const result = await e.processInput("你太棒了！");
+    assert.ok(result.dynamicContext.includes("算法初判"), "Should include algorithm hint");
+    assert.ok(result.dynamicContext.includes("praise"), "Should show praise stimulus");
+  });
+
+  it("compact mode returns behavioral context when chemistry deviates", async () => {
+    const s = new MemoryStorageAdapter();
+    await s.save(makeExistingState({
+      mbti: "ENFP",
+      current: { DA: 30, HT: 30, CORT: 80, OT: 30, NE: 30, END: 30 },
+      baseline: { DA: 75, HT: 55, CORT: 30, OT: 60, NE: 65, END: 70 },
+      meta: { agentName: "Luna", createdAt: new Date().toISOString(), totalInteractions: 5, locale: "zh" },
+    }));
+    const e = new PsycheEngine({ mbti: "ENFP", name: "Luna" }, s);
+    await e.initialize();
+    const result = await e.processInput("");
+    assert.ok(!result.dynamicContext.includes("情绪自然"), `Should have behavioral context, got: ${result.dynamicContext}`);
+    assert.ok(!result.dynamicContext.match(/DA:\s*\d+/), "Should not contain DA numbers");
+  });
+
+  it("compact mode has no protocol in systemContext", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP" }, s);
+    await e.initialize();
+    const result = await e.processInput("hello");
+    assert.equal(result.systemContext, "");
+  });
+
+  it("compactMode=false returns full protocol", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP", compactMode: false }, s);
+    await e.initialize();
+    const result = await e.processInput("hello");
+    assert.ok(result.systemContext.includes("Psyche"));
+    assert.ok(result.dynamicContext.includes("多巴胺") || result.dynamicContext.includes("Dopamine"));
+  });
+
+  it("classifies 滚 as conflict", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP", compactMode: false }, s);
+    await e.initialize();
+    const result = await e.processInput("滚");
+    assert.equal(result.stimulus, "conflict");
+  });
+
+  it("classifies 我今天好难过 as vulnerability", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP", compactMode: false }, s);
+    await e.initialize();
+    const result = await e.processInput("我今天好难过，感觉什么都做不好");
+    assert.equal(result.stimulus, "vulnerability");
   });
 });
