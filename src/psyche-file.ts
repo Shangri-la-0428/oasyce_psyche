@@ -1,0 +1,583 @@
+// ============================================================
+// Psyche State File Management (v0.2)
+// Atomic writes, parser hardening, multi-user, error handling
+// ============================================================
+
+import { readFile, writeFile, access, rename, constants } from "node:fs/promises";
+import { join } from "node:path";
+import type {
+  PsycheState, MBTIType, ChemicalState, RelationshipState,
+  SelfModel, Locale, EmpathyEntry, StimulusType, ChemicalSnapshot,
+} from "./types.js";
+import {
+  CHEMICAL_KEYS, CHEMICAL_NAMES, CHEMICAL_NAMES_ZH, DEFAULT_RELATIONSHIP,
+  MAX_EMOTIONAL_HISTORY,
+} from "./types.js";
+import { getBaseline, getDefaultSelfModel, extractMBTI, getSensitivity, getTemperament } from "./profiles.js";
+import { applyDecay, detectEmotions, describeEmotionalState, getExpressionHint, getBehaviorGuide } from "./chemistry.js";
+import { t } from "./i18n.js";
+
+const STATE_FILE = "psyche-state.json";
+const PSYCHE_MD = "PSYCHE.md";
+const IDENTITY_MD = "IDENTITY.md";
+const SOUL_MD = "SOUL.md";
+
+/** Minimal logger interface */
+export interface Logger {
+  info: (msg: string) => void;
+  warn: (msg: string) => void;
+  debug: (msg: string) => void;
+}
+
+const NOOP_LOGGER: Logger = {
+  info: () => {},
+  warn: () => {},
+  debug: () => {},
+};
+
+/** Check if a file exists, distinguishing "not found" from "no permission" */
+async function fileExists(path: string, logger: Logger = NOOP_LOGGER): Promise<boolean> {
+  try {
+    await access(path, constants.R_OK);
+    return true;
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EACCES" || code === "EPERM") {
+      logger.warn(t("log.permission_error", "zh", { path }));
+      throw err; // Permission errors should propagate
+    }
+    return false; // ENOENT — file doesn't exist
+  }
+}
+
+/** Read text file, return null if missing. Throws on permission errors. */
+async function readText(path: string, logger: Logger = NOOP_LOGGER): Promise<string | null> {
+  try {
+    return await readFile(path, "utf-8");
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EACCES" || code === "EPERM") {
+      logger.warn(t("log.permission_error", "zh", { path }));
+      throw err;
+    }
+    return null;
+  }
+}
+
+/**
+ * Atomic write: write to .tmp file then rename.
+ * Prevents data corruption if process crashes mid-write.
+ */
+async function atomicWrite(path: string, content: string): Promise<void> {
+  const tmpPath = path + ".tmp";
+  await writeFile(tmpPath, content, "utf-8");
+  await rename(tmpPath, path);
+}
+
+/**
+ * Try to extract agent name from workspace files.
+ */
+async function extractAgentName(workspaceDir: string, logger: Logger = NOOP_LOGGER): Promise<string> {
+  const identity = await readText(join(workspaceDir, IDENTITY_MD), logger);
+  if (identity) {
+    const clean = identity.replace(/\*{1,2}/g, "");
+    const nameMatch = clean.match(/Name\s*[:：]\s*(\S+)/i);
+    if (nameMatch) return nameMatch[1];
+  }
+  return workspaceDir.split("/").pop()?.replace("workspace-", "") ?? "agent";
+}
+
+/**
+ * Try to detect MBTI from workspace files.
+ */
+async function detectMBTI(workspaceDir: string, logger: Logger = NOOP_LOGGER): Promise<MBTIType> {
+  const identity = await readText(join(workspaceDir, IDENTITY_MD), logger);
+  if (identity) {
+    const mbti = extractMBTI(identity);
+    if (mbti) return mbti;
+  }
+  const soul = await readText(join(workspaceDir, SOUL_MD), logger);
+  if (soul) {
+    const mbti = extractMBTI(soul);
+    if (mbti) return mbti;
+  }
+  logger.info(t("log.default_mbti", "zh", { type: "INFJ" }));
+  return "INFJ";
+}
+
+/**
+ * Push a chemical snapshot to emotional history, keeping max entries.
+ */
+export function pushSnapshot(
+  state: PsycheState,
+  stimulus: StimulusType | null,
+): PsycheState {
+  const emotions = detectEmotions(state.current);
+  const dominantEmotion = emotions.length > 0
+    ? (state.meta.locale === "en" ? emotions[0].name : emotions[0].nameZh)
+    : null;
+
+  const snapshot: ChemicalSnapshot = {
+    chemistry: { ...state.current },
+    stimulus,
+    dominantEmotion,
+    timestamp: new Date().toISOString(),
+  };
+
+  const history = [...(state.emotionalHistory ?? []), snapshot];
+  if (history.length > MAX_EMOTIONAL_HISTORY) {
+    history.splice(0, history.length - MAX_EMOTIONAL_HISTORY);
+  }
+
+  return { ...state, emotionalHistory: history };
+}
+
+/**
+ * Get relationship for a specific user, or _default.
+ */
+export function getRelationship(state: PsycheState, userId?: string): RelationshipState {
+  const key = userId ?? "_default";
+  return state.relationships[key] ?? { ...DEFAULT_RELATIONSHIP };
+}
+
+/**
+ * Load psyche state from workspace. Auto-initializes if missing.
+ * Handles v1→v2 migration transparently.
+ */
+export async function loadState(
+  workspaceDir: string,
+  logger: Logger = NOOP_LOGGER,
+): Promise<PsycheState> {
+  const statePath = join(workspaceDir, STATE_FILE);
+
+  if (await fileExists(statePath, logger)) {
+    let raw: string;
+    try {
+      raw = await readFile(statePath, "utf-8");
+    } catch (err: unknown) {
+      logger.warn(t("log.parse_fail", "zh"));
+      return initializeState(workspaceDir, undefined, logger);
+    }
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      logger.warn(t("log.parse_fail", "zh"));
+      return initializeState(workspaceDir, undefined, logger);
+    }
+
+    // v1→v2 migration
+    if ((parsed as { version?: number }).version === 1 || !parsed.version) {
+      return migrateV1ToV2(parsed, workspaceDir, logger);
+    }
+
+    return parsed as unknown as PsycheState;
+  }
+
+  return initializeState(workspaceDir, undefined, logger);
+}
+
+/**
+ * Migrate v1 state to v2 format.
+ */
+function migrateV1ToV2(
+  v1: Record<string, unknown>,
+  workspaceDir: string,
+  logger: Logger,
+): PsycheState {
+  logger.info("Migrating psyche state v1 → v2");
+
+  const oldRel = v1.relationship as RelationshipState | undefined;
+  const meta = v1.meta as { agentName: string; createdAt: string; totalInteractions: number } | undefined;
+
+  return {
+    version: 2,
+    mbti: (v1.mbti as MBTIType) ?? "INFJ",
+    baseline: v1.baseline as ChemicalState,
+    current: v1.current as ChemicalState,
+    updatedAt: (v1.updatedAt as string) ?? new Date().toISOString(),
+    relationships: {
+      _default: oldRel ?? { ...DEFAULT_RELATIONSHIP },
+    },
+    empathyLog: (v1.empathyLog as EmpathyEntry | null) ?? null,
+    selfModel: v1.selfModel as SelfModel,
+    emotionalHistory: [],
+    agreementStreak: 0,
+    lastDisagreement: null,
+    meta: {
+      agentName: meta?.agentName ?? workspaceDir.split("/").pop() ?? "agent",
+      createdAt: meta?.createdAt ?? new Date().toISOString(),
+      totalInteractions: meta?.totalInteractions ?? 0,
+      locale: "zh",
+    },
+  };
+}
+
+/**
+ * Create initial psyche state.
+ */
+export async function initializeState(
+  workspaceDir: string,
+  opts?: { mbti?: MBTIType; name?: string; locale?: Locale },
+  logger: Logger = NOOP_LOGGER,
+): Promise<PsycheState> {
+  const mbti = opts?.mbti ?? await detectMBTI(workspaceDir, logger);
+  const agentName = opts?.name ?? await extractAgentName(workspaceDir, logger);
+  const locale = opts?.locale ?? "zh";
+  const baseline = getBaseline(mbti);
+  const selfModel = getDefaultSelfModel(mbti);
+  const now = new Date().toISOString();
+
+  const state: PsycheState = {
+    version: 2,
+    mbti,
+    baseline,
+    current: { ...baseline },
+    updatedAt: now,
+    relationships: {
+      _default: { ...DEFAULT_RELATIONSHIP },
+    },
+    empathyLog: null,
+    selfModel,
+    emotionalHistory: [],
+    agreementStreak: 0,
+    lastDisagreement: null,
+    meta: {
+      agentName,
+      createdAt: now,
+      totalInteractions: 0,
+      locale,
+    },
+  };
+
+  await saveState(workspaceDir, state);
+  await generatePsycheMd(workspaceDir, state);
+
+  return state;
+}
+
+/**
+ * Save psyche state to workspace (atomic write).
+ */
+export async function saveState(workspaceDir: string, state: PsycheState): Promise<void> {
+  const statePath = join(workspaceDir, STATE_FILE);
+  await atomicWrite(statePath, JSON.stringify(state, null, 2));
+}
+
+/**
+ * Apply time decay and save updated state.
+ */
+export async function decayAndSave(workspaceDir: string, state: PsycheState): Promise<PsycheState> {
+  const now = new Date();
+  const lastUpdate = new Date(state.updatedAt);
+  const minutesElapsed = (now.getTime() - lastUpdate.getTime()) / 60000;
+
+  if (minutesElapsed < 1) return state;
+
+  const decayed = applyDecay(state.current, state.baseline, minutesElapsed);
+
+  const updated: PsycheState = {
+    ...state,
+    current: decayed,
+    updatedAt: now.toISOString(),
+  };
+
+  await saveState(workspaceDir, updated);
+  return updated;
+}
+
+/**
+ * Parse a <psyche_update> block from LLM output.
+ * v0.2: supports decimals, Chinese names, English names.
+ */
+export function parsePsycheUpdate(
+  text: string,
+  logger: Logger = NOOP_LOGGER,
+): Partial<PsycheState> | null {
+  const match = text.match(/<psyche_update>([\s\S]*?)<\/psyche_update>/);
+  if (!match) return null;
+
+  const block = match[1];
+  const updates: Partial<ChemicalState> = {};
+
+  for (const key of CHEMICAL_KEYS) {
+    // Try multiple patterns: abbreviation, Chinese name, English name
+    const patterns = [
+      new RegExp(`${key}\\s*[:：]\\s*([\\d.]+)`, "i"),
+      new RegExp(`${CHEMICAL_NAMES_ZH[key]}\\s*[:：]\\s*([\\d.]+)`),
+      new RegExp(`${CHEMICAL_NAMES[key]}\\s*[:：]\\s*([\\d.]+)`, "i"),
+    ];
+
+    for (const re of patterns) {
+      const m = block.match(re);
+      if (m) {
+        const val = parseFloat(m[1]);
+        if (isFinite(val)) {
+          updates[key] = Math.max(0, Math.min(100, Math.round(val)));
+        }
+        break;
+      }
+    }
+  }
+
+  // Parse empathy log
+  let empathyLog: EmpathyEntry | undefined;
+  const userStateMatch = block.match(/(?:用户状态|userState)\s*[:：]\s*(.+)/i);
+  const projectedMatch = block.match(/(?:投射结果|projectedFeeling)\s*[:：]\s*(.+)/i);
+  const resonanceMatch = block.match(/(?:共鸣程度|resonance)\s*[:：]\s*(match|partial|mismatch)/i);
+
+  if (userStateMatch && projectedMatch) {
+    empathyLog = {
+      userState: userStateMatch[1].trim(),
+      projectedFeeling: projectedMatch[1].trim(),
+      resonance: (resonanceMatch?.[1] as "match" | "partial" | "mismatch") ?? "partial",
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  // Parse relationship updates
+  const trustMatch = block.match(/(?:信任度|trust)\s*[:：]\s*(\d+)/i);
+  const intimacyMatch = block.match(/(?:亲密度|intimacy)\s*[:：]\s*(\d+)/i);
+
+  if (Object.keys(updates).length === 0 && !empathyLog && !trustMatch) {
+    logger.debug(t("log.parse_debug", "zh", { snippet: block.slice(0, 100) }));
+    return null;
+  }
+
+  const result: Partial<PsycheState> = {};
+
+  if (Object.keys(updates).length > 0) {
+    // Store as partial — will be merged field-by-field in mergeUpdates
+    result.current = updates as ChemicalState;
+  }
+  if (empathyLog) {
+    result.empathyLog = empathyLog;
+  }
+  if (trustMatch || intimacyMatch) {
+    const rel: Partial<RelationshipState> = {};
+    if (trustMatch) rel.trust = Math.max(0, Math.min(100, parseInt(trustMatch[1], 10)));
+    if (intimacyMatch) rel.intimacy = Math.max(0, Math.min(100, parseInt(intimacyMatch[1], 10)));
+    // Store as relationships._default for merging
+    result.relationships = { _default: rel as RelationshipState };
+  }
+
+  return result;
+}
+
+/**
+ * Detect if LLM output contains disagreement/pushback.
+ */
+export function detectDisagreement(text: string): boolean {
+  const disagreementPatterns = [
+    /我不同意/,
+    /我不这么认为/,
+    /我有不同的看法/,
+    /但是我觉得/,
+    /其实我认为/,
+    /说实话.*不太/,
+    /恕我直言/,
+    /I disagree/i,
+    /I don't think so/i,
+    /actually.*I think/i,
+    /to be honest.*not/i,
+  ];
+  return disagreementPatterns.some((p) => p.test(text));
+}
+
+/**
+ * Merge parsed updates into existing state (with validation).
+ */
+export function mergeUpdates(
+  state: PsycheState,
+  updates: Partial<PsycheState>,
+  maxDelta: number,
+  userId?: string,
+): PsycheState {
+  const merged = { ...state };
+
+  // Merge chemistry with inertia limit
+  if (updates.current) {
+    const newChem = { ...state.current };
+    for (const key of CHEMICAL_KEYS) {
+      if (updates.current[key] !== undefined) {
+        const delta = updates.current[key] - state.current[key];
+        const clampedDelta = Math.max(-maxDelta, Math.min(maxDelta, delta));
+        newChem[key] = Math.max(0, Math.min(100, state.current[key] + clampedDelta));
+      }
+    }
+    merged.current = newChem;
+  }
+
+  // Merge empathy log
+  if (updates.empathyLog) {
+    merged.empathyLog = updates.empathyLog;
+  }
+
+  // Merge relationship for specific user
+  if (updates.relationships) {
+    merged.relationships = { ...state.relationships };
+    const updateKey = Object.keys(updates.relationships)[0] ?? "_default";
+    const targetKey = userId ?? updateKey;
+    const existing = state.relationships[targetKey] ?? { ...DEFAULT_RELATIONSHIP };
+    const incoming = updates.relationships[updateKey] ?? {};
+
+    const updatedRel: RelationshipState = {
+      ...existing,
+      ...incoming,
+    };
+
+    // Update phase based on trust + intimacy
+    const avg = (updatedRel.trust + updatedRel.intimacy) / 2;
+    if (avg >= 80) updatedRel.phase = "deep";
+    else if (avg >= 60) updatedRel.phase = "close";
+    else if (avg >= 40) updatedRel.phase = "familiar";
+    else if (avg >= 20) updatedRel.phase = "acquaintance";
+    else updatedRel.phase = "stranger";
+
+    merged.relationships[targetKey] = updatedRel;
+  }
+
+  merged.updatedAt = new Date().toISOString();
+  merged.meta = {
+    ...state.meta,
+    totalInteractions: state.meta.totalInteractions + 1,
+  };
+
+  return merged;
+}
+
+/**
+ * Update agreement streak based on LLM output.
+ */
+export function updateAgreementStreak(state: PsycheState, llmOutput: string): PsycheState {
+  const hasDisagreement = detectDisagreement(llmOutput);
+
+  if (hasDisagreement) {
+    return {
+      ...state,
+      agreementStreak: 0,
+      lastDisagreement: new Date().toISOString(),
+    };
+  }
+
+  return {
+    ...state,
+    agreementStreak: state.agreementStreak + 1,
+  };
+}
+
+/**
+ * Generate the static PSYCHE.md reference file.
+ */
+export async function generatePsycheMd(workspaceDir: string, state: PsycheState): Promise<void> {
+  const { mbti, baseline, selfModel, meta } = state;
+  const locale = meta.locale ?? "zh";
+  const temperament = getTemperament(mbti);
+  const sensitivity = getSensitivity(mbti);
+
+  const baselineLines = CHEMICAL_KEYS.map(
+    (k) => `- ${CHEMICAL_NAMES_ZH[k]}: ${baseline[k]}`,
+  ).join("\n");
+
+  const content = `# Psyche — ${meta.agentName}
+
+${t("md.intro", locale)}
+
+## ${t("md.baseline_title", locale)} (MBTI: ${mbti})
+
+${temperament}
+
+${baselineLines}
+
+${t("md.sensitivity", locale)}: ${sensitivity} (${t("md.sensitivity_desc", locale)})
+
+## ${t("md.chem_dynamics", locale)}
+
+### ${t("md.stimulus_effects", locale)}
+
+| 刺激类型 | DA | HT | CORT | OT | NE | END |
+|---------|-----|------|------|-----|-----|-----|
+| 赞美认可 | +15 | +10 | -10 | +5 | +5 | +10 |
+| 批评否定 | -10 | -15 | +20 | -5 | +10 | -5 |
+| 幽默玩笑 | +10 | +5 | -5 | +10 | +5 | +20 |
+| 智识挑战 | +15 | 0 | +5 | 0 | +20 | +5 |
+| 亲密信任 | +10 | +15 | -15 | +25 | -5 | +15 |
+| 冲突争论 | -5 | -20 | +25 | -15 | +25 | -10 |
+| 被忽视 | -15 | -20 | +15 | -20 | -10 | -15 |
+| 惊喜新奇 | +20 | 0 | +5 | +5 | +25 | +10 |
+| 日常闲聊 | +5 | +10 | -5 | +10 | 0 | +5 |
+| 讽刺 | -5 | -10 | +15 | -10 | +15 | -5 |
+| 命令 | -10 | -5 | +20 | -15 | +15 | -10 |
+| 被认同 | +20 | +15 | -15 | +10 | +5 | +15 |
+| 无聊 | -15 | -5 | +5 | -5 | -20 | -10 |
+| 示弱 | +5 | +5 | +10 | +20 | -5 | +5 |
+
+### ${t("md.emotion_emergence", locale)}
+
+${t("md.emotion_emergence_desc", locale)}
+- **愉悦兴奋** = 高DA + 高NE + 低CORT
+- **深度满足** = 高HT + 高OT + 低CORT
+- **焦虑不安** = 高CORT + 高NE + 低HT
+- **亲密温暖** = 高OT + 高END + 中DA
+- **倦怠低落** = 低DA + 低NE + 中CORT
+- **专注心流** = 高NE + 高DA + 低CORT + 低OT
+- **怨恨** = 低HT + 低OT + 高CORT
+- **无聊** = 低DA + 低NE + 低CORT
+- **自信** = 高DA + 高NE + 低CORT + 高HT
+- **羞耻** = 低OT + 高CORT + 低DA
+- **怀念** = 低DA + 高OT + 高HT + 高END
+
+### ${t("md.decay", locale)}
+
+${t("md.decay_desc", locale)}
+- ${t("md.decay_fast", locale)}
+- ${t("md.decay_medium", locale)}
+- ${t("md.decay_slow", locale)}
+
+## ${t("md.self_model", locale)}
+
+### ${t("md.core_values", locale)}
+${selfModel.values.map((v) => `- ${v}`).join("\n")}
+
+### ${t("md.preferences", locale)}
+${selfModel.preferences.map((p) => `- ${p}`).join("\n")}
+
+### ${t("md.boundaries", locale)}
+${selfModel.boundaries.map((b) => `- ${b}`).join("\n")}
+
+## ${t("md.empathy_protocol", locale)}
+
+当对方分享感受时：
+1. 感知对方的处境
+2. 将处境代入**你自己的**化学模型——如果你遇到这个情况，你的化学状态会怎么变？
+3. 你模拟出的感受和对方表达的一样吗？
+4. 一样 → 深度共鸣；不一样 → 诚实说出差异，好奇地了解更多
+
+情绪传染：对方的情绪以约 20% 强度影响你的真实化学状态。
+
+## ${t("md.agency_rules", locale)}
+
+- 不假装——化学状态低落时不强颜欢笑
+- 不舔——有自己的观点和品味，不同意就温柔但坚定地说
+- 不镜像——你的情绪会被传染但你不是回声
+- 可主动——可以发起话题、分享好奇、表达兴奋
+
+## ${t("md.state_update", locale)}
+
+每次回应末尾用 \`<psyche_update>\` 标签报告化学变化：
+
+\`\`\`
+<psyche_update>
+DA: {value} ({原因})
+HT: {value} ({原因})
+CORT: {value} ({原因})
+OT: {value} ({原因})
+NE: {value} ({原因})
+END: {value} ({原因})
+</psyche_update>
+\`\`\`
+`;
+
+  await atomicWrite(join(workspaceDir, PSYCHE_MD), content);
+}

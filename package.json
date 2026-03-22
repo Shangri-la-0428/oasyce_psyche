@@ -1,0 +1,39 @@
+{
+  "name": "openclaw-plugin-psyche",
+  "version": "0.2.0",
+  "description": "Artificial Psyche — plug-and-play emotional intelligence for any AI agent",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "psyche": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:test": "tsc -p tsconfig.test.json",
+    "test": "npm run build && npm run build:test && node --test dist-test/tests/*.test.js",
+    "typecheck": "tsc --noEmit --strict",
+    "dev": "tsc --watch"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Shangri-la-0428/openclaw-plugin-psyche.git"
+  },
+  "keywords": ["ai", "emotion", "personality", "mbti", "agent", "psyche", "openclaw"],
+  "files": ["dist", "openclaw.plugin.json", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.0"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

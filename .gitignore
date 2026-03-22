@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dist-test/
+*.tgz
+.DS_Store
+psyche-state.json
+psyche-state.json.tmp
