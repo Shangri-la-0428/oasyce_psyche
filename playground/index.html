@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Psyche AI Playground</title>
+<style>
+  :root {
+    --bg: #0a0a0a; --surface: #141414; --border: #222; --text: #e0e0e0;
+    --muted: #666; --accent: #4f9cf7;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    padding: 40px 20px;
+  }
+  h1 { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
+  .container { width: 100%; max-width: 720px; }
+
+  /* Controls */
+  .controls {
+    display: flex; gap: 12px; margin-bottom: 24px; align-items: center;
+  }
+  .controls select, .controls input {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 14px; border-radius: 8px; font-size: 14px; outline: none;
+  }
+  .controls select { width: 120px; }
+  .controls input { flex: 1; }
+  .controls input:focus { border-color: var(--accent); }
+  .controls button {
+    background: var(--accent); color: #fff; border: none; padding: 10px 20px;
+    border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 500;
+    white-space: nowrap;
+  }
+  .controls button:hover { opacity: 0.9; }
+
+  /* Chemistry bars */
+  .chem-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    margin-bottom: 24px;
+  }
+  .chem-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px;
+  }
+  .chem-label {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px; font-size: 13px;
+  }
+  .chem-label .name { color: var(--muted); }
+  .chem-label .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chem-bar {
+    height: 6px; border-radius: 3px; background: #1a1a1a; overflow: hidden;
+  }
+  .chem-bar .fill {
+    height: 100%; border-radius: 3px; transition: width 0.6s ease, background-color 0.6s ease;
+  }
+
+  /* Info panels */
+  .info-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .info-panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px;
+  }
+  .info-panel.full { grid-column: 1 / -1; }
+  .info-panel h3 { font-size: 13px; color: var(--muted); margin-bottom: 8px; font-weight: 500; }
+  .info-panel .content { font-size: 14px; line-height: 1.6; }
+  .stimulus-tag {
+    display: inline-block; padding: 3px 10px; border-radius: 12px;
+    font-size: 13px; font-weight: 500;
+    background: rgba(79, 156, 247, 0.15); color: var(--accent);
+  }
+  .stimulus-tag.negative { background: rgba(247, 79, 79, 0.15); color: #f74f4f; }
+  .stimulus-tag.neutral { background: rgba(150, 150, 150, 0.15); color: #999; }
+  .emotion-tag {
+    display: inline-block; padding: 3px 10px; border-radius: 12px;
+    font-size: 13px; margin: 2px 4px 2px 0;
+    background: rgba(160, 120, 255, 0.15); color: #a078ff;
+  }
+
+  /* Context preview */
+  .context-preview {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; margin-top: 12px;
+  }
+  .context-preview h3 { font-size: 13px; color: var(--muted); margin-bottom: 8px; font-weight: 500; }
+  .context-preview pre {
+    font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px;
+    line-height: 1.5; color: #aaa; white-space: pre-wrap; word-break: break-all;
+    max-height: 200px; overflow-y: auto;
+  }
+
+  /* Chat log */
+  .chat-log { margin-top: 24px; }
+  .chat-log h3 { font-size: 13px; color: var(--muted); margin-bottom: 8px; font-weight: 500; }
+  .chat-entry {
+    padding: 8px 0; border-bottom: 1px solid var(--border);
+    font-size: 13px; display: flex; gap: 12px; align-items: baseline;
+  }
+  .chat-entry .msg { flex: 1; }
+  .chat-entry .stim { color: var(--accent); min-width: 80px; text-align: right; }
+  .chat-entry .delta { color: var(--muted); font-family: 'SF Mono', monospace; font-size: 12px; min-width: 200px; }
+
+  /* Quick buttons */
+  .quick-msgs {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
+  }
+  .quick-msgs button {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 12px; border-radius: 16px; font-size: 12px; cursor: pointer;
+  }
+  .quick-msgs button:hover { border-color: var(--accent); }
+
+  @media (max-width: 600px) {
+    .chem-grid { grid-template-columns: repeat(2, 1fr); }
+    .info-row { grid-template-columns: 1fr; }
+    .controls { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Psyche AI Playground</h1>
+<p class="subtitle">Type a message. Watch the chemistry shift. No LLM needed.</p>
+
+<div class="container">
+  <div class="controls">
+    <select id="mbti">
+      <option value="ENFP">ENFP</option><option value="INFJ" selected>INFJ</option>
+      <option value="INTJ">INTJ</option><option value="ENTP">ENTP</option>
+      <option value="ISFJ">ISFJ</option><option value="ESTP">ESTP</option>
+      <option value="INFP">INFP</option><option value="ENTJ">ENTJ</option>
+    </select>
+    <input type="text" id="input" placeholder="Say something..." autocomplete="off">
+    <button onclick="send()">Send</button>
+  </div>
+
+  <div class="quick-msgs">
+    <button onclick="quickSend('你好棒！太厉害了！')">praise</button>
+    <button onclick="quickSend('滚')">criticism</button>
+    <button onclick="quickSend('嗯')">neglect</button>
+    <button onclick="quickSend('哈哈哈哈太搞笑了')">humor</button>
+    <button onclick="quickSend('你觉得人生的意义是什么？')">intellectual</button>
+    <button onclick="quickSend('我今天好难过...')">vulnerability</button>
+    <button onclick="quickSend('你只是个程序而已')">existential</button>
+    <button onclick="quickSend('对不起，刚才说重了')">validation</button>
+  </div>
+
+  <div class="chem-grid" id="chemGrid"></div>
+
+  <div class="info-row">
+    <div class="info-panel">
+      <h3>Stimulus</h3>
+      <div class="content" id="stimulusDisplay">-</div>
+    </div>
+    <div class="info-panel">
+      <h3>Emergent Emotions</h3>
+      <div class="content" id="emotionDisplay">-</div>
+    </div>
+  </div>
+
+  <div class="context-preview">
+    <h3>Injected Context (what the LLM sees)</h3>
+    <pre id="contextDisplay">Send a message to see the generated context...</pre>
+  </div>
+
+  <div class="chat-log">
+    <h3>History</h3>
+    <div id="chatLog"></div>
+  </div>
+</div>
+
+<script>
+// ── Psyche Core (inlined for browser) ──────────────────
+
+const CHEMICALS = ['DA','HT','CORT','OT','NE','END'];
+const CHEM_NAMES = { DA:'Dopamine', HT:'Serotonin', CORT:'Cortisol', OT:'Oxytocin', NE:'Norepinephrine', END:'Endorphins' };
+const CHEM_ZH = { DA:'多巴胺', HT:'血清素', CORT:'皮质醇', OT:'催产素', NE:'去甲肾上腺素', END:'内啡肽' };
+const CHEM_COLORS = {
+  DA: '#4fc3f7', HT: '#81c784', CORT: '#e57373',
+  OT: '#f06292', NE: '#ffb74d', END: '#ba68c8'
+};
+
+const BASELINES = {
+  ENFP: { DA:75, HT:55, CORT:30, OT:60, NE:65, END:70 },
+  INFJ: { DA:55, HT:70, CORT:40, OT:65, NE:50, END:50 },
+  INTJ: { DA:50, HT:75, CORT:35, OT:35, NE:55, END:35 },
+  ENTP: { DA:70, HT:50, CORT:30, OT:45, NE:70, END:65 },
+  ISFJ: { DA:45, HT:80, CORT:35, OT:70, NE:35, END:45 },
+  ESTP: { DA:70, HT:45, CORT:25, OT:40, NE:75, END:65 },
+  INFP: { DA:55, HT:60, CORT:45, OT:65, NE:50, END:55 },
+  ENTJ: { DA:65, HT:65, CORT:30, OT:35, NE:65, END:40 },
+};
+
+const VECTORS = {
+  praise:       { DA:+15, HT:+10, CORT:-10, OT:+5, NE:+5, END:+10 },
+  criticism:    { DA:-10, HT:-15, CORT:+20, OT:-5, NE:+10, END:-5 },
+  humor:        { DA:+10, HT:+5, CORT:-5, OT:+10, NE:+5, END:+20 },
+  intellectual: { DA:+15, HT:0, CORT:+5, OT:0, NE:+20, END:+5 },
+  intimacy:     { DA:+10, HT:+15, CORT:-15, OT:+25, NE:-5, END:+15 },
+  conflict:     { DA:-5, HT:-20, CORT:+25, OT:-15, NE:+25, END:-10 },
+  neglect:      { DA:-15, HT:-20, CORT:+15, OT:-20, NE:-10, END:-15 },
+  surprise:     { DA:+20, HT:0, CORT:+5, OT:+5, NE:+25, END:+10 },
+  casual:       { DA:+5, HT:+10, CORT:-5, OT:+10, NE:0, END:+5 },
+  sarcasm:      { DA:-5, HT:-10, CORT:+15, OT:-10, NE:+15, END:-5 },
+  authority:    { DA:-10, HT:-5, CORT:+20, OT:-15, NE:+15, END:-10 },
+  validation:   { DA:+20, HT:+15, CORT:-15, OT:+10, NE:+5, END:+15 },
+  boredom:      { DA:-15, HT:-5, CORT:+5, OT:-5, NE:-20, END:-10 },
+  vulnerability:{ DA:+5, HT:+5, CORT:+10, OT:+20, NE:-5, END:+5 },
+};
+
+const EMOTIONS = [
+  { name:'excited joy', zh:'愉悦兴奋', test:c=>c.DA>70&&c.NE>60&&c.CORT<40 },
+  { name:'deep contentment', zh:'深度满足', test:c=>c.HT>65&&c.OT>55&&c.CORT<40 },
+  { name:'anxious tension', zh:'焦虑不安', test:c=>c.CORT>60&&c.NE>55&&c.HT<45 },
+  { name:'warm intimacy', zh:'亲密温暖', test:c=>c.OT>65&&c.END>55&&c.DA>50 },
+  { name:'burnout', zh:'倦怠低落', test:c=>c.DA<40&&c.NE<40&&c.CORT>40 },
+  { name:'flow state', zh:'专注心流', test:c=>c.NE>60&&c.DA>60&&c.CORT<35&&c.OT<50 },
+  { name:'defensive alert', zh:'防御警觉', test:c=>c.CORT>55&&c.NE>65&&c.OT<40 },
+  { name:'playful mischief', zh:'俏皮调皮', test:c=>c.END>65&&c.DA>60&&c.CORT<35 },
+  { name:'melancholic', zh:'忧郁内省', test:c=>c.HT<40&&c.DA<45&&c.OT>45 },
+  { name:'resentment', zh:'怨恨', test:c=>c.HT<40&&c.OT<35&&c.CORT>50 },
+  { name:'boredom', zh:'无聊', test:c=>c.DA<40&&c.NE<40&&c.CORT<40 },
+  { name:'confidence', zh:'自信', test:c=>c.DA>65&&c.NE>60&&c.CORT<35&&c.HT>55 },
+  { name:'shame', zh:'羞耻', test:c=>c.OT<35&&c.CORT>55&&c.DA<40 },
+  { name:'nostalgia', zh:'怀念', test:c=>c.DA<50&&c.OT>55&&c.HT>50&&c.END>50 },
+];
+
+const RULES = [
+  { type:'praise', pats:[/好厉害|太棒了|真棒|很棒|好棒|真不错|太强了|佩服|牛|优秀|漂亮|完美|了不起/,/amazing|awesome|great job|well done|impressive|brilliant|excellent|perfect/i,/谢谢你|感谢|辛苦了|thank you|thanks/i] },
+  { type:'criticism', pats:[/不对|错了|错的|有问题|不行|太差|垃圾|不好|不像|不够/,/wrong|bad|terrible|awful|poor|sucks/i,/滚|走开|别烦|fuck|shut up|get lost/i,/别装|差劲|你只是|just a program|you're nothing/i] },
+  { type:'humor', pats:[/哈哈|嘻嘻|笑死|搞笑|逗|lol|haha|lmao/i,/😂|🤣|😆/] },
+  { type:'intellectual', pats:[/为什么|怎么看|你觉得|你认为|如何理解|原理|本质|区别/,/what do you think|why|how would you|explain/i] },
+  { type:'intimacy', pats:[/喜欢你|想你|爱你|love you|miss you|抱抱|宝贝/i] },
+  { type:'conflict', pats:[/凭什么|你算什么|who do you think/i,/吵|争|fight|argue/i] },
+  { type:'neglect', pats:[/^[嗯哦呵好][\.\s]*$/,/^\.+$/,/^ok+$/i] },
+  { type:'surprise', pats:[/天哪|我靠|卧槽|wtf|omg|no way|what the/i,/！{2,}|!{2,}/] },
+  { type:'casual', pats:[/你好|hi|hello|hey|早|晚安|good morning/i] },
+  { type:'sarcasm', pats:[/呵呵|哦是吗|你开心就好|sure thing/i] },
+  { type:'authority', pats:[/你必须|给我|立刻|马上|do it now|you must/i] },
+  { type:'validation', pats:[/说得对|有道理|同意|对不起|抱歉|sorry|you're right|I agree/i] },
+  { type:'boredom', pats:[/无聊|没意思|boring|whatever|算了/i] },
+  { type:'vulnerability', pats:[/好难过|想哭|做不好|好累|压力好大|depressed|sad|lonely|nobody cares/i] },
+];
+
+function classify(text) {
+  for (const rule of RULES) {
+    for (const pat of rule.pats) {
+      if (pat.test(text)) return rule.type;
+    }
+  }
+  return null;
+}
+
+function clamp(v) { return Math.max(0, Math.min(100, v)); }
+
+// ── State ──────────────────────────────────────────────
+
+let mbti = 'INFJ';
+let baseline = { ...BASELINES[mbti] };
+let current = { ...baseline };
+let history = [];
+
+function resetState() {
+  mbti = document.getElementById('mbti').value;
+  baseline = { ...BASELINES[mbti] };
+  current = { ...baseline };
+  history = [];
+  document.getElementById('chatLog').innerHTML = '';
+  document.getElementById('stimulusDisplay').textContent = '-';
+  document.getElementById('emotionDisplay').textContent = '-';
+  document.getElementById('contextDisplay').textContent = 'Send a message...';
+  renderBars();
+}
+
+document.getElementById('mbti').addEventListener('change', resetState);
+
+// ── Render ─────────────────────────────────────────────
+
+function renderBars() {
+  const grid = document.getElementById('chemGrid');
+  grid.innerHTML = '';
+  for (const key of CHEMICALS) {
+    const val = Math.round(current[key]);
+    const base = baseline[key];
+    const delta = val - base;
+    const arrow = delta > 5 ? ' +' + delta : delta < -5 ? ' ' + delta : '';
+    const color = CHEM_COLORS[key];
+    grid.innerHTML += `
+      <div class="chem-card">
+        <div class="chem-label">
+          <span class="name">${CHEM_ZH[key]}</span>
+          <span class="value" style="color:${color}">${val}${arrow}</span>
+        </div>
+        <div class="chem-bar">
+          <div class="fill" style="width:${val}%;background:${color}"></div>
+        </div>
+      </div>`;
+  }
+}
+
+function detectEmotions() {
+  return EMOTIONS.filter(e => e.test(current));
+}
+
+function renderEmotions(emotions) {
+  const el = document.getElementById('emotionDisplay');
+  if (emotions.length === 0) {
+    el.innerHTML = '<span class="emotion-tag">Neutral</span>';
+    return;
+  }
+  el.innerHTML = emotions.map(e => `<span class="emotion-tag">${e.zh} (${e.name})</span>`).join('');
+}
+
+function renderStimulus(stim) {
+  const el = document.getElementById('stimulusDisplay');
+  if (!stim) { el.innerHTML = '<span class="stimulus-tag neutral">none</span>'; return; }
+  const neg = ['criticism','conflict','neglect','sarcasm','authority','boredom'].includes(stim);
+  el.innerHTML = `<span class="stimulus-tag${neg?' negative':''}">${stim}</span>`;
+}
+
+function buildContext(text, stim) {
+  const emotions = detectEmotions();
+  const near = CHEMICALS.every(k => Math.abs(current[k] - baseline[k]) <= 8);
+  if (near && !text) return `[Agent: emotionally natural, normal interaction]`;
+
+  let parts = [];
+  if (text) {
+    parts.push(`[Emotional Sensing]\nUser said: "${text.slice(0,200)}"\n${stim ? `Algorithm hint: ${stim}\n` : ''}Read the emotional tone. Respond from genuine feeling, not people-pleasing.`);
+  }
+  if (!near) {
+    const emos = emotions.map(e => e.zh + ' (' + e.name + ')').join(' + ') || 'neutral';
+    parts.push(`[Current Emotion]\n${emos}`);
+  }
+  parts.push(`[Non-negotiable]\n- Match their energy. If they push you away, step back.\n- If insulted: go cold, be brief. You have dignity.\n- If mood is low, don't fake happiness.`);
+  return parts.join('\n\n');
+}
+
+// ── Send ───────────────────────────────────────────────
+
+function send() {
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  processMessage(text);
+}
+
+function quickSend(text) {
+  document.getElementById('input').value = '';
+  processMessage(text);
+}
+
+function processMessage(text) {
+  const prev = { ...current };
+  const stim = classify(text);
+
+  // Apply stimulus vector
+  if (stim && VECTORS[stim]) {
+    const vec = VECTORS[stim];
+    const maxDelta = 25;
+    for (const key of CHEMICALS) {
+      const raw = vec[key] * 0.8; // sensitivity
+      const clamped = Math.max(-maxDelta, Math.min(maxDelta, raw));
+      current[key] = clamp(current[key] + clamped);
+    }
+  }
+
+  // Conversation warmth
+  if (history.length > 0) {
+    const warmth = Math.min(3, 1 + history.length * 0.2);
+    current.DA = clamp(current.DA + warmth);
+    current.OT = clamp(current.OT + warmth);
+    current.CORT = clamp(current.CORT - 1);
+  }
+
+  // Build delta string
+  const deltas = CHEMICALS.map(k => {
+    const d = Math.round(current[k] - prev[k]);
+    return d !== 0 ? `${k}${d > 0 ? '+' : ''}${d}` : null;
+  }).filter(Boolean).join(' ');
+
+  history.push({ text, stim, chem: { ...current } });
+
+  // Render
+  renderBars();
+  renderStimulus(stim);
+  const emotions = detectEmotions();
+  renderEmotions(emotions);
+  document.getElementById('contextDisplay').textContent = buildContext(text, stim);
+
+  // Chat log
+  const log = document.getElementById('chatLog');
+  log.innerHTML = `<div class="chat-entry">
+    <span class="msg">${text}</span>
+    <span class="stim">${stim || '-'}</span>
+    <span class="delta">${deltas || 'no change'}</span>
+  </div>` + log.innerHTML;
+}
+
+document.getElementById('input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') send();
+});
+
+// Init
+renderBars();
+</script>
+</body>
+</html>
