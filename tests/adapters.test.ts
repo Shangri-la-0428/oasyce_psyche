@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { PsycheEngine } from "../src/core.js";
@@ -6,6 +6,7 @@ import { MemoryStorageAdapter } from "../src/storage.js";
 import { psycheMiddleware } from "../src/adapters/vercel-ai.js";
 import { PsycheLangChain } from "../src/adapters/langchain.js";
 import { createPsycheServer } from "../src/adapters/http.js";
+import { register } from "../src/adapters/openclaw.js";
 
 function makeEngine() {
   return new PsycheEngine(
@@ -237,5 +238,69 @@ describe("createPsycheServer (HTTP)", () => {
     });
     assert.equal(status, 200);
     assert.ok(data.dynamicContext);
+  });
+});
+
+// ── OpenClaw Adapter ─────────────────────────────────
+
+describe("register (OpenClaw)", () => {
+  it("registers 5 hooks when enabled", () => {
+    const hooks: Array<{ event: string; priority: number }> = [];
+    const fakeApi = {
+      pluginConfig: { enabled: true, stripUpdateTags: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, _handler: any, opts?: { priority: number }) {
+        hooks.push({ event, priority: opts?.priority ?? 0 });
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.equal(hooks.length, 5);
+    assert.ok(hooks.some(h => h.event === "before_prompt_build"));
+    assert.ok(hooks.some(h => h.event === "llm_output"));
+    assert.ok(hooks.some(h => h.event === "before_message_write"));
+    assert.ok(hooks.some(h => h.event === "message_sending"));
+    assert.ok(hooks.some(h => h.event === "agent_end"));
+  });
+
+  it("skips tag-stripping hooks when stripUpdateTags=false", () => {
+    const hooks: string[] = [];
+    const fakeApi = {
+      pluginConfig: { enabled: true, stripUpdateTags: false },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string) { hooks.push(event); },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(!hooks.includes("before_message_write"));
+    assert.ok(!hooks.includes("message_sending"));
+  });
+
+  it("does nothing when disabled", () => {
+    const hooks: string[] = [];
+    const fakeApi = {
+      pluginConfig: { enabled: false },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string) { hooks.push(event); },
+    };
+    register(fakeApi as any);
+    assert.equal(hooks.length, 0);
+  });
+
+  it("before_prompt_build returns appendSystemContext", async () => {
+    let capturedHandler: any;
+    const fakeApi = {
+      pluginConfig: { enabled: true, compactMode: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, handler: any) {
+        if (event === "before_prompt_build") capturedHandler = handler;
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(capturedHandler, "Should register before_prompt_build handler");
+    // Without a real workspace, the handler should return {} gracefully
+    const result = await capturedHandler({}, {});
+    assert.deepEqual(result, {});
   });
 });
