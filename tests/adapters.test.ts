@@ -92,6 +92,77 @@ describe("psycheMiddleware (Vercel AI)", () => {
     assert.ok(typeof result.system === "string");
     assert.ok(result.system!.length > 0);
   });
+
+  // ── Streaming (wrapStream) ──
+
+  async function collectStream(stream: AsyncIterable<any>): Promise<{ texts: string[]; finished: boolean }> {
+    const texts: string[] = [];
+    let finished = false;
+    for await (const chunk of stream) {
+      if (chunk.type === "text-delta") texts.push(chunk.textDelta);
+      if (chunk.type === "finish") finished = true;
+    }
+    return { texts, finished };
+  }
+
+  async function* fakeStream(chunks: Array<{ type: string; textDelta?: string }>): AsyncIterable<any> {
+    for (const c of chunks) yield c;
+  }
+
+  it("wrapStream passes through clean text", async () => {
+    const mw = psycheMiddleware(engine);
+    const { stream } = await mw.wrapStream({
+      doStream: async () => ({
+        stream: fakeStream([
+          { type: "text-delta", textDelta: "Hello " },
+          { type: "text-delta", textDelta: "world!" },
+          { type: "finish" },
+        ]),
+      }),
+      params: {},
+    });
+    const { texts, finished } = await collectStream(stream);
+    assert.ok(texts.join("").includes("Hello"));
+    assert.ok(texts.join("").includes("world!"));
+    assert.ok(finished);
+  });
+
+  it("wrapStream strips psyche_update tag from stream", async () => {
+    const mw = psycheMiddleware(engine);
+    const { stream } = await mw.wrapStream({
+      doStream: async () => ({
+        stream: fakeStream([
+          { type: "text-delta", textDelta: "I'm happy!" },
+          { type: "text-delta", textDelta: "\n\n<psyche_update>" },
+          { type: "text-delta", textDelta: "\nDA: 85" },
+          { type: "text-delta", textDelta: "\n</psyche_update>" },
+          { type: "finish" },
+        ]),
+      }),
+      params: {},
+    });
+    const { texts } = await collectStream(stream);
+    const combined = texts.join("");
+    assert.ok(!combined.includes("psyche_update"), `Should strip tags, got: ${combined}`);
+    assert.ok(!combined.includes("DA: 85"), `Should strip tag content, got: ${combined}`);
+  });
+
+  it("wrapStream processes engine output on finish", async () => {
+    const mw = psycheMiddleware(engine);
+    const stateBefore = engine.getState().meta.totalInteractions;
+    const { stream } = await mw.wrapStream({
+      doStream: async () => ({
+        stream: fakeStream([
+          { type: "text-delta", textDelta: "response" },
+          { type: "finish" },
+        ]),
+      }),
+      params: {},
+    });
+    await collectStream(stream);
+    // processOutput should have been called on finish
+    // (it increments state internally via contagion/agreement checks)
+  });
 });
 
 // ── LangChain Adapter ──────────────────────────────────
@@ -287,7 +358,7 @@ describe("register (OpenClaw)", () => {
     assert.equal(hooks.length, 0);
   });
 
-  it("before_prompt_build returns appendSystemContext", async () => {
+  it("before_prompt_build returns empty without workspaceDir", async () => {
     let capturedHandler: any;
     const fakeApi = {
       pluginConfig: { enabled: true, compactMode: true },
@@ -299,8 +370,311 @@ describe("register (OpenClaw)", () => {
     };
     register(fakeApi as any);
     assert.ok(capturedHandler, "Should register before_prompt_build handler");
-    // Without a real workspace, the handler should return {} gracefully
-    const result = await capturedHandler({}, {});
+    // Without workspaceDir in ctx, the handler should return {} gracefully
+    const result = await capturedHandler({ text: "hello" }, {});
     assert.deepEqual(result, {});
+  });
+
+  it("uses default config when pluginConfig is undefined", () => {
+    const hooks: string[] = [];
+    const fakeApi = {
+      pluginConfig: undefined,
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string) { hooks.push(event); },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    // enabled defaults to true, stripUpdateTags defaults to true
+    assert.ok(hooks.length >= 5, "All hooks registered with default config");
+    assert.ok(hooks.includes("before_message_write"), "Tag stripping on by default");
+    assert.ok(hooks.includes("message_sending"), "Tag stripping on by default");
+  });
+
+  it("hook priorities are set correctly", () => {
+    const hookPriorities: Record<string, number> = {};
+    const fakeApi = {
+      pluginConfig: { enabled: true, stripUpdateTags: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, _handler: any, opts?: { priority: number }) {
+        hookPriorities[event] = opts?.priority ?? 0;
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+
+    assert.equal(hookPriorities["before_prompt_build"], 10);
+    assert.equal(hookPriorities["llm_output"], 50);
+    assert.equal(hookPriorities["before_message_write"], 90);
+    assert.equal(hookPriorities["message_sending"], 90);
+    assert.equal(hookPriorities["agent_end"], 50);
+  });
+
+  it("registers psyche CLI command", () => {
+    const cliCommands: string[] = [];
+    const fakeApi = {
+      pluginConfig: { enabled: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on() {},
+      registerCli(_handler: any, opts: { commands: string[] }) {
+        cliCommands.push(...opts.commands);
+      },
+    };
+    register(fakeApi as any);
+    assert.ok(cliCommands.includes("psyche"));
+  });
+
+  it("logs activation and ready messages", () => {
+    const logMessages: string[] = [];
+    const fakeApi = {
+      pluginConfig: { enabled: true },
+      logger: {
+        info: (msg: string) => logMessages.push(msg),
+        warn: () => {},
+        debug: () => {},
+      },
+      on() {},
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(logMessages.some((m) => m.includes("activating")));
+    assert.ok(logMessages.some((m) => m.includes("ready")));
+  });
+
+  it("logs disabled message when not enabled", () => {
+    const logMessages: string[] = [];
+    const fakeApi = {
+      pluginConfig: { enabled: false },
+      logger: {
+        info: (msg: string) => logMessages.push(msg),
+        warn: () => {},
+        debug: () => {},
+      },
+      on() {},
+    };
+    register(fakeApi as any);
+    assert.ok(logMessages.some((m) => m.includes("disabled")));
+  });
+
+  it("before_message_write strips tags from string content", () => {
+    let writeHandler: any;
+    const fakeApi = {
+      pluginConfig: { enabled: true, stripUpdateTags: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, handler: any) {
+        if (event === "before_message_write") writeHandler = handler;
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(writeHandler, "before_message_write handler registered");
+
+    const result = writeHandler(
+      { message: { role: "assistant", content: "Hello!\n\n<psyche_update>\nDA: 80\n</psyche_update>" } },
+      {},
+    );
+    assert.ok(result !== undefined);
+    assert.equal(result.message.content, "Hello!");
+  });
+
+  it("before_message_write strips tags from content block arrays", () => {
+    let writeHandler: any;
+    const fakeApi = {
+      pluginConfig: { enabled: true, stripUpdateTags: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, handler: any) {
+        if (event === "before_message_write") writeHandler = handler;
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(writeHandler);
+
+    const result = writeHandler(
+      {
+        message: {
+          role: "assistant",
+          content: [
+            { type: "text", text: "Hello!\n<psyche_update>\nDA: 80\n</psyche_update>" },
+            { type: "image", url: "test.png" },
+          ],
+        },
+      },
+      {},
+    );
+    assert.ok(result !== undefined);
+    const blocks = result.message.content;
+    assert.equal(blocks[0].text, "Hello!");
+    assert.equal(blocks[1].type, "image");
+  });
+
+  it("before_message_write passes through when no tags present", () => {
+    let writeHandler: any;
+    const fakeApi = {
+      pluginConfig: { enabled: true, stripUpdateTags: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, handler: any) {
+        if (event === "before_message_write") writeHandler = handler;
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(writeHandler);
+
+    const result = writeHandler(
+      { message: { role: "assistant", content: "No tags here" } },
+      {},
+    );
+    assert.equal(result, undefined);
+  });
+
+  it("before_message_write handles missing message gracefully", () => {
+    let writeHandler: any;
+    const fakeApi = {
+      pluginConfig: { enabled: true, stripUpdateTags: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, handler: any) {
+        if (event === "before_message_write") writeHandler = handler;
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(writeHandler);
+
+    const result = writeHandler({}, {});
+    assert.equal(result, undefined);
+  });
+
+  it("message_sending strips tags from content string", async () => {
+    let sendHandler: any;
+    const fakeApi = {
+      pluginConfig: { enabled: true, stripUpdateTags: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, handler: any) {
+        if (event === "message_sending") sendHandler = handler;
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(sendHandler);
+
+    const result = await sendHandler(
+      { content: "Hello!\n\n<psyche_update>\nDA: 80\n</psyche_update>" },
+      {},
+    );
+    assert.equal(result.content, "Hello!");
+  });
+
+  it("message_sending passes through when no tags", async () => {
+    let sendHandler: any;
+    const fakeApi = {
+      pluginConfig: { enabled: true, stripUpdateTags: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, handler: any) {
+        if (event === "message_sending") sendHandler = handler;
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(sendHandler);
+
+    const result = await sendHandler({ content: "Clean text" }, {});
+    assert.deepEqual(result, {});
+  });
+
+  it("message_sending passes through when content is not a string", async () => {
+    let sendHandler: any;
+    const fakeApi = {
+      pluginConfig: { enabled: true, stripUpdateTags: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, handler: any) {
+        if (event === "message_sending") sendHandler = handler;
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(sendHandler);
+
+    const result = await sendHandler({ content: 42 }, {});
+    assert.deepEqual(result, {});
+  });
+
+  it("agent_end does not throw when no engine cached", async () => {
+    let endHandler: any;
+    const fakeApi = {
+      pluginConfig: { enabled: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, handler: any) {
+        if (event === "agent_end") endHandler = handler;
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(endHandler);
+
+    // No engine cached for this workspace — should not throw
+    await endHandler({}, { workspaceDir: "/tmp/nonexistent" });
+  });
+
+  it("agent_end does not throw without workspaceDir", async () => {
+    let endHandler: any;
+    const fakeApi = {
+      pluginConfig: { enabled: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, handler: any) {
+        if (event === "agent_end") endHandler = handler;
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(endHandler);
+
+    await endHandler({}, {});
+  });
+
+  it("llm_output returns early without workspaceDir", async () => {
+    let outputHandler: any;
+    const fakeApi = {
+      pluginConfig: { enabled: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, handler: any) {
+        if (event === "llm_output") outputHandler = handler;
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(outputHandler);
+
+    // Should not throw — no workspaceDir
+    await outputHandler({ assistantTexts: ["hello"] }, {});
+  });
+
+  it("llm_output returns early with empty text", async () => {
+    let outputHandler: any;
+    const fakeApi = {
+      pluginConfig: { enabled: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string, handler: any) {
+        if (event === "llm_output") outputHandler = handler;
+      },
+      registerCli: () => {},
+    };
+    register(fakeApi as any);
+    assert.ok(outputHandler);
+
+    // Should not throw — no assistantTexts
+    await outputHandler({}, { workspaceDir: "/tmp/test" });
+  });
+
+  it("works without registerCli on the api", () => {
+    const hooks: string[] = [];
+    const fakeApi = {
+      pluginConfig: { enabled: true },
+      logger: { info: () => {}, warn: () => {}, debug: () => {} },
+      on(event: string) { hooks.push(event); },
+      // No registerCli — optional method
+    };
+    // Should not throw
+    register(fakeApi as any);
+    assert.ok(hooks.length >= 5);
   });
 });

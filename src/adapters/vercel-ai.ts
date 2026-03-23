@@ -13,9 +13,7 @@
 // Handles:
 //   - transformParams: inject psyche system/dynamic context
 //   - wrapGenerate: process output, strip <psyche_update> tags
-//
-// Note: For streaming (streamText), call engine.processOutput()
-// manually on the final accumulated text.
+//   - wrapStream: buffer stream, detect & strip tags at end
 // ============================================================
 
 import type { PsycheEngine } from "../core.js";
@@ -40,6 +38,20 @@ interface GenerateResult {
   [key: string]: unknown;
 }
 
+interface StreamChunk {
+  type: string;
+  [key: string]: unknown;
+}
+
+// ── Tag stripping ────────────────────────────────────────────
+
+const PSYCHE_TAG_RE = /<psyche_update>[\s\S]*?<\/psyche_update>/g;
+const MULTI_NEWLINE_RE = /\n{3,}/g;
+
+function stripPsycheTags(text: string): string {
+  return text.replace(PSYCHE_TAG_RE, "").replace(MULTI_NEWLINE_RE, "\n\n").trim();
+}
+
 // ── Middleware ────────────────────────────────────────────────
 
 export interface PsycheMiddlewareOptions {
@@ -51,11 +63,13 @@ export interface PsycheMiddlewareOptions {
  * Create Vercel AI SDK middleware that injects psyche emotional context
  * and processes LLM output for state updates.
  *
+ * Supports both generateText (wrapGenerate) and streamText (wrapStream).
+ *
  * @example
  * ```ts
  * import { PsycheEngine, MemoryStorageAdapter } from "psyche-ai";
  * import { psycheMiddleware } from "psyche-ai/vercel-ai";
- * import { wrapLanguageModel, generateText } from "ai";
+ * import { wrapLanguageModel, generateText, streamText } from "ai";
  * import { openai } from "@ai-sdk/openai";
  *
  * const engine = new PsycheEngine({ mbti: "ENFP", name: "Luna" }, new MemoryStorageAdapter());
@@ -66,7 +80,12 @@ export interface PsycheMiddlewareOptions {
  *   middleware: psycheMiddleware(engine),
  * });
  *
+ * // Non-streaming
  * const { text } = await generateText({ model, prompt: "Hey!" });
+ *
+ * // Streaming — tags are buffered and stripped automatically
+ * const stream = streamText({ model, prompt: "Hey!" });
+ * for await (const chunk of stream.textStream) { process.stdout.write(chunk); }
  * ```
  */
 export function psycheMiddleware(engine: PsycheEngine, opts?: PsycheMiddlewareOptions) {
@@ -92,6 +111,83 @@ export function psycheMiddleware(engine: PsycheEngine, opts?: PsycheMiddlewareOp
         return { ...result, text: processed.cleanedText };
       }
       return result;
+    },
+
+    wrapStream: async ({ doStream }: { doStream: () => Promise<{ stream: AsyncIterable<StreamChunk> }>; params: CallParams }) => {
+      const { stream: innerStream } = await doStream();
+
+      // Buffer text chunks, detect <psyche_update> at end, strip from output
+      let fullText = "";
+      let tagDetected = false;
+
+      async function* transformStream(): AsyncIterable<StreamChunk> {
+        // Buffering strategy:
+        // Stream text chunks through normally UNTIL we see '<psyche_update>'.
+        // Once detected, buffer everything from that point on and strip the tag.
+        // At finish, process the full text through the engine.
+        let bufferStart = -1;
+        let buffer = "";
+
+        for await (const chunk of innerStream) {
+          if (chunk.type === "text-delta") {
+            const text = (chunk as { type: string; textDelta: string }).textDelta ?? "";
+            fullText += text;
+
+            if (bufferStart < 0) {
+              // Check if tag is starting in the accumulated text
+              const tagStart = fullText.indexOf("<psyche_update>");
+              if (tagStart >= 0) {
+                // Yield any text before the tag that hasn't been yielded
+                const preTag = text.substring(0, Math.max(0, text.length - (fullText.length - tagStart)));
+                if (preTag) {
+                  yield { ...chunk, textDelta: preTag } as StreamChunk;
+                }
+                bufferStart = tagStart;
+                buffer = fullText.substring(tagStart);
+                tagDetected = true;
+              } else {
+                // Check if we might be in a partial tag (< at end)
+                const partialIdx = fullText.lastIndexOf("<");
+                if (partialIdx >= 0 && fullText.substring(partialIdx).length < 16) {
+                  // Might be start of <psyche_update>, hold back
+                  const safe = text.substring(0, Math.max(0, text.length - (fullText.length - partialIdx)));
+                  if (safe) {
+                    yield { ...chunk, textDelta: safe } as StreamChunk;
+                  }
+                } else {
+                  yield chunk;
+                }
+              }
+            } else {
+              // Already buffering inside a tag — don't yield
+              buffer += text;
+
+              // Check if the closing tag appeared
+              if (buffer.includes("</psyche_update>")) {
+                // Tag complete — strip it, yield any remaining text after the tag
+                const afterTag = fullText.substring(
+                  fullText.indexOf("</psyche_update>") + "</psyche_update>".length,
+                );
+                if (afterTag.trim()) {
+                  yield { type: "text-delta", textDelta: afterTag.trim() } as StreamChunk;
+                }
+                bufferStart = -1;
+                buffer = "";
+              }
+            }
+          } else if (chunk.type === "finish") {
+            // Process full text through engine before finishing
+            if (fullText) {
+              await engine.processOutput(fullText);
+            }
+            yield chunk;
+          } else {
+            yield chunk;
+          }
+        }
+      }
+
+      return { stream: transformStream() };
     },
   };
 }

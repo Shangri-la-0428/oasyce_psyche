@@ -544,7 +544,16 @@ export function buildCompactContext(
     if (selfCtx) parts.push(selfCtx);
   }
 
-  // 9. Empathy report — only when user shares feelings
+  // 9. Cross-session emotional memory — surface relationship history
+  const relationship = getRelationship(state, userId);
+  if (relationship.memory && relationship.memory.length > 0) {
+    const memLines = relationship.memory.slice(-3); // last 3 sessions
+    parts.push(locale === "zh"
+      ? `[记忆]\n${memLines.join("\n")}`
+      : `[Memory]\n${memLines.join("\n")}`);
+  }
+
+  // 10. Empathy report — only when user shares feelings
   parts.push(locale === "zh"
     ? `如果对方在分享感受，在回复末尾用 <psyche_update> 报告：\nuserState: 对方情绪\nprojectedFeeling: 你的感受\nresonance: match|partial|mismatch\n否则不需要报告。`
     : `If user shares feelings, report at end with <psyche_update>:\nuserState: their emotion\nprojectedFeeling: your feeling\nresonance: match|partial|mismatch\nOtherwise no report needed.`);

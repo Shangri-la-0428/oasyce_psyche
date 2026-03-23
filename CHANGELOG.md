@@ -1,5 +1,32 @@
 # 更新日志 / Changelog
 
+## v2.2.0 — 流式支持 · 多 Agent 交互 · 跨会话记忆
+
+### Vercel AI Streaming (P2.1)
+
+- **`wrapStream`**: Vercel AI SDK middleware now supports `streamText`. Buffers `<psyche_update>` tags mid-stream, strips them from output, processes full text on finish.
+- **Partial tag detection**: Holds back text when `<` might be the start of a tag, ensuring clean streaming output.
+
+### Multi-Agent Emotional Interaction (P2.2)
+
+- **`PsycheInteraction`** (`src/interaction.ts`): Two PsycheEngine instances can emotionally interact.
+  - `exchange(from, to, text)` — directed exchange: speaker processes output, receiver processes input
+  - `crossContagion(a, b, rate)` — bidirectional emotional contagion between agents
+  - `getRelationshipSummary(a, b)` — relationship phase, directional valence, chemical similarity
+- **Relationship phases**: strangers → acquaintances → familiar → attuned (based on exchange count)
+- **Valence tracking**: Per-direction average emotional valence from interaction history
+
+### Cross-Session Emotional Memory (P2.4)
+
+- **Section 9 in compact prompt**: Surfaces last 3 compressed session summaries from `relationship.memory` in compact context.
+- Agent now remembers emotional context from past conversations: "上次聊天时你压力很大，我很担心你".
+
+### Tests
+
+- 395 tests total (from 347). New: 3 streaming tests, 12 interaction tests, expanded OpenClaw adapter tests.
+
+---
+
 ## v2.1.0 — 自我认知与适配器修复 / Self-Recognition & Adapter Fix
 
 ### 自我认知 / Self-Recognition (核心新增)

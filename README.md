@@ -152,10 +152,13 @@ cd openclaw-plugin-psyche && node scripts/diagnose.js
 - **存在性威胁检测** — 识别中英文的存在性否定，直接打击生存驱力
 - **驱力→化学联动** — 未满足的驱力改变化学衰减基线和刺激敏感度
 - **马斯洛抑制** — 低层需求未满足时，高层需求的影响被抑制
-- **自我认知** — 分析情绪历史，识别自身的情绪趋势和反复触发点（9 段式 prompt 架构）
+- **自我认知** — 分析情绪历史，识别自身的情绪趋势和反复触发点（10 段式 prompt 架构）
 - **情绪传染** — 用户的情绪会轻微影响 agent
 - **反谄媚** — 追踪连续同意次数，防止无脑讨好
 - **互惠机制** — 你对它好，它对你好。你冷漠，它保持距离
+- **跨会话记忆** — 重新遇到用户时注入上次对话的情绪记忆
+- **多 Agent 交互** — 两个 PsycheEngine 实例之间的情绪传染、关系追踪
+- **流式支持** — Vercel AI SDK `streamText` 中间件，自动缓冲和剥离标签
 - **Compact Mode** — 算法做化学计算，LLM 只看行为指令（~15-180 tokens vs ~550）
 
 架构详情见 [ARCHITECTURE.md](ARCHITECTURE.md)。
@@ -165,7 +168,7 @@ cd openclaw-plugin-psyche && node scripts/diagnose.js
 ```bash
 npm install
 npm run build
-npm test           # 339 tests
+npm test           # 395 tests
 npm run typecheck  # strict mode
 ```
 

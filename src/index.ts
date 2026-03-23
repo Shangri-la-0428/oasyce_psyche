@@ -32,6 +32,10 @@ export {
 export { computeSelfReflection, computeEmotionalTendency, buildSelfReflectionContext } from "./self-recognition.js";
 export type { SelfReflection } from "./self-recognition.js";
 
+// Multi-agent interaction
+export { PsycheInteraction } from "./interaction.js";
+export type { ExchangeResult, ContagionResult, RelationshipSummary, InteractionPhase } from "./interaction.js";
+
 // Utilities — for custom adapter / advanced use
 export { classifyStimulus, getPrimaryStimulus } from "./classify.js";
 export { buildProtocolContext, buildDynamicContext, buildCompactContext, isNearBaseline } from "./prompt.js";
