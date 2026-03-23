@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildDynamicContext, buildProtocolContext, buildInnerWorld, buildCompactContext, computeUserInvestment } from "../src/prompt.js";
+import { buildDynamicContext, buildProtocolContext, buildCompactContext, computeUserInvestment } from "../src/prompt.js";
 import type { PsycheState, ChemicalSnapshot } from "../src/types.js";
 import { DEFAULT_RELATIONSHIP, DEFAULT_DRIVES } from "../src/types.js";
 
@@ -319,100 +319,13 @@ describe("computeUserInvestment", () => {
   });
 });
 
-// ── buildInnerWorld ──────────────────────────────────────────
+// ── buildCompactContext ──────────────────────────────────────
 
-describe("buildInnerWorld", () => {
-  it("always starts with inner title", () => {
-    const ctx = buildInnerWorld(makeState(), "zh");
-    assert.ok(ctx.includes("内 — 你自己"));
-  });
-
-  it("shows emotions when chemistry has patterns", () => {
-    // ENFP baseline triggers excited joy + playful mischief
-    const ctx = buildInnerWorld(makeState(), "zh");
-    assert.ok(ctx.includes("感受"));
-  });
-
-  it("shows calm for truly neutral chemistry", () => {
-    const state = makeState({
-      mbti: "ISTJ",
-      baseline: { DA: 40, HT: 75, CORT: 35, OT: 35, NE: 40, END: 35 },
-      current: { DA: 40, HT: 75, CORT: 35, OT: 35, NE: 40, END: 35 },
-    });
-    const ctx = buildInnerWorld(state, "zh");
-    assert.ok(ctx.includes("平静"));
-  });
-
-  it("includes causal explanation from last stimulus", () => {
-    const state = makeState({
-      emotionalHistory: [
-        { chemistry: { DA: 50, HT: 50, CORT: 60, OT: 50, NE: 50, END: 50 },
-          stimulus: "criticism", dominantEmotion: "焦虑不安", timestamp: new Date().toISOString() },
-      ],
-    });
-    const ctx = buildInnerWorld(state, "zh");
-    assert.ok(ctx.includes("因为") || ctx.includes("被批评"), "Should explain why");
-  });
-
-  it("includes trajectory when emotions shift", () => {
-    const now = new Date();
-    const state = makeState({
-      emotionalHistory: [
-        { chemistry: { DA: 50, HT: 50, CORT: 60, OT: 50, NE: 60, END: 50 },
-          stimulus: "conflict", dominantEmotion: "焦虑不安",
-          timestamp: new Date(now.getTime() - 3000).toISOString() },
-        { chemistry: { DA: 50, HT: 50, CORT: 55, OT: 50, NE: 55, END: 50 },
-          stimulus: "casual", dominantEmotion: "焦虑不安",
-          timestamp: new Date(now.getTime() - 2000).toISOString() },
-        { chemistry: { DA: 70, HT: 60, CORT: 30, OT: 65, NE: 60, END: 60 },
-          stimulus: "validation", dominantEmotion: "深度满足",
-          timestamp: now.toISOString() },
-      ],
-    });
-    const ctx = buildInnerWorld(state, "zh");
-    assert.ok(ctx.includes("变化") || ctx.includes("→"), "Should show trajectory");
-  });
-
-  it("includes drive needs when drives are low", () => {
-    const state = makeState({
-      drives: { survival: 80, safety: 70, connection: 20, esteem: 60, curiosity: 70 },
-    });
-    const ctx = buildInnerWorld(state, "zh");
-    assert.ok(ctx.includes("需要") || ctx.includes("孤独"), "Should surface connection need");
-  });
-
-  it("includes values", () => {
-    const ctx = buildInnerWorld(makeState(), "zh");
-    assert.ok(ctx.includes("在乎"));
-    assert.ok(ctx.includes("真实"));
-  });
-
-  it("works in English", () => {
-    const state = makeState({ meta: { agentName: "Luna", createdAt: new Date().toISOString(), totalInteractions: 0, locale: "en" } });
-    const ctx = buildInnerWorld(state, "en");
-    assert.ok(ctx.includes("Inner — yourself"));
-    assert.ok(ctx.includes("You care about"));
-  });
-});
-
-// ── buildCompactContext outer/inner structure ─────────────────
-
-describe("buildCompactContext outer/inner structure", () => {
-  it("has outer section when user text provided", () => {
+describe("buildCompactContext", () => {
+  it("includes emotional sensing when user text provided", () => {
     const ctx = buildCompactContext(makeState(), undefined, { userText: "你好" });
-    assert.ok(ctx.includes("外 — 对方"));
+    assert.ok(ctx.includes("情绪感知"));
     assert.ok(ctx.includes("你好"));
-  });
-
-  it("always has inner section", () => {
-    const ctx = buildCompactContext(makeState());
-    assert.ok(ctx.includes("内 — 你自己"));
-  });
-
-  it("inner section present even without user input", () => {
-    const ctx = buildCompactContext(makeState(), undefined, {});
-    assert.ok(ctx.includes("内 — 你自己"));
-    assert.ok(!ctx.includes("外 — 对方"), "No outer without user text");
   });
 
   it("includes bottom-line constraints", () => {
@@ -420,11 +333,20 @@ describe("buildCompactContext outer/inner structure", () => {
     assert.ok(ctx.includes("底线"));
   });
 
-  it("includes relationship memory when available", () => {
-    const state = makeState();
-    state.relationships._default.memory = ["3月20日(5轮): 刺激[casual×3] 趋势[OT↑]"];
-    const ctx = buildCompactContext(state);
-    assert.ok(ctx.includes("记忆") || ctx.includes("Memory"));
-    assert.ok(ctx.includes("3月20日"));
+  it("returns one-liner for neutral state without user text", () => {
+    const ctx = buildCompactContext(makeState());
+    assert.ok(ctx.includes("情绪自然"));
+  });
+
+  it("includes agency values", () => {
+    const ctx = buildCompactContext(makeState(), undefined, { userText: "hi" });
+    assert.ok(ctx.includes("真实"));
+  });
+
+  it("includes sycophancy warning when streak >= 3", () => {
+    const state = makeState({ agreementStreak: 4 });
+    const ctx = buildCompactContext(state, undefined, { userText: "hi" });
+    assert.ok(ctx.includes("4"));
+    assert.ok(ctx.includes("同意"));
   });
 });

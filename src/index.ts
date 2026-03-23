@@ -28,6 +28,10 @@ export {
   DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DRIVE_KEYS, DRIVE_NAMES_ZH,
 } from "./types.js";
 
+// Self-recognition
+export { computeSelfReflection, computeEmotionalTendency, buildSelfReflectionContext } from "./self-recognition.js";
+export type { SelfReflection } from "./self-recognition.js";
+
 // Utilities — for custom adapter / advanced use
 export { classifyStimulus, getPrimaryStimulus } from "./classify.js";
 export { buildProtocolContext, buildDynamicContext, buildCompactContext, isNearBaseline } from "./prompt.js";

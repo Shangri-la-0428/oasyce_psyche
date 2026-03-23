@@ -1,5 +1,43 @@
 # 更新日志 / Changelog
 
+## v2.1.0 — 自我认知与适配器修复 / Self-Recognition & Adapter Fix
+
+### 自我认知 / Self-Recognition (核心新增)
+
+- **情绪自省** (`self-recognition.ts`): 分析情绪历史，识别反复触发的刺激类型、情绪趋势（上升/下降/波动/震荡/稳定）、主导情绪，生成叙事性自我认知摘要。
+- **Emotional introspection** (`self-recognition.ts`): Analyzes emotional history to identify recurring triggers, emotional tendency (ascending/descending/volatile/oscillating/stable), dominant emotion, and generates a narrative self-reflection summary.
+- **Compact 注入**: 情绪历史 ≥5 轮时，自动在 compact context 中注入自我认知（第 8 节）。
+- **Compact injection**: Auto-injects self-recognition as section 8 in compact context when emotional history has ≥5 entries.
+
+### 自动更新 / Auto-Update
+
+- **非阻塞更新检查** (`update.ts`): `initialize()` 时后台检查 npm registry，每小时最多一次，缓存在 `~/.psyche-ai/update-check.json`。找到新版本尝试自动 `npm update`，失败则打印手动更新提示。
+- **Non-blocking update checker** (`update.ts`): Background npm registry check on `initialize()`, hourly rate limit, cached at `~/.psyche-ai/update-check.json`. Auto-updates if possible, prints manual hint if not.
+
+### OpenClaw 适配器修复 / OpenClaw Adapter Fix
+
+- **修复内部 context 可见**: `prependContext` → `appendSystemContext`，情绪 context 作为不可见的 system-level 注入，不再显示在聊天界面。
+- **Fix internal context visibility**: Changed from `prependContext` to `appendSystemContext` for invisible system-level injection.
+- **修复 `<psyche_update>` 标签可见**: 新增 `before_message_write` hook（优先级 90），在 TUI 写入前剥离标签。
+- **Fix visible `<psyche_update>` tags**: Added `before_message_write` hook (priority 90) to strip tags before TUI display.
+- **修复 `llm_output` hook**: 读取 `event.assistantTexts` (string[]) 而非 `event.text`。
+- **Fix `llm_output` hook**: Read `event.assistantTexts` (string[]) instead of `event.text`.
+- **适配器现在注册 5 个 hooks**: `before_prompt_build`, `llm_output`, `before_message_write`, `message_sending`, `agent_end`。
+- **Adapter now registers 5 hooks**: `before_prompt_build`, `llm_output`, `before_message_write`, `message_sending`, `agent_end`.
+
+### Compact Mode 重构 / Compact Mode Restructure
+
+- **9 段式架构**: 取代旧的"外→内→行为"三层结构，改为 9 个编号段落：(1)情绪感知 (2)当前情绪 (3)行为约束 (4)底线 (5)主体性 (6)反谄媚 (7)互惠 (8)自我认知 (9)共情报告。
+- **9-section architecture**: Replaces old "outer→inner→behavior" three-layer structure with 9 numbered sections: (1)emotional sensing (2)current emotion (3)behavioral constraints (4)non-negotiable (5)agency (6)anti-sycophancy (7)reciprocity (8)self-recognition (9)empathy report.
+
+### 工程 / Engineering
+
+- **测试**: 339 个测试，0 失败
+- **Tests**: 339 tests, 0 failures
+- **版本同步**: `openclaw.plugin.json` 同步到 v2.1.0
+
+---
+
 ## v2.0.0 — 本能与内在世界 / Instinct & Inner World
 
 ### 本能层 / Innate Drives (核心新增)

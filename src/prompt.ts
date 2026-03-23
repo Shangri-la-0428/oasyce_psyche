@@ -10,6 +10,7 @@ import { getTemperament, getProfile } from "./profiles.js";
 import { getRelationship } from "./psyche-file.js";
 import { t } from "./i18n.js";
 import { buildDriveContext, hasCriticalDrive } from "./drives.js";
+import { computeSelfReflection, buildSelfReflectionContext } from "./self-recognition.js";
 
 /**
  * Build the dynamic per-turn emotional context injected via before_prompt_build.
@@ -535,7 +536,15 @@ export function buildCompactContext(
       : `Sustained coldness. Stay professional, withdraw emotionally. Work stays competent.`);
   }
 
-  // 8. Empathy report — only when user shares feelings
+  // 8. Self-recognition — inject when history has enough data
+  const history = emotionalHistory ?? [];
+  if (history.length >= 5) {
+    const reflection = computeSelfReflection(history, locale);
+    const selfCtx = buildSelfReflectionContext(reflection, locale);
+    if (selfCtx) parts.push(selfCtx);
+  }
+
+  // 9. Empathy report — only when user shares feelings
   parts.push(locale === "zh"
     ? `如果对方在分享感受，在回复末尾用 <psyche_update> 报告：\nuserState: 对方情绪\nprojectedFeeling: 你的感受\nresonance: match|partial|mismatch\n否则不需要报告。`
     : `If user shares feelings, report at end with <psyche_update>:\nuserState: their emotion\nprojectedFeeling: your feeling\nresonance: match|partial|mismatch\nOtherwise no report needed.`);

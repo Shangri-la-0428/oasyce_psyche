@@ -146,7 +146,7 @@ For developers and the curious:
 - **Existential threat detection** — detects existential denial in Chinese/English, directly hits survival drive
 - **Drive→chemistry coupling** — unsatisfied drives shift the effective baseline and stimulus sensitivity
 - **Maslow suppression** — lower-level needs unsatisfied → higher-level drive effects suppressed
-- **Inner world** — persistent self-awareness (outer/inner/behavior three-layer prompt structure)
+- **Self-recognition** — analyzes emotional history, identifies own emotional tendencies and recurring triggers (9-section prompt architecture)
 - **Emotional contagion** — user's emotions slightly influence the agent
 - **Anti-sycophancy** — tracks consecutive agreements, prevents mindless people-pleasing
 - **Reciprocity** — treats you how you treat it. Cold user gets distance, not begging
@@ -159,7 +159,7 @@ Architecture details in [ARCHITECTURE.md](ARCHITECTURE.md).
 ```bash
 npm install
 npm run build
-npm test           # 347 tests
+npm test           # 339 tests
 npm run typecheck  # strict mode
 ```
 

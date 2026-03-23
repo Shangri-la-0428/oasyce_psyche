@@ -24,6 +24,7 @@ import {
   decayDrives, feedDrives, detectExistentialThreat,
   computeEffectiveBaseline, computeEffectiveSensitivity,
 } from "./drives.js";
+import { checkForUpdate } from "./update.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -96,6 +97,9 @@ export class PsycheEngine {
       this.state = this.createDefaultState();
       await this.storage.save(this.state);
     }
+
+    // Non-blocking update check — fire and forget, never delays initialization
+    checkForUpdate().catch(() => {});
   }
 
   /**
