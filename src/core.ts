@@ -381,6 +381,10 @@ export class PsycheEngine {
         const effectiveSensitivity = computeEffectiveSensitivity(
           getSensitivity(state.mbti), drives, primary.type, state.traitDrift,
         );
+        // v9.2: Confidence modulates intensity — a 0.95 life-or-death dilemma
+        // hits ~1.7x harder than a 0.55 mild disagreement.
+        // Maps [0.5, 1.0] → [0.6, 1.2] via linear interpolation.
+        const confidenceIntensity = 0.6 + (primary.confidence - 0.5) * 1.2;
         const modeMultiplier = this.cfg.mode === "work" ? 0.3 : this.cfg.mode === "companion" ? 1.5 : 1.0;
         const effectiveMaxDelta = this.cfg.mode === "work" ? 5 : this.cfg.maxChemicalDelta;
         // v9: Habituation — count recent same-type stimuli in this session
@@ -388,7 +392,7 @@ export class PsycheEngine {
           .filter(s => s.stimulus === primary.type).length + 1; // +1 for current
         current = applyStimulus(
           current, primary.type,
-          effectiveSensitivity * this.cfg.personalityIntensity * modeMultiplier,
+          effectiveSensitivity * this.cfg.personalityIntensity * modeMultiplier * confidenceIntensity,
           effectiveMaxDelta,
           NOOP_LOGGER,
           recentSameCount,
@@ -615,7 +619,7 @@ export class PsycheEngine {
 
     // v9: Compute structured policy modifiers
     const policyModifiers = computePolicyModifiers(state);
-    const policyCtx = buildPolicyContext(policyModifiers, locale);
+    const policyCtx = buildPolicyContext(policyModifiers, locale, state.drives);
 
     // P10: Append processing depth info to autonomic description when depth is low
     let autonomicDesc: string | undefined;
@@ -693,6 +697,50 @@ export class PsycheEngine {
           ),
         };
         stateChanged = true;
+      }
+    }
+
+    // v9.2: Self-expression feedback — the agent's own output reinforces its emotional state.
+    // "Saying it makes you feel it more." Reduced rate (0.3x) to avoid runaway loops.
+    // Only applies when the text is substantial (> 20 chars) and classifies above threshold.
+    if (text.length > 20) {
+      const selfClassifications = await Promise.resolve(
+        this.classifier.classify(text, { locale: this.cfg.locale }),
+      );
+      const selfPrimary = selfClassifications[0];
+      if (selfPrimary && selfPrimary.confidence >= 0.5) {
+        const selfFeedbackRate = 0.3;
+        state = {
+          ...state,
+          current: applyContagion(
+            state.current,
+            selfPrimary.type,
+            selfFeedbackRate,
+            getSensitivity(state.mbti),
+          ),
+        };
+        stateChanged = true;
+
+        // v9.2 P4: Autonomic recovery — expressing vulnerable/comforting emotions
+        // while stressed triggers parasympathetic relief (post-cry cortisol drop).
+        // Biology: emotional expression activates vagal brake, releasing endorphins
+        // and lowering cortisol. The more stressed you are, the more relief you get.
+        const RELEASE_TYPES: ReadonlySet<StimulusType> = new Set<StimulusType>([
+          "vulnerability", "intimacy", "validation",
+        ]);
+        if (RELEASE_TYPES.has(selfPrimary.type) && state.current.CORT > 60) {
+          const stressExcess = (state.current.CORT - 60) / 40; // 0 at CORT=60, 1 at CORT=100
+          const recoveryMagnitude = 3 + stressExcess * 5; // 3–8 point CORT drop
+          state = {
+            ...state,
+            current: {
+              ...state.current,
+              CORT: clamp(state.current.CORT - recoveryMagnitude),
+              END: clamp(state.current.END + recoveryMagnitude * 0.6),
+              HT: clamp(state.current.HT + recoveryMagnitude * 0.3),
+            },
+          };
+        }
       }
     }
 

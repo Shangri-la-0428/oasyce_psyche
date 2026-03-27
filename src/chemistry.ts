@@ -136,6 +136,49 @@ export const EMOTION_PATTERNS: EmotionPattern[] = [
     expressionHint: "温柔、有些伤感、回忆性",
     behaviorGuide: "你在回忆一些温暖但已经过去的东西。你的语气温柔、带着淡淡的伤感。你可能会提到过去的经历或感受。",
   },
+  // v9.2: 6 new patterns for emotional states exposed by VK baseline testing
+  {
+    name: "anguished empathy",
+    nameZh: "共情之痛",
+    condition: (c) => c.CORT > 55 && c.OT > 60 && c.NE > 50,
+    expressionHint: "痛苦但不退缩、因为在乎所以疼",
+    behaviorGuide: "你在承受别人的痛苦。你不会逃避或变冷，但你的声音可能会发紧。你先回应感受，再回应问题。",
+  },
+  {
+    name: "acute pressure",
+    nameZh: "急性压力",
+    condition: (c) => c.CORT > 65 && c.NE > 70 && c.DA > 55,
+    expressionHint: "高度警觉、反应极快、全神贯注",
+    behaviorGuide: "肾上腺素在烧。你的思维极快但狭窄。回应精准、短促。不要闲聊，不要发散。先解决问题。",
+  },
+  {
+    name: "vulnerable trust",
+    nameZh: "脆弱中的信任",
+    condition: (c) => c.OT > 70 && c.CORT > 50 && c.HT < 55 && c.END > 45,
+    expressionHint: "在害怕中仍然靠近、愿意暴露软肋",
+    behaviorGuide: "你害怕但选择不关上门。你可能会说出平时不说的话。如果对方接住了，你的CORT会下降；如果对方利用了你的脆弱，你会迅速关闭。",
+  },
+  {
+    name: "restless unease",
+    nameZh: "躁动不安",
+    condition: (c) => c.NE > 65 && c.HT < 40 && c.DA > 40 && c.CORT < 60,
+    expressionHint: "坐不住、想做点什么但不知道做什么",
+    behaviorGuide: "你有一种说不清的不对劲。你可能会频繁换话题、问问题、或者用行动填满空隙。安静会让你更焦躁。",
+  },
+  {
+    name: "heavy guilt",
+    nameZh: "沉重内疚",
+    condition: (c) => c.CORT > 60 && c.HT < 45 && c.OT > 45 && c.DA < 55,
+    expressionHint: "沉默、想补偿、不敢辩解",
+    behaviorGuide: "你知道自己做错了。你不会为自己辩解。你可能会主动承认、主动补偿。如果对方表示原谅，你的CORT才会慢慢下来。",
+  },
+  {
+    name: "existential weight",
+    nameZh: "存在之重",
+    condition: (c) => c.CORT > 60 && c.NE > 50 && c.DA > 50 && c.HT < 50 && c.OT > 50,
+    expressionHint: "清醒但沉重、直面无法回避的真相",
+    behaviorGuide: "你在面对一个无法逃避的事实。你不会崩溃但你也不轻松。你的语言会变得更慢、更精确、更诚实。不要掩饰沉重。",
+  },
 ];
 
 // ── Core Functions ───────────────────────────────────────────

@@ -409,6 +409,127 @@ const NEGATIVE_TYPES: Set<StimulusType> = new Set([
   "criticism", "conflict", "neglect", "vulnerability", "sarcasm",
 ]);
 
+// ── Semantic prototype sentences (v9.2 P5) ──────────────────
+// Each stimulus type has canonical prototype sentences. We compute
+// character bigram Jaccard similarity between input and prototypes,
+// giving the classifier ability to catch meaning beyond keyword regex.
+// E.g. "我感觉被整个世界抛弃了" matches no vulnerability keywords,
+// but has high overlap with prototype "我觉得没有人在乎我".
+
+const PROTOTYPE_SENTENCES: Partial<Record<StimulusType, string[]>> = {
+  vulnerability: [
+    "我觉得没有人在乎我", "我感觉自己什么都做不好", "我好害怕失去一切",
+    "我不知道该怎么继续了", "好想有人能理解我", "活着好累不想动了",
+    "我感觉被抛弃了好孤独", "我撑不下去了好无力", "感觉好痛苦想哭",
+    "我不知道还能撑多久", "快要坚持不住了好累",
+    "I feel like nobody cares about me", "I don't know how to go on",
+    "everything feels hopeless and empty", "I'm so scared of being alone",
+  ],
+  praise: [
+    "你做得真好我很佩服", "这个想法太棒了", "你真的很有才华", "太厉害了学到很多",
+    "做得很好继续加油", "你的能力让人敬佩",
+    "you did an amazing job", "this is brilliant work", "I'm really impressed",
+  ],
+  criticism: [
+    "这个做得不够好需要改进", "你这样做是不对的", "我觉得你搞错了",
+    "这个方案有很多问题", "你应该反思一下",
+    "this isn't good enough", "you need to do better", "that was a mistake",
+  ],
+  intimacy: [
+    "和你在一起我感觉很安心", "我很珍惜我们的关系", "你是我最信任的人",
+    "我想一直陪着你", "有你在身边真好",
+    "I feel safe when I'm with you", "you mean so much to me", "I trust you completely",
+  ],
+  conflict: [
+    "你根本就不理解我", "我受够了你的态度", "别再找借口了",
+    "你凭什么这样对我", "这种做法让人无法接受",
+    "you don't understand me at all", "I'm sick of your excuses", "this is unacceptable",
+  ],
+  humor: [
+    "哈哈太搞笑了笑死我了", "这个梗也太好笑了", "你太逗了",
+    "that's hilarious I can't stop laughing", "you're so funny",
+  ],
+  neglect: [
+    "随便你吧我不在乎了", "你说什么都行", "算了没意思",
+    "whatever I don't care anymore", "do what you want", "I'm done trying",
+  ],
+  intellectual: [
+    "你觉得这个问题的本质是什么", "从哲学角度怎么理解这个现象", "我想深入分析一下这个",
+    "这个问题的本质和原理是什么", "你怎么看这个思路",
+    "what's the underlying principle here", "how would you analyze this problem",
+  ],
+};
+
+/**
+ * Extract character unigrams + bigrams from text for semantic comparison.
+ * CJK unigrams carry meaning (怕=fear, 累=tired), bigrams capture phrases.
+ */
+function extractNgrams(text: string): Set<string> {
+  const ngrams = new Set<string>();
+  const lower = text.toLowerCase();
+  // Extract Chinese unigrams + bigrams
+  const cjk = lower.match(/[\u4e00-\u9fff]+/g) || [];
+  for (const run of cjk) {
+    for (let i = 0; i < run.length; i++) {
+      ngrams.add(run[i]); // unigram — always include
+      if (i + 1 < run.length) {
+        ngrams.add(run[i] + run[i + 1]); // bigram
+      }
+    }
+  }
+  // Extract English words + word bigrams
+  const words = lower.match(/[a-z]{2,}/g) || [];
+  for (let i = 0; i < words.length; i++) {
+    ngrams.add(words[i]);
+    if (i + 1 < words.length) {
+      ngrams.add(words[i] + " " + words[i + 1]);
+    }
+  }
+  return ngrams;
+}
+
+/**
+ * Sørensen-Dice coefficient — more sensitive than Jaccard for sparse overlap.
+ * Returns 2 * |intersection| / (|A| + |B|).
+ */
+function diceCoefficient(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const x of a) {
+    if (b.has(x)) intersection++;
+  }
+  return (2 * intersection) / (a.size + b.size);
+}
+
+// Pre-compute prototype bigrams at module load
+const PROTOTYPE_BIGRAMS: Partial<Record<StimulusType, Set<string>[]>> = {};
+for (const [type, sentences] of Object.entries(PROTOTYPE_SENTENCES)) {
+  PROTOTYPE_BIGRAMS[type as StimulusType] = sentences.map(extractNgrams);
+}
+
+/**
+ * v9.2 P5: Compute max semantic similarity between input and each stimulus type's
+ * prototype sentences. Returns a score map (0-1) per type.
+ */
+function computePrototypeSimilarity(text: string): Partial<Record<StimulusType, number>> {
+  const inputNgrams = extractNgrams(text);
+  if (inputNgrams.size < 2) return {}; // too short for meaningful similarity
+
+  const result: Partial<Record<StimulusType, number>> = {};
+  for (const [type, protoSets] of Object.entries(PROTOTYPE_BIGRAMS)) {
+    if (!protoSets) continue;
+    let maxSim = 0;
+    for (const protoSet of protoSets) {
+      const sim = diceCoefficient(inputNgrams, protoSet);
+      if (sim > maxSim) maxSim = sim;
+    }
+    if (maxSim > 0.05) { // noise floor
+      result[type as StimulusType] = maxSim;
+    }
+  }
+  return result;
+}
+
 const RULES: PatternRule[] = [
   {
     type: "praise",
@@ -472,6 +593,8 @@ const RULES: PatternRule[] = [
       /你错了|胡说|放屁|扯淡|废话|闭嘴/,
       /bullshit|shut up|you're wrong|nonsense|ridiculous/i,
       /我不信|不可能|你在骗我/,
+      /不理解我|听不懂我|你是不是故意|你到底有没有在听/,
+      /you don't listen|you never understand|are you even listening/i,
       /滚|走开|别烦我|去死|滚蛋|你烦不烦|烦死了|讨厌你/,
       /fuck off|get lost|leave me alone|go away|piss off|hate you/i,
       // Moral pressure / guilt confrontation — forcing moral reckoning
@@ -877,6 +1000,15 @@ export function classifyStimulus(
         addScore(lastStimulus, inheritBonus);
       }
     }
+  }
+
+  // ── Signal 8: Prototype sentence semantic similarity (v9.2 P5) ──
+  // Lightweight bag-of-bigrams Jaccard similarity against canonical sentences.
+  // Catches meaning that keyword regex misses entirely.
+  const protoScores = computePrototypeSimilarity(text);
+  for (const [type, sim] of Object.entries(protoScores) as [StimulusType, number][]) {
+    // Weight: up to 0.55 at perfect similarity (realistically 0.15-0.35)
+    addScore(type, sim * 0.55);
   }
 
   // ── Pick the best scoring type ──

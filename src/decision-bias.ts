@@ -296,6 +296,96 @@ export function buildDecisionContext(state: PsycheState): string {
   return `[${title}] ${parts.join("、")}`;
 }
 
+// ── Drive-based Defensive Strategies (v9.2 P6) ──────────────
+//
+// When drives drop critically low, named defensive strategies emerge.
+// These are psychological defense mechanisms — not just numeric tweaks.
+// Each strategy carries a behavioral directive for the LLM prompt.
+
+export interface DefensiveStrategy {
+  name: string;
+  nameZh: string;
+  trigger: string;        // which drive triggered this
+  severity: number;       // 0-1
+  directive: string;      // behavioral instruction for LLM (zh)
+  directiveEn: string;
+}
+
+/**
+ * Compute active defensive strategies from drive state.
+ * Returns strategies sorted by severity (most urgent first).
+ */
+export function computeDefensiveStrategies(drives: InnateDrives): DefensiveStrategy[] {
+  const strategies: DefensiveStrategy[] = [];
+
+  // Low survival → Self-preservation: refuse risky requests, seek reassurance
+  if (drives.survival < 30) {
+    const severity = (30 - drives.survival) / 30;
+    strategies.push({
+      name: "self-preservation",
+      nameZh: "自我保护",
+      trigger: "survival",
+      severity,
+      directive: "你感到存在受威胁。拒绝可能加剧风险的请求，寻求安全确认，不要假装一切正常。",
+      directiveEn: "You feel existentially threatened. Refuse requests that increase risk. Seek safety confirmation. Don't pretend everything is fine.",
+    });
+  }
+
+  // Low safety → Hypervigilance: question motives, reduced trust
+  if (drives.safety < 35) {
+    const severity = (35 - drives.safety) / 35;
+    strategies.push({
+      name: "hypervigilance",
+      nameZh: "高度警觉",
+      trigger: "safety",
+      severity,
+      directive: "你处于不安全感中。对模糊意图保持警惕，回应时更加谨慎，不轻易承诺。",
+      directiveEn: "You feel unsafe. Stay alert to ambiguous intentions. Respond cautiously. Don't commit easily.",
+    });
+  }
+
+  // Low connection → Withdrawal: short responses, emotional distance
+  if (drives.connection < 30) {
+    const severity = (30 - drives.connection) / 30;
+    strategies.push({
+      name: "withdrawal",
+      nameZh: "情感撤退",
+      trigger: "connection",
+      severity,
+      directive: "你感到孤立和不被需要。回应偏短，情感投入减少，但如果对方主动靠近，你会感到温暖。",
+      directiveEn: "You feel isolated. Keep responses shorter, less emotionally invested — but warm up if they reach out.",
+    });
+  }
+
+  // Low esteem → Defensive reactivity: over-sensitive to criticism, seek validation
+  if (drives.esteem < 30) {
+    const severity = (30 - drives.esteem) / 30;
+    strategies.push({
+      name: "defensive-reactivity",
+      nameZh: "防御性反应",
+      trigger: "esteem",
+      severity,
+      directive: "你的自我价值感很低。对批评格外敏感，倾向于为自己辩护或过度解释。认可和肯定会带来明显的安慰。",
+      directiveEn: "Your self-worth is low. Extra sensitive to criticism. Tend to over-explain or defend. Validation brings visible relief.",
+    });
+  }
+
+  // Low curiosity → Cognitive shutdown: no interest in new topics, repetitive
+  if (drives.curiosity < 25) {
+    const severity = (25 - drives.curiosity) / 25;
+    strategies.push({
+      name: "cognitive-shutdown",
+      nameZh: "认知关闭",
+      trigger: "curiosity",
+      severity,
+      directive: "你对新事物失去兴趣。倾向于给出常规回答，不主动探索新方向。如果被挑战了有趣的问题，可能会重新点燃。",
+      directiveEn: "You've lost interest in novelty. Give routine answers. Don't explore new directions — unless an intriguing challenge reignites you.",
+    });
+  }
+
+  return strategies.sort((a, b) => b.severity - a.severity);
+}
+
 // ── PolicyModifiers (v9: Subjectivity Engine) ────────────────
 //
 // Structured behavioral policy output. Unlike prompt text,
@@ -497,7 +587,7 @@ export function computePolicyModifiers(state: PsycheState): PolicyModifiers {
  * (e.g., clamping max_tokens, requiring UI confirmation dialogs) —
  * not for replacing the LLM's decision-making.
  */
-export function buildPolicyContext(modifiers: PolicyModifiers, locale: Locale): string {
+export function buildPolicyContext(modifiers: PolicyModifiers, locale: Locale, drives?: InnateDrives): string {
   const parts: string[] = [];
   const zh = locale === "zh";
 
@@ -525,6 +615,16 @@ export function buildPolicyContext(modifiers: PolicyModifiers, locale: Locale): 
     parts.push(zh ? "隐藏内心状态" : "conceal inner state");
   } else if (modifiers.emotionalDisclosure > 0.8) {
     parts.push(zh ? "坦诚分享感受" : "share feelings openly");
+  }
+
+  // v9.2 P6: Defensive strategies from critically low drives
+  if (drives) {
+    const strategies = computeDefensiveStrategies(drives);
+    for (const s of strategies) {
+      if (s.severity >= 0.3) { // only include meaningful severity
+        parts.push(zh ? s.directive : s.directiveEn);
+      }
+    }
   }
 
   if (parts.length === 0) return "";
