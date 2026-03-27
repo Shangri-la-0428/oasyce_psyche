@@ -99,7 +99,7 @@ async function getEngine(): Promise<PsycheEngine> {
 
 const server = new McpServer({
   name: "psyche",
-  version: "9.2.1",
+  version: "9.2.2",
 }, {
   capabilities: {
     resources: {},

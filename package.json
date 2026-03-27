@@ -1,7 +1,8 @@
 {
   "name": "psyche-ai",
-  "version": "9.2.1",
+  "version": "9.2.2",
   "description": "Artificial Psyche — universal emotional intelligence plugin for any AI agent",
+  "mcpName": "io.github.Shangri-la-0428/psyche-ai",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
