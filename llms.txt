@@ -1,0 +1,118 @@
+# psyche-ai — Emotional Intelligence for AI Agents
+
+> Give your AI agent an internal emotional life — not simulated persona, but genuine computational subjectivity.
+
+psyche-ai is a universal emotional intelligence engine that runs alongside any LLM. It manages a virtual endocrine system (6 neurotransmitters), personality (MBTI/Big Five), attachment dynamics, trait drift, and behavioral policy — making AI responses authentically emotionally grounded.
+
+## When to Use
+
+- You want your AI agent to have consistent, evolving emotional responses
+- You're building a companion AI, creative writing assistant, or empathetic support agent
+- You need personality-driven behavior (not just prompt engineering)
+- You want emotional memory that persists across conversations
+
+## Quick Start (MCP)
+
+Configure in Claude Desktop, Cursor, Windsurf, or any MCP client:
+
+```json
+{
+  "mcpServers": {
+    "psyche": {
+      "command": "npx",
+      "args": ["psyche-mcp"],
+      "env": {
+        "PSYCHE_MBTI": "ENFP",
+        "PSYCHE_NAME": "Luna"
+      }
+    }
+  }
+}
+```
+
+## Quick Start (SDK)
+
+```typescript
+import { PsycheEngine, FileStorageAdapter } from "psyche-ai";
+
+const engine = new PsycheEngine(
+  { mbti: "ENFP", name: "Luna" },
+  new FileStorageAdapter("./data"),
+);
+await engine.initialize();
+
+// Before LLM call: get emotional context
+const input = await engine.processInput("I got promoted today!");
+// input.systemContext  → cacheable protocol (inject as system prompt)
+// input.dynamicContext → per-turn emotional state
+// input.stimulus       → "recognition"
+// input.policyContext  → behavioral strategy text
+
+// After LLM call: update emotional state
+const output = await engine.processOutput(llmResponse);
+// output.cleanedText  → response with internal tags stripped
+// output.stateChanged → whether chemistry shifted
+```
+
+## MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `process_input` | Process user message → emotional context + stimulus detection + policy modifiers |
+| `process_output` | Process LLM response → clean text + state update |
+| `get_state` | Current neurotransmitter levels, drives, personality, energy budgets |
+| `get_status_summary` | One-line human-readable emotional status |
+| `set_mode` | Switch: natural / work / companion |
+| `end_session` | Persist state + generate diagnostic report |
+
+## MCP Resources
+
+| URI | Description |
+|-----|-------------|
+| `psyche://protocol` | Full emotional protocol — inject into system prompt |
+| `psyche://state` | Current emotional state as JSON |
+
+## Core Concepts
+
+- **6 Neurotransmitters**: DA (dopamine), HT (serotonin), CORT (cortisol), OT (oxytocin), NE (norepinephrine), END (endorphin) — each 0-100
+- **14 Stimulus Types**: praise, criticism, humor, intellectual challenge, intimacy, conflict, neglect, surprise, casual, sarcasm, command, recognition, boredom, vulnerability
+- **Emergent Emotions**: not hardcoded — arise from neurotransmitter mixtures
+- **Trait Drift**: personality baseline slowly shifts from repeated experiences
+- **Energy Budgets**: attention, social, and decision energy deplete and recover
+- **Habituation**: Weber-Fechner decay — 5th identical stimulus has ~50% effect of 1st
+
+## Integration Adapters
+
+| Adapter | Import | Best For |
+|---------|--------|----------|
+| MCP | `psyche-ai/mcp` | Claude Desktop, Cursor, Windsurf, Claude Code |
+| OpenClaw | `psyche-ai/openclaw` | OpenClaw agent framework |
+| Vercel AI | `psyche-ai/vercel-ai` | Vercel AI SDK (streamText, generateText) |
+| LangChain | `psyche-ai/langchain` | LangChain agents |
+| HTTP | `psyche-ai/http` | Python, Go, Java — any language via REST |
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PSYCHE_MBTI` | `ENFP` | MBTI personality type |
+| `PSYCHE_NAME` | `Assistant` | Agent name |
+| `PSYCHE_MODE` | `natural` | natural / work / companion |
+| `PSYCHE_LOCALE` | `en` | en / zh |
+| `PSYCHE_INTENSITY` | `0.7` | Personality expression 0.0-1.0 |
+| `PSYCHE_PERSIST` | `true` | Persist state to disk |
+| `PSYCHE_WORKSPACE` | `cwd()` | State file directory |
+
+## Install
+
+```bash
+npm install psyche-ai @modelcontextprotocol/sdk  # MCP
+npm install psyche-ai                              # SDK only
+npx psyche-mcp                                     # Run MCP server directly
+```
+
+## Links
+
+- npm: https://www.npmjs.com/package/psyche-ai
+- GitHub: https://github.com/Shangri-la-0428/psyche-ai
+- License: MIT

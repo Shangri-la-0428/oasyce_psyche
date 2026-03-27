@@ -1,6 +1,6 @@
 {
   "name": "psyche-ai",
-  "version": "9.2.0",
+  "version": "9.2.1",
   "description": "Artificial Psyche — universal emotional intelligence plugin for any AI agent",
   "type": "module",
   "main": "dist/index.js",
@@ -25,11 +25,16 @@
     "./http": {
       "types": "./dist/adapters/http.d.ts",
       "default": "./dist/adapters/http.js"
+    },
+    "./mcp": {
+      "types": "./dist/adapters/mcp.d.ts",
+      "default": "./dist/adapters/mcp.js"
     }
   },
   "bin": {
     "psyche": "dist/cli.js",
-    "psyche-ai": "dist/cli.js"
+    "psyche-ai": "dist/cli.js",
+    "psyche-mcp": "dist/adapters/mcp.js"
   },
   "scripts": {
     "build": "tsc",
@@ -54,11 +59,17 @@
     "openclaw",
     "vercel-ai",
     "langchain",
-    "emotional-intelligence"
+    "emotional-intelligence",
+    "mcp",
+    "model-context-protocol",
+    "ai-consciousness",
+    "empathy"
   ],
   "files": [
     "dist",
     "openclaw.plugin.json",
+    "server.json",
+    "llms.txt",
     "README.md",
     "LICENSE"
   ],
@@ -67,10 +78,14 @@
   },
   "peerDependencies": {
     "@langchain/core": ">=0.3.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "ai": ">=4.0.0",
     "openclaw": ">=2026.3.0"
   },
   "peerDependenciesMeta": {
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    },
     "openclaw": {
       "optional": true
     },
@@ -87,7 +102,9 @@
     ]
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
     "@types/node": "^25.5.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "zod": "^4.3.6"
   }
 }

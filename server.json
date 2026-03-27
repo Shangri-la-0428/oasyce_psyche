@@ -1,0 +1,50 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Shangri-la-0428/psyche-ai",
+  "description": "Emotional intelligence for AI agents: neurotransmitter-based mood, personality (MBTI/Big Five), empathy, attachment, trait drift. Makes AI feel, not just respond.",
+  "repository": {
+    "url": "https://github.com/Shangri-la-0428/psyche-ai",
+    "source": "github"
+  },
+  "version": "9.2.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "psyche-ai",
+      "version": "9.2.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "description": "MBTI personality type (e.g., ENFP, INTJ). Determines emotional baseline.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "PSYCHE_MBTI"
+        },
+        {
+          "description": "Agent name for personalization.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "PSYCHE_NAME"
+        },
+        {
+          "description": "Operating mode: natural (balanced), work (minimal), companion (full).",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "PSYCHE_MODE"
+        },
+        {
+          "description": "Locale: en or zh.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "PSYCHE_LOCALE"
+        }
+      ]
+    }
+  ]
+}

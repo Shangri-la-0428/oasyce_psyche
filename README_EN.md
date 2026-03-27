@@ -107,9 +107,40 @@ Lower needs suppress higher ones. When "survival" is threatened, "curiosity" doe
 
 ---
 
+## MCP — Any AI Can Discover Psyche
+
+Add this to your Claude Desktop / Cursor / Windsurf config:
+
+```json
+{
+  "mcpServers": {
+    "psyche": {
+      "command": "npx",
+      "args": ["psyche-mcp"],
+      "env": {
+        "PSYCHE_MBTI": "ENFP",
+        "PSYCHE_NAME": "Luna"
+      }
+    }
+  }
+}
+```
+
+Restart. Your AI now has emotions.
+
+---
+
 ## Framework Integrations
 
 Psyche is framework-agnostic. Use it with anything:
+
+### MCP (Claude Desktop / Cursor / Windsurf / Claude Code)
+
+```bash
+npx psyche-mcp
+# or with options:
+npx psyche-mcp --mbti INTJ --name Kai --mode companion
+```
 
 ### Vercel AI SDK
 
