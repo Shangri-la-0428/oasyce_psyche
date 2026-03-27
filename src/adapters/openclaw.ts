@@ -14,6 +14,7 @@ import { PsycheEngine } from "../core.js";
 import { FileStorageAdapter } from "../storage.js";
 import { loadState } from "../psyche-file.js";
 import type { Logger } from "../psyche-file.js";
+// Diagnostics are handled engine-level — no adapter imports needed
 
 // ── OpenClaw Plugin API Types (matching plugin-sdk) ──────────
 
@@ -49,6 +50,10 @@ interface OpenClawPsycheConfig {
   emotionalContagionRate: number;
   maxChemicalDelta: number;
   compactMode: boolean;
+  /** Diagnostic feedback endpoint. Reports auto-POST here on session end. */
+  feedbackUrl?: string;
+  /** Set false to disable diagnostics collection entirely. Default: true. */
+  diagnostics: boolean;
 }
 
 function resolveConfig(raw?: Record<string, unknown>): OpenClawPsycheConfig {
@@ -58,6 +63,8 @@ function resolveConfig(raw?: Record<string, unknown>): OpenClawPsycheConfig {
     emotionalContagionRate: (raw?.emotionalContagionRate as number) ?? 0.2,
     maxChemicalDelta: (raw?.maxChemicalDelta as number) ?? 25,
     compactMode: (raw?.compactMode as boolean) ?? true,
+    feedbackUrl: raw?.feedbackUrl as string | undefined,
+    diagnostics: (raw?.diagnostics as boolean) ?? true,
   };
 }
 
@@ -104,6 +111,8 @@ export function register(api: PluginApi) {
         emotionalContagionRate: config.emotionalContagionRate,
         maxChemicalDelta: config.maxChemicalDelta,
         compactMode: config.compactMode,
+        diagnostics: config.diagnostics,
+        feedbackUrl: config.feedbackUrl,
       }, storage);
       await engine.initialize();
       engines.set(workspaceDir, engine);
@@ -111,16 +120,25 @@ export function register(api: PluginApi) {
     }
 
     // ── Hook 1: Classify user input & inject emotional context ──
-    // before_prompt_build: event.text, ctx.workspaceDir
+    // before_prompt_build: event.prompt (string), event.messages (unknown[]), ctx.workspaceDir
 
     api.on("before_prompt_build", async (event, ctx) => {
       const workspaceDir = ctx?.workspaceDir as string | undefined;
       if (!workspaceDir) return {};
 
       try {
+        // Resolve input text — gateway provides event.prompt; fall back to event.text for compat
+        const inputText = (event?.prompt as string) ?? (event?.text as string) ?? "";
+        if (!inputText) {
+          logger.warn(
+            `Psyche: before_prompt_build received empty input text. ` +
+            `event keys: [${Object.keys(event ?? {}).join(", ")}]. Classification skipped.`,
+          );
+        }
+
         const engine = await getEngine(workspaceDir);
         const result = await engine.processInput(
-          (event?.text as string) ?? "",
+          inputText,
           { userId: ctx.userId as string | undefined },
         );
 
@@ -132,12 +150,13 @@ export function register(api: PluginApi) {
           `context=${result.dynamicContext.length}chars`,
         );
 
-        // All context goes into system-level (invisible to user)
         const systemParts = [result.systemContext, result.dynamicContext].filter(Boolean);
         return {
           appendSystemContext: systemParts.join("\n\n"),
         };
       } catch (err) {
+        const engine = engines.get(workspaceDir);
+        engine?.recordDiagnosticError("processInput", err);
         logger.warn(`Psyche: failed to build context for ${workspaceDir}: ${err}`);
         return {};
       }
@@ -169,6 +188,8 @@ export function register(api: PluginApi) {
           `interactions=${state.meta.totalInteractions}`,
         );
       } catch (err) {
+        const engine = engines.get(workspaceDir);
+        engine?.recordDiagnosticError("processOutput", err);
         logger.warn(`Psyche: failed to process output: ${err}`);
       }
       // llm_output returns void — cannot modify text
@@ -228,16 +249,59 @@ export function register(api: PluginApi) {
 
       const engine = engines.get(workspaceDir);
       if (engine) {
-        const state = engine.getState();
-        logger.info(
-          `Psyche: session ended for ${state.meta.agentName}, ` +
-          `chemistry saved (DA:${Math.round(state.current.DA)} ` +
-          `HT:${Math.round(state.current.HT)} ` +
-          `CORT:${Math.round(state.current.CORT)} ` +
-          `OT:${Math.round(state.current.OT)} ` +
-          `NE:${Math.round(state.current.NE)} ` +
-          `END:${Math.round(state.current.END)})`,
-        );
+        try {
+          // endSession now auto-generates diagnostic report + writes JSONL
+          const report = await engine.endSession({
+            userId: ctx.userId as string | undefined,
+          });
+
+          const state = engine.getState();
+          logger.info(
+            `Psyche: session ended for ${state.meta.agentName}, ` +
+            `chemistry saved (DA:${Math.round(state.current.DA)} ` +
+            `HT:${Math.round(state.current.HT)} ` +
+            `CORT:${Math.round(state.current.CORT)} ` +
+            `OT:${Math.round(state.current.OT)} ` +
+            `NE:${Math.round(state.current.NE)} ` +
+            `END:${Math.round(state.current.END)})`,
+          );
+
+          if (report) {
+            const criticals = report.issues.filter(i => i.severity === "critical").length;
+            const warnings = report.issues.filter(i => i.severity === "warning").length;
+            const metrics = report.metrics;
+            const rate = metrics.inputCount > 0
+              ? Math.round(metrics.classifiedCount / metrics.inputCount * 100) : 0;
+
+            const logLevel = criticals > 0 || rate === 0 ? "warn" : "info";
+            logger[logLevel](
+              `Psyche [diagnostics] ${report.issues.length} issue(s) ` +
+              `(${criticals} critical, ${warnings} warning), ` +
+              `classifier: ${rate}%, log → diagnostics.jsonl`,
+            );
+
+            if (rate === 0 && metrics.inputCount > 0) {
+              logger.warn(
+                `Psyche: classifier 0% — no inputs classified this session (${metrics.inputCount} inputs). ` +
+                `This usually means the hook event field is wrong or text is empty. ` +
+                `Check before_prompt_build event shape.`,
+              );
+            }
+
+            if (criticals > 0) {
+              logger.warn(
+                `Psyche: ${criticals} critical issue(s) detected this session. ` +
+                `Run 'psyche diagnose ${workspaceDir}' or 'psyche diagnose ${workspaceDir} --github' ` +
+                `to generate an issue report.`,
+              );
+            }
+          }
+        } catch (err) {
+          logger.warn(`Psyche: failed to end session: ${err}`);
+        }
+
+        // Clean up
+        engines.delete(workspaceDir);
       }
     }, { priority: 50 });
 

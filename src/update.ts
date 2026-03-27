@@ -6,15 +6,25 @@
 // ============================================================
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
 const PACKAGE_NAME = "psyche-ai";
-const CURRENT_VERSION = "5.1.0";
+
+// Read version from package.json at module load so it stays in sync automatically
+let CURRENT_VERSION = "9.0.0"; // fallback
+try {
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const pkg = JSON.parse(await readFile(join(__dirname, "..", "package.json"), "utf-8"));
+  CURRENT_VERSION = pkg.version ?? CURRENT_VERSION;
+} catch {
+  // Silent — use fallback
+}
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const CACHE_DIR = join(homedir(), ".psyche-ai");
 const CACHE_FILE = join(CACHE_DIR, "update-check.json");

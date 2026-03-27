@@ -28,12 +28,16 @@ export type {
   MetacognitiveState, RegulationRecord, DefensePatternRecord,
   RegulationStrategyType, DefenseMechanismType,
   PersonhoodState, PersistedCausalInsight, GrowthDirection,
+  PersonalityTraits, PsycheMode, PolicyModifiers,
+  TraitDriftState, EnergyBudgets,
+  ClassifierProvider, ClassifierContext, ClassificationResult,
 } from "./types.js";
 export {
   CHEMICAL_KEYS, CHEMICAL_NAMES, CHEMICAL_NAMES_ZH,
   DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE,
   DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE,
   DEFAULT_ATTACHMENT, DRIVE_KEYS, DRIVE_NAMES_ZH,
+  DEFAULT_TRAIT_DRIFT, DEFAULT_ENERGY_BUDGETS,
 } from "./types.js";
 
 // Self-recognition
@@ -82,16 +86,17 @@ export {
 } from "./metacognition.js";
 export type { MetacognitiveAssessment, RegulationSuggestion, DetectedDefense } from "./metacognition.js";
 
-// Decision bias (P5)
+// Decision bias (P5) + PolicyModifiers (v9)
 export {
   computeDecisionBias, computeAttentionWeights,
   computeExploreExploit, buildDecisionContext,
+  computePolicyModifiers, buildPolicyContext,
 } from "./decision-bias.js";
 export type { DecisionBiasVector, AttentionWeights } from "./decision-bias.js";
 
-// Experiential field (P6)
-export { computeExperientialField, computeCoherence, detectUnnamedEmotion } from "./experiential-field.js";
-export type { ExperientialField, ExperientialQuality } from "./experiential-field.js";
+// Experiential field (P6 + P8 Barrett construction)
+export { computeExperientialField, computeCoherence, detectUnnamedEmotion, computeAffectCore } from "./experiential-field.js";
+export type { ExperientialField, ExperientialQuality, ConstructionContext } from "./experiential-field.js";
 
 // Generative self (P6)
 export { computeGenerativeSelf, predictSelfReaction, detectInternalConflicts, buildIdentityNarrative } from "./generative-self.js";
@@ -108,8 +113,45 @@ export {
 } from "./ethics.js";
 export type { EthicalAssessment, EthicalConcern, SelfProtectionAction } from "./ethics.js";
 
+// Autonomic nervous system (P7)
+export { computeAutonomicResult, computeAutonomicState, computeProcessingDepth, gateEmotions, getTransitionTime, describeAutonomicState } from "./autonomic.js";
+export type { AutonomicState, AutonomicResult, AutonomicTransition } from "./autonomic.js";
+
+// Circadian rhythms (P12)
+export { computeCircadianModulation, computeHomeostaticPressure, getCircadianPhase, computeEnergyDepletion, computeEnergyRecovery } from "./circadian.js";
+export type { CircadianPhase } from "./circadian.js";
+
+// Primary emotional systems — Panksepp (P9)
+export {
+  computePrimarySystems, computeSystemInteractions,
+  gatePrimarySystemsByAutonomic, getDominantSystems,
+  describeBehavioralTendencies, PRIMARY_SYSTEM_NAMES,
+} from "./primary-systems.js";
+export type {
+  PrimarySystemName, PrimarySystemLevels, BehavioralTendency, DominantSystem,
+} from "./primary-systems.js";
+
 // Utilities — for custom adapter / advanced use
-export { classifyStimulus, getPrimaryStimulus } from "./classify.js";
-export { buildProtocolContext, buildDynamicContext, buildCompactContext, isNearBaseline } from "./prompt.js";
-export { describeEmotionalState, getExpressionHint, getBehaviorGuide } from "./chemistry.js";
-export { getBaseline, getTemperament, getSensitivity, getDefaultSelfModel } from "./profiles.js";
+// Trait drift (v9)
+export { updateTraitDrift } from "./drives.js";
+
+// Utilities — for custom adapter / advanced use
+export { classifyStimulus, getPrimaryStimulus, scoreSentiment, scoreEmoji, BuiltInClassifier, analyzeParticles, detectIntent, buildLLMClassifierPrompt, parseLLMClassification } from "./classify.js";
+export type { StimulusClassification, ParticleSignal, MessageIntent } from "./classify.js";
+export { buildProtocolContext, buildDynamicContext, buildCompactContext, isNearBaseline, getNearBaselineThreshold } from "./prompt.js";
+export { describeEmotionalState, getExpressionHint, getBehaviorGuide, detectEmotions } from "./chemistry.js";
+export { getBaseline, getTemperament, getSensitivity, getDefaultSelfModel, traitsToBaseline, mbtiToTraits } from "./profiles.js";
+export {
+  migrateToLatest, compressSession, parsePsycheUpdate,
+  computeSnapshotIntensity, computeSnapshotValence,
+  consolidateHistory, retrieveRelatedMemories,
+} from "./psyche-file.js";
+export type { PsycheUpdateResult } from "./psyche-file.js";
+
+// ── Diagnostics ──────────────────────────────────────────────
+export {
+  runHealthCheck, DiagnosticCollector,
+  generateReport, formatReport, toGitHubIssueBody, formatLogEntry,
+  submitFeedback,
+} from "./diagnostics.js";
+export type { DiagnosticIssue, DiagnosticReport, SessionMetrics, Severity } from "./diagnostics.js";

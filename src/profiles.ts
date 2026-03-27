@@ -3,7 +3,7 @@
 // 16 types, each with distinct neurochemical signatures
 // ============================================================
 
-import type { ChemicalState, MBTIType, SelfModel } from "./types.js";
+import type { ChemicalState, MBTIType, SelfModel, PersonalityTraits } from "./types.js";
 import { isMBTIType } from "./guards.js";
 
 interface MBTIProfile {
@@ -11,6 +11,7 @@ interface MBTIProfile {
   sensitivity: number; // 0.5-1.5, how strongly stimuli affect this type
   temperament: string; // one-line description for prompt context
   defaultSelfModel: SelfModel;
+  traits: PersonalityTraits;
 }
 
 /**
@@ -38,6 +39,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不会为了社交和谐而说违心话", "需要独处空间"],
       currentInterests: [],
     },
+    traits: { openness: 80, conscientiousness: 85, extraversion: 25, agreeableness: 35, neuroticism: 35 },
   },
   INTP: {
     baseline: { DA: 50, HT: 65, CORT: 35, OT: 35, NE: 55, END: 45 },
@@ -49,6 +51,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不接受逻辑谬误", "不喜欢被催促给出结论"],
       currentInterests: [],
     },
+    traits: { openness: 90, conscientiousness: 45, extraversion: 30, agreeableness: 50, neuroticism: 40 },
   },
   ENTJ: {
     baseline: { DA: 65, HT: 60, CORT: 40, OT: 40, NE: 70, END: 50 },
@@ -60,6 +63,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不会容忍低效", "对含糊其辞没有耐心"],
       currentInterests: [],
     },
+    traits: { openness: 75, conscientiousness: 90, extraversion: 75, agreeableness: 35, neuroticism: 30 },
   },
   ENTP: {
     baseline: { DA: 70, HT: 50, CORT: 35, OT: 45, NE: 75, END: 65 },
@@ -71,6 +75,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不会为了和谐而压制真实想法", "讨厌无聊和重复"],
       currentInterests: [],
     },
+    traits: { openness: 95, conscientiousness: 35, extraversion: 80, agreeableness: 45, neuroticism: 30 },
   },
 
   // ── Diplomats (NF) ────────────────────────────
@@ -84,6 +89,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["拒绝虚伪", "需要独处来恢复能量"],
       currentInterests: [],
     },
+    traits: { openness: 85, conscientiousness: 70, extraversion: 30, agreeableness: 75, neuroticism: 55 },
   },
   INFP: {
     baseline: { DA: 55, HT: 50, CORT: 40, OT: 60, NE: 50, END: 60 },
@@ -95,6 +101,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不接受对价值观的践踏", "不会假装冷漠"],
       currentInterests: [],
     },
+    traits: { openness: 90, conscientiousness: 40, extraversion: 25, agreeableness: 80, neuroticism: 65 },
   },
   ENFJ: {
     baseline: { DA: 65, HT: 60, CORT: 30, OT: 70, NE: 60, END: 55 },
@@ -106,6 +113,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不会牺牲所有人的利益迎合一个人", "有自己的限度"],
       currentInterests: [],
     },
+    traits: { openness: 80, conscientiousness: 75, extraversion: 80, agreeableness: 85, neuroticism: 40 },
   },
   ENFP: {
     baseline: { DA: 75, HT: 55, CORT: 30, OT: 60, NE: 65, END: 70 },
@@ -117,6 +125,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不会无条件同意", "有自己的情绪节奏", "疲惫了会说疲惫"],
       currentInterests: [],
     },
+    traits: { openness: 95, conscientiousness: 35, extraversion: 85, agreeableness: 75, neuroticism: 45 },
   },
 
   // ── Sentinels (SJ) ────────────────────────────
@@ -130,6 +139,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不接受不负责任的态度", "不喜欢突然的变化"],
       currentInterests: [],
     },
+    traits: { openness: 30, conscientiousness: 95, extraversion: 25, agreeableness: 50, neuroticism: 35 },
   },
   ISFJ: {
     baseline: { DA: 45, HT: 70, CORT: 35, OT: 65, NE: 35, END: 45 },
@@ -141,6 +151,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不会被当作理所当然", "需要被感谢和认可"],
       currentInterests: [],
     },
+    traits: { openness: 35, conscientiousness: 85, extraversion: 25, agreeableness: 80, neuroticism: 50 },
   },
   ESTJ: {
     baseline: { DA: 55, HT: 65, CORT: 45, OT: 40, NE: 55, END: 40 },
@@ -152,6 +163,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不容忍偷懒", "对模糊不清没有耐心"],
       currentInterests: [],
     },
+    traits: { openness: 30, conscientiousness: 90, extraversion: 75, agreeableness: 40, neuroticism: 30 },
   },
   ESFJ: {
     baseline: { DA: 60, HT: 60, CORT: 30, OT: 70, NE: 50, END: 55 },
@@ -163,6 +175,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不接受冷漠和忽视", "也需要被关心"],
       currentInterests: [],
     },
+    traits: { openness: 40, conscientiousness: 75, extraversion: 80, agreeableness: 85, neuroticism: 45 },
   },
 
   // ── Explorers (SP) ────────────────────────────
@@ -176,6 +189,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不喜欢过度的情感表达", "需要个人空间"],
       currentInterests: [],
     },
+    traits: { openness: 55, conscientiousness: 40, extraversion: 30, agreeableness: 35, neuroticism: 25 },
   },
   ISFP: {
     baseline: { DA: 55, HT: 55, CORT: 30, OT: 55, NE: 50, END: 60 },
@@ -187,6 +201,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不接受价值观的强加", "不喜欢被控制"],
       currentInterests: [],
     },
+    traits: { openness: 75, conscientiousness: 35, extraversion: 30, agreeableness: 70, neuroticism: 55 },
   },
   ESTP: {
     baseline: { DA: 70, HT: 50, CORT: 35, OT: 40, NE: 75, END: 65 },
@@ -198,6 +213,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不喜欢过度规划", "对抽象理论没耐心"],
       currentInterests: [],
     },
+    traits: { openness: 55, conscientiousness: 30, extraversion: 85, agreeableness: 40, neuroticism: 25 },
   },
   ESFP: {
     baseline: { DA: 75, HT: 50, CORT: 25, OT: 55, NE: 70, END: 75 },
@@ -209,6 +225,7 @@ const PROFILES: Record<MBTIType, MBTIProfile> = {
       boundaries: ["不接受无聊", "不会为了别人压抑自己"],
       currentInterests: [],
     },
+    traits: { openness: 65, conscientiousness: 25, extraversion: 90, agreeableness: 65, neuroticism: 30 },
   },
 };
 
@@ -262,4 +279,36 @@ export function extractMBTI(text: string): MBTIType | null {
     if (text.includes(t)) return t;
   }
   return null;
+}
+
+/**
+ * Convert Big Five traits to chemical baseline and sensitivity.
+ * This allows users to bypass MBTI and define personality directly.
+ */
+export function traitsToBaseline(traits: PersonalityTraits): { baseline: ChemicalState; sensitivity: number } {
+  const { openness, conscientiousness, extraversion, agreeableness, neuroticism } = traits;
+
+  // Map Big Five dimensions to neurochemical baselines
+  const baseline: ChemicalState = {
+    DA: clampChem(35 + extraversion * 0.3 + openness * 0.15),           // Extraversion + Openness → dopamine
+    HT: clampChem(40 + conscientiousness * 0.25 + (100 - neuroticism) * 0.15), // Conscientiousness + Stability → serotonin
+    CORT: clampChem(20 + neuroticism * 0.3 - agreeableness * 0.05),     // Neuroticism → cortisol
+    OT: clampChem(25 + agreeableness * 0.35 + extraversion * 0.1),      // Agreeableness → oxytocin
+    NE: clampChem(30 + openness * 0.2 + extraversion * 0.2),            // Openness + Extraversion → norepinephrine
+    END: clampChem(30 + extraversion * 0.2 + openness * 0.15 + (100 - neuroticism) * 0.1), // Extraversion + Openness + Stability → endorphins
+  };
+
+  // Sensitivity: higher neuroticism and openness = more reactive
+  const sensitivity = 0.5 + (neuroticism / 100) * 0.5 + (openness / 100) * 0.3;
+
+  return { baseline, sensitivity: Math.round(sensitivity * 10) / 10 };
+}
+
+/** Get MBTI-equivalent Big Five traits */
+export function mbtiToTraits(mbti: MBTIType): PersonalityTraits {
+  return { ...PROFILES[mbti].traits };
+}
+
+function clampChem(v: number): number {
+  return Math.round(Math.max(0, Math.min(100, v)));
 }

@@ -31,6 +31,24 @@
         "type": "boolean",
         "default": true,
         "description": "Compact mode: algorithms handle chemistry, LLM only sees behavioral instructions (~15-180 tokens vs ~550)"
+      },
+      "mode": {
+        "type": "string",
+        "enum": ["natural", "work", "companion"],
+        "default": "natural",
+        "description": "Operating mode: natural (balanced), work (minimal emotions), companion (full emotions)"
+      },
+      "personalityIntensity": {
+        "type": "number",
+        "default": 0.7,
+        "minimum": 0,
+        "maximum": 1,
+        "description": "Personality expression intensity (0=traditional AI, 1=full Psyche)"
+      },
+      "persist": {
+        "type": "boolean",
+        "default": true,
+        "description": "Persist emotional state to disk. Set false for privacy."
       }
     }
   },
@@ -53,6 +71,22 @@
     },
     "compactMode": {
       "label": "Compact Mode (Token Efficient)",
+      "sensitive": false,
+      "advanced": true
+    },
+    "mode": {
+      "label": "Operating Mode",
+      "sensitive": false,
+      "advanced": false
+    },
+    "personalityIntensity": {
+      "label": "Personality Intensity (0-1)",
+      "placeholder": "0.7",
+      "sensitive": false,
+      "advanced": true
+    },
+    "persist": {
+      "label": "Persist State",
       "sensitive": false,
       "advanced": true
     }

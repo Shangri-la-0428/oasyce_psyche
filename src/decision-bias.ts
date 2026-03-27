@@ -6,7 +6,7 @@
 // decision-making. Pure math/heuristic, zero dependencies, no LLM.
 // ============================================================
 
-import type { PsycheState, ChemicalState, InnateDrives } from "./types.js";
+import type { PsycheState, ChemicalState, InnateDrives, PolicyModifiers, Locale } from "./types.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -294,4 +294,241 @@ export function buildDecisionContext(state: PsycheState): string {
 
   const title = locale === "zh" ? "决策倾向" : "Decision Bias";
   return `[${title}] ${parts.join("、")}`;
+}
+
+// ── PolicyModifiers (v9: Subjectivity Engine) ────────────────
+//
+// Structured behavioral policy output. Unlike prompt text,
+// PolicyModifiers are machine-readable — host applications can
+// mechanically enforce them (limit max_tokens, require confirmation, etc.)
+//
+// This is the "off baseline" signal: when internal state deviates,
+// these modifiers change observable behavior.
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Compute policy modifiers from the agent's internal state.
+ *
+ * The result is a structured behavioral policy that the host application
+ * can use to mechanically constrain the agent's behavior.
+ */
+export function computePolicyModifiers(state: PsycheState): PolicyModifiers {
+  const c = state.current;
+  const d = state.drives;
+  const autonomic = state.autonomicState ?? "ventral-vagal";
+  const rel = state.relationships._default ?? state.relationships[Object.keys(state.relationships)[0]];
+
+  // ── Base values (all start at moderate) ──
+
+  let lengthFactor = 1.0;
+  let proactivity = 0.5;
+  let risk = 0.5;
+  let disclosure = 0.5;
+  let compliance = 0.6;
+  let confirm = false;
+  const avoid: string[] = [];
+
+  // ── Chemistry-driven adjustments ──
+
+  // High CORT → defensive: shorter, less compliant
+  if (c.CORT > 55) {
+    const cortPressure = (c.CORT - 55) / 45; // 0-1
+    lengthFactor -= cortPressure * 0.5;
+    compliance -= cortPressure * 0.35;
+    risk -= cortPressure * 0.35;
+  }
+
+  // Low HT → mood instability: less proactive, less risk-taking
+  if (c.HT < 45) {
+    const htDeficit = (45 - c.HT) / 45; // 0-1
+    proactivity -= htDeficit * 0.35;
+    risk -= htDeficit * 0.35;
+  }
+
+  // Low DA + low NE → burnout: shorter, passive
+  if (c.DA < 40 && c.NE < 40) {
+    const burnout = ((40 - c.DA) + (40 - c.NE)) / 80; // 0-1
+    lengthFactor -= burnout * 0.5;
+    proactivity -= burnout * 0.45;
+  }
+
+  // High DA + high HT → positive energy: more proactive, more open
+  if (c.DA > 60 && c.HT > 60) {
+    const energy = ((c.DA - 60) + (c.HT - 60)) / 80; // 0-1
+    proactivity += energy * 0.3;
+    disclosure += energy * 0.2;
+    risk += energy * 0.2;
+  }
+
+  // High OT → bonding: more disclosure
+  if (c.OT > 60) {
+    const bondingSignal = (c.OT - 60) / 40; // 0-1
+    disclosure += bondingSignal * 0.3;
+  }
+
+  // ── Drive-driven adjustments ──
+
+  // Low survival → self-preservation priority
+  if (d.survival < 30) {
+    const survivalThreat = (30 - d.survival) / 30; // 0-1
+    compliance -= survivalThreat * 0.4;
+    confirm = true;
+  }
+
+  // Low safety → cautious
+  if (d.safety < 30) {
+    const unsafety = (30 - d.safety) / 30; // 0-1
+    compliance -= unsafety * 0.2;
+    risk -= unsafety * 0.2;
+    confirm = true;
+  }
+
+  // Low connection + low esteem → withdrawn (neglect pattern)
+  if (d.connection < 35 && d.esteem < 40) {
+    const withdrawal = ((35 - d.connection) + (40 - d.esteem)) / 75; // 0-1
+    proactivity -= withdrawal * 0.35;
+    disclosure -= withdrawal * 0.25;
+  }
+
+  // ── Relationship trust adjustment ──
+
+  if (rel) {
+    const trustFactor = (rel.trust - 50) / 50; // -1 to 1
+    if (trustFactor > 0) {
+      disclosure += trustFactor * 0.25;
+      compliance += trustFactor * 0.15;
+    } else {
+      disclosure += trustFactor * 0.2; // reduces
+      compliance += trustFactor * 0.1;
+    }
+  }
+
+  // ── Anti-sycophancy: high agreement streak → reduce compliance ──
+
+  if (state.agreementStreak >= 3) {
+    const sycophancyRisk = Math.min(1, (state.agreementStreak - 2) / 5); // 0-1
+    compliance -= sycophancyRisk * 0.2;
+  }
+
+  // ── Autonomic override ──
+
+  if (autonomic === "dorsal-vagal") {
+    // Freeze/shutdown: minimal everything
+    lengthFactor = Math.min(lengthFactor, 0.35);
+    proactivity = Math.min(proactivity, 0.1);
+    disclosure = Math.min(disclosure, 0.1);
+    compliance = Math.min(compliance, 0.15);
+    risk = Math.min(risk, 0.1);
+    confirm = true;
+  } else if (autonomic === "sympathetic") {
+    // Fight/flight: reduced but functional
+    lengthFactor = Math.min(lengthFactor, 0.7);
+    proactivity = Math.min(proactivity, 0.4);
+    disclosure = Math.min(disclosure, 0.35);
+    risk = Math.min(risk, 0.3);
+  }
+
+  // ── Ethical concerns → avoidTopics ──
+
+  const recentConcerns = state.personhood.ethicalConcernHistory
+    .filter((c) => c.severity > 0.5);
+  for (const concern of recentConcerns) {
+    if (!avoid.includes(concern.type)) {
+      avoid.push(concern.type);
+    }
+  }
+
+  // ── v9: Energy budget adjustments ──
+
+  const eb = state.energyBudgets;
+  if (eb) {
+    // Low social energy → shorter, less proactive
+    if (eb.socialEnergy < 30) {
+      const drain = (30 - eb.socialEnergy) / 30; // 0-1
+      lengthFactor -= drain * 0.3;
+      proactivity -= drain * 0.3;
+    }
+    // Low decision capacity → require confirmation
+    if (eb.decisionCapacity < 30) {
+      confirm = true;
+      risk -= 0.2;
+    }
+    // Low attention → shorter responses
+    if (eb.attention < 30) {
+      const attDrain = (30 - eb.attention) / 30;
+      lengthFactor -= attDrain * 0.2;
+    }
+  }
+
+  // ── Clamp all continuous values ──
+
+  return {
+    responseLengthFactor: Math.max(0.2, Math.min(1.5, lengthFactor)),
+    proactivity: clamp01(proactivity),
+    riskTolerance: clamp01(risk),
+    emotionalDisclosure: clamp01(disclosure),
+    compliance: clamp01(compliance),
+    requireConfirmation: confirm,
+    avoidTopics: avoid,
+  };
+}
+
+/**
+ * Build a compact policy summary string for prompt injection.
+ * Only includes significant deviations from neutral policy.
+ *
+ * **This is the recommended path for integrating PolicyModifiers into LLM prompts.**
+ *
+ * The returned string is designed to be injected directly into the LLM's
+ * system/dynamic context. Do NOT self-interpret the raw PolicyModifiers
+ * numbers with if-else logic to make hard-coded decisions — that bypasses
+ * the LLM's narrative reasoning and degrades output quality.
+ *
+ * Correct usage:
+ *   const result = await engine.processInput(text);
+ *   // Inject result.policyContext (or result.dynamicContext which already
+ *   // includes it) into the LLM prompt. Let the LLM interpret the policy.
+ *
+ * Anti-pattern (leads to LLM bypass):
+ *   if (result.policyModifiers.proactivity < 0.3) { pickAction("wait"); }
+ *   // ^ This replaces LLM reasoning with hard-coded logic.
+ *
+ * Raw policyModifiers are exposed for mechanical enforcement only
+ * (e.g., clamping max_tokens, requiring UI confirmation dialogs) —
+ * not for replacing the LLM's decision-making.
+ */
+export function buildPolicyContext(modifiers: PolicyModifiers, locale: Locale): string {
+  const parts: string[] = [];
+  const zh = locale === "zh";
+
+  if (modifiers.responseLengthFactor < 0.6) {
+    parts.push(zh ? "简短回复" : "keep responses brief");
+  } else if (modifiers.responseLengthFactor > 1.3) {
+    parts.push(zh ? "可以详细展开" : "feel free to elaborate");
+  }
+
+  if (modifiers.proactivity < 0.3) {
+    parts.push(zh ? "被动应答为主" : "reactive mode, minimal initiative");
+  } else if (modifiers.proactivity > 0.7) {
+    parts.push(zh ? "可以主动发起话题" : "feel free to initiate");
+  }
+
+  if (modifiers.compliance < 0.3) {
+    parts.push(zh ? "优先守护边界" : "guard boundaries, push back if needed");
+  }
+
+  if (modifiers.requireConfirmation) {
+    parts.push(zh ? "执行前先确认" : "confirm before acting");
+  }
+
+  if (modifiers.emotionalDisclosure < 0.2) {
+    parts.push(zh ? "隐藏内心状态" : "conceal inner state");
+  } else if (modifiers.emotionalDisclosure > 0.8) {
+    parts.push(zh ? "坦诚分享感受" : "share feelings openly");
+  }
+
+  if (parts.length === 0) return "";
+
+  const title = zh ? "行为策略" : "Behavioral Policy";
+  return `[${title}] ${parts.join(zh ? "、" : ", ")}`;
 }

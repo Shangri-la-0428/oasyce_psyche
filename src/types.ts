@@ -92,6 +92,18 @@ export const CHEMICAL_DECAY_SPEED: Record<keyof ChemicalState, DecaySpeed> = {
   END: "fast",
 };
 
+/** Psyche operating mode */
+export type PsycheMode = "natural" | "work" | "companion";
+
+/** Big Five personality traits (0-100 each) */
+export interface PersonalityTraits {
+  openness: number;        // 好奇↔保守
+  conscientiousness: number; // 严谨↔随性
+  extraversion: number;    // 外向↔内向
+  agreeableness: number;   // 合作↔独立
+  neuroticism: number;     // 敏感↔稳定
+}
+
 /** MBTI type string */
 export type MBTIType =
   | "INTJ" | "INTP" | "ENTJ" | "ENTP"
@@ -171,10 +183,14 @@ export interface ChemicalSnapshot {
   stimulus: StimulusType | null;
   dominantEmotion: string | null;
   timestamp: string;
+  // P11: Emotional memory consolidation — optional for backward compatibility
+  intensity?: number;             // 0-1, chemical deviation from baseline
+  valence?: number;               // -1 to 1, overall emotional valence
+  isCoreMemory?: boolean;         // true if intensity >= 0.6 or repeatedly consolidated
 }
 
-/** Max history entries to keep */
-export const MAX_EMOTIONAL_HISTORY = 10;
+/** Max history entries to keep (P11: raised from 10 to 30, intensity-filtered) */
+export const MAX_EMOTIONAL_HISTORY = 30;
 
 /** Max compressed session memories per relationship */
 export const MAX_RELATIONSHIP_MEMORY = 20;
@@ -352,7 +368,7 @@ export const DEFAULT_PERSONHOOD_STATE: PersonhoodState = {
 
 /** Persisted psyche state for an agent (v6: digital personhood) */
 export interface PsycheState {
-  version: 3 | 4 | 5 | 6;
+  version: 3 | 4 | 5 | 6 | 7 | 8 | 9;
   mbti: MBTIType;
   baseline: ChemicalState;
   current: ChemicalState;
@@ -367,11 +383,20 @@ export interface PsycheState {
   learning: LearningState;          // v4: emotional learning data
   metacognition: MetacognitiveState; // v5: metacognitive monitoring
   personhood: PersonhoodState;      // v6: digital personhood
+  /** v7: autonomic nervous system state (Polyvagal Theory) */
+  autonomicState?: "ventral-vagal" | "sympathetic" | "dorsal-vagal";
+  /** v7: session start time for homeostatic pressure calculation */
+  sessionStartedAt?: string;
+  /** v9: long-term personality drift from accumulated interaction patterns */
+  traitDrift?: TraitDriftState;
+  /** v9: finite resource budgets (attention, social energy, decision capacity) */
+  energyBudgets?: EnergyBudgets;
   meta: {
     agentName: string;
     createdAt: string;
     totalInteractions: number;
     locale: Locale;
+    mode?: PsycheMode;
   };
 }
 
@@ -381,3 +406,130 @@ export const DEFAULT_RELATIONSHIP: RelationshipState = {
   intimacy: 30,
   phase: "acquaintance",
 };
+
+// ── PolicyModifiers (v9) ─────────────────────────────────────
+
+/** Autonomic nervous system state */
+export type AutonomicState = "ventral-vagal" | "sympathetic" | "dorsal-vagal";
+
+/**
+ * Structured behavioral policy output — v9 Subjectivity Engine.
+ *
+ * Unlike prompt text, PolicyModifiers are machine-readable and can be
+ * mechanically enforced by the host application (e.g., limiting max_tokens,
+ * requiring confirmation before actions).
+ *
+ * This is the "off baseline" signal — when the agent's internal state
+ * deviates from baseline, these modifiers change observable behavior.
+ */
+export interface PolicyModifiers {
+  /** Response length factor: 0.3 (terse) → 1.0 (normal) → 1.5 (verbose) */
+  responseLengthFactor: number;
+  /** Proactivity: 0 (purely reactive) → 1 (initiates, suggests, volunteers) */
+  proactivity: number;
+  /** Risk tolerance: 0 (refuse novel actions, require confirmation) → 1 (bold) */
+  riskTolerance: number;
+  /** Emotional disclosure: 0 (hide internal state) → 1 (transparent about feelings) */
+  emotionalDisclosure: number;
+  /** Compliance: 0 (push back on requests, guard boundaries) → 1 (fully compliant) */
+  compliance: number;
+  /** Whether to require explicit confirmation before executing actions */
+  requireConfirmation: boolean;
+  /** Topics the agent should avoid based on ethical concerns, boundaries, fatigue */
+  avoidTopics: string[];
+}
+
+// ── Trait Drift (v9) ─────────────────────────────────────────
+
+/**
+ * Trait Drift — Path B: Adaptive Pattern Change.
+ *
+ * Long-term interaction patterns don't just shift baseline values;
+ * they change HOW the agent reacts: decay rates (trauma vs resilience)
+ * and stimulus sensitivity (desensitization vs sensitization).
+ *
+ * Like K in Blade Runner 2049 — his experiences don't just make him
+ * "more anxious"; they fundamentally change how he responds to orders.
+ */
+export interface TraitDriftState {
+  /** Cumulative interaction pattern scores, each -100 to +100 */
+  accumulators: {
+    praiseExposure: number;     // positive = more praise, negative = more criticism
+    pressureExposure: number;   // high = sustained high-pressure interactions
+    neglectExposure: number;    // high = sustained low-stimulation / ignored
+    connectionExposure: number; // high = frequent intimate/vulnerable interactions
+    conflictExposure: number;   // high = frequent conflict/authority interactions
+  };
+  /** Number of sessions that contributed to drift */
+  sessionCount: number;
+  /** Computed baseline delta (debugging/display) */
+  baselineDelta: Partial<ChemicalState>;
+  /** Decay rate modifiers: >1 = slower recovery (trauma), <1 = faster (resilience) */
+  decayRateModifiers: Partial<Record<keyof ChemicalState, number>>;
+  /** Stimulus sensitivity modifiers: >1 = more sensitive, <1 = desensitized */
+  sensitivityModifiers: Partial<Record<StimulusType, number>>;
+}
+
+/** Default empty trait drift state */
+export const DEFAULT_TRAIT_DRIFT: TraitDriftState = {
+  accumulators: {
+    praiseExposure: 0,
+    pressureExposure: 0,
+    neglectExposure: 0,
+    connectionExposure: 0,
+    conflictExposure: 0,
+  },
+  sessionCount: 0,
+  baselineDelta: {},
+  decayRateModifiers: {},
+  sensitivityModifiers: {},
+};
+
+// ── Energy Budgets (v9) ──────────────────────────────────────
+
+/**
+ * Finite resource budgets that create real behavioral boundaries.
+ * Depleted during interaction, recovered during absence.
+ */
+export interface EnergyBudgets {
+  /** Attention: depletes each turn, faster for complex exchanges. 0-100 */
+  attention: number;
+  /** Social energy: extraverts recharge from socializing, introverts deplete. 0-120 */
+  socialEnergy: number;
+  /** Decision capacity: depletes with conflict/authority. 0-100 */
+  decisionCapacity: number;
+}
+
+export const DEFAULT_ENERGY_BUDGETS: EnergyBudgets = {
+  attention: 100,
+  socialEnergy: 100,
+  decisionCapacity: 100,
+};
+
+// ── Classifier Provider (v9.1) ──────────────────────────────
+
+/** A single classification result */
+export interface ClassificationResult {
+  type: StimulusType;
+  confidence: number; // 0-1
+}
+
+/** Context passed to classifier providers */
+export interface ClassifierContext {
+  recentStimuli?: (StimulusType | null)[];
+  recentMessages?: string[];
+  locale?: Locale;
+}
+
+/**
+ * Pluggable classifier interface.
+ * Implementations can be sync or async.
+ * Built-in: enhanced keyword + Chinese NLP classifier (sync, zero deps).
+ * User-provided: could be LLM-based, API-based, local model, etc.
+ */
+export interface ClassifierProvider {
+  classify(
+    text: string,
+    context?: ClassifierContext,
+  ): ClassificationResult[] | Promise<ClassificationResult[]>;
+}

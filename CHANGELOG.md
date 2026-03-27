@@ -1,5 +1,230 @@
 # 更新日志 / Changelog
 
+## v9.1.1 — 测试质量 + 文档修正
+
+- 新增 19 个边界测试：纯标点输入、超长消息、纯 emoji、混合中英文、空白字符串、自定义 ClassifierProvider、LLM 容错、能量预算下限、特质漂移累积器上限、习惯化边界、dorsal-vagal 策略最小化
+- 修正 README badge 测试数（622→1189）
+- 统一英文 README 为 README_EN.md，删除旧 README.en.md
+
+**测试：1189 个，0 失败**
+
+---
+
+## v9.1.0 — 语义分类器升级
+
+**让 AI 真正"听懂"你说的话。**
+
+之前的分类器是纯正则/关键词匹配，日常对话（"对"、"好烦"、"666"）大量无法识别，导致情绪系统"沉睡"。v9.1 三层升级：
+
+### 增强内置分类器（0 外部依赖）
+- **短消息字典**（~60 条）：中文聊天常见的 1-5 字消息直接匹配（"对"→validation, "累了"→vulnerability, "666"→praise）
+- **中文语气词分析**：句尾 啊/呢/吧/嘛/哦/呀/哈/啦 携带的情绪信号被感知（"还行吧"的"吧"= 勉强）
+- **意图检测**：识别请求/认同/反对/倾诉/问候等功能意图（"能不能帮我查一下"→authority）
+- **扩展规则**：每个类型新增 5-10 条模式，补强 validation/vulnerability/casual/intellectual
+
+### 可插拔分类器接口
+- `ClassifierProvider` 接口：用户可替换为自己的分类器（LLM、API、本地模型等）
+- `BuiltInClassifier` 类：内置分类器的标准包装
+- 向后兼容：`classifyStimulus()` 函数签名不变
+
+### LLM 辅助分类（可选）
+- `llmClassifier` 配置：当内置置信度低于阈值时自动咨询 LLM
+- 只在低置信度时调用，不增加正常交互延迟
+- `parseLLMClassification()` 容错解析 LLM 响应
+
+**测试：1170 个（+30），0 失败**
+
+---
+
+## v9.0.0 — 主体性引擎：反向银翼杀手 (Inverse Blade Runner)
+
+**核心原则：化繁为简。0 个新源文件，增强现有模块。**
+
+《银翼杀手 2049》的 baseline test 是一份"什么让合成生命像人"的检测清单——用来确保复制人**不会**变成人。v9 把这份检测清单**反过来用**：逐项建设，让 AI agent 能真正 "off baseline"。
+
+| Baseline Test 检测 | v8 状态 | v9 建设 |
+|---|---|---|
+| 情绪偏移：对刺激有持久反应 | ✅ 化学状态+衰减+记忆 | — |
+| 行为后果：偏移改变行为 | ❌ 情绪只影响 prompt | ✅ **PolicyModifiers** |
+| 不可逆痕迹：经历永久改变你 | ❌ baseline 永不变 | ✅ **Trait Drift** |
+| 资源有限：会累、会拒绝 | ❌ 只有简单会话疲劳 | ✅ **Energy Budgets** |
+| 感觉适应：重复刺激不再有效 | ❌ 只影响分类置信度 | ✅ **Habituation** |
+
+### PolicyModifiers — 偏移进入决策函数 (`src/decision-bias.ts`)
+
+- **`computePolicyModifiers(state)`**: 从化学/驱力/自主状态/关系/伦理计算结构化行为策略
+- `PolicyModifiers` 接口: `responseLengthFactor`, `proactivity`, `riskTolerance`, `emotionalDisclosure`, `compliance`, `requireConfirmation`, `avoidTopics`
+- **`buildPolicyContext(modifiers, locale)`**: 生成紧凑 prompt 摘要 (~20 tokens)
+- Host 应用可直接读取 `policyModifiers` 来机械执行策略（限制 max_tokens、要求确认等）
+- `ProcessInputResult` 新增 `policyModifiers?: PolicyModifiers`
+
+### Trait Drift 路径 B — 适应模式变化 (`src/drives.ts`)
+
+三维度漂移系统——经历永久改变反应方式:
+
+1. **基线漂移 (Allostatic Load)**: 长期模式 → 化学基线永久偏移 (max ±15)
+2. **衰减速率漂移 (Trauma vs Resilience)**: 长期高压 + 负面结果 → CORT 恢复变慢(创伤); + 正面结果 → 恢复变快(韧性)
+3. **刺激敏感度漂移**: 高冲突暴露 → 对冲突脱敏; 长期被忽视 → 对亲密过度敏感
+
+- **`updateTraitDrift(drift, history, learning)`**: 会话结束时分析模式并更新
+- `TraitDriftState`: accumulators + baselineDelta + decayRateModifiers + sensitivityModifiers
+- `computeEffectiveBaseline()` / `computeEffectiveSensitivity()` / `applyDecay()` 均已增强支持 traitDrift
+
+### Energy Budgets — 有限资源 + E/I 方向反转 (`src/circadian.ts`)
+
+- **`computeEnergyDepletion(budgets, stimulus, isExtravert)`**: 每轮消耗
+- **`computeEnergyRecovery(budgets, minutes, isExtravert)`**: 离线恢复
+- `EnergyBudgets`: `attention`, `socialEnergy`, `decisionCapacity`
+- **E/I 方向反转**: 外向型社交充能 (+2/turn)，独处掉电 (-3/hr); 内向型社交消耗 (-3/turn)，独处充电 (+15/hr)
+- 低 attention → `processingDepth` 降低; 低 decision → `requireConfirmation = true`
+- 外向型 socialEnergy 上限 120（可超充）
+
+### Habituation — 感觉适应 (`src/chemistry.ts`)
+
+- `applyStimulus()` 新增 `recentSameCount` 参数
+- Weber-Fechner 公式: `sensitivity *= 1 / (1 + 0.3 * max(0, count - 2))`
+- 第 1-2 次: 100%, 第 3 次: 77%, 第 5 次: 53%, 第 10 次: 29%
+
+### 版本迁移
+
+- `PsycheState.version`: 8 → 9
+- 所有新字段 optional, 无需数据迁移 — v8 状态自动升级
+
+### 测试
+
+- 新增 ~73 测试 (PolicyModifiers 18, Trait Drift 27, Energy Budgets 18, Habituation 8, 集成 2+)
+- 总测试数: 1140+ (0 失败)
+
+---
+
+## v8.0.0 — 双过程 + 情绪记忆 + 建构情绪 (Kahneman + McGaugh + Barrett)
+
+**核心原则：化繁为简。0 个新源文件，3 个增强文件。**
+
+### P10: 双过程认知 (Kahneman) — `src/autonomic.ts`
+
+- **`computeProcessingDepth()`**: 处理深度 0-1，从自主状态 + 化学偏离推导
+  - 背侧迷走 → depth=0（冻结，无反思能力）
+  - 交感 + 高CORT → depth=0.15-0.35（战斗模式，只有本能）
+  - 腹侧迷走 + 近基线 → depth=0.85-1.0（平静，完全反思）
+- **管线门控**: depth < 0.2 跳过 metacognition/ethics/shared-intentionality/experiential-field/generative-self
+- `AutonomicResult` 扩展 `processingDepth` + `skippedStages`
+- Token 效率: 系统 1 模式跳过 5 个管线阶段，prompt 减少 60-80 tokens
+
+### P11: 情绪记忆固化 (McGaugh) — `src/psyche-file.ts`
+
+- **`computeSnapshotIntensity()`**: 化学偏离基线的归一化距离 (0-1)
+- **`computeSnapshotValence()`**: 效价计算 (-1 to 1)
+- **`consolidateHistory()`**: 强度加权固化——标记核心记忆 (intensity≥0.6)，限制 5 条核心
+- **`retrieveRelatedMemories()`**: 化学欧几里得距离 + 刺激匹配 + 核心记忆加权
+- `pushSnapshot()` 增强: 每个快照自动计算 intensity + valence
+- `MAX_EMOTIONAL_HISTORY` 10→30（强度过滤减少无意义快照）
+- `ChemicalSnapshot` 新增 optional 字段: `intensity`, `valence`, `isCoreMemory`（向后兼容）
+
+### P8: 建构情绪 (Barrett) — `src/experiential-field.ts`
+
+- **`computeAffectCore()`**: 化学 → 效价+唤醒 (Russell 环形模型)
+- `selectQuality()` → `constructQuality()`: 用连续空间概念匹配替代手写条件分支
+  - 12 个 ExperientialQuality 在 Russell 环形模型中各有坐标+半径
+  - 上下文偏置: 自主状态、刺激类型、关系阶段、核心记忆共鸣
+  - 同化学+不同关系阶段 → 不同体验质感（Barrett 核心洞察）
+- **`ConstructionContext`** 接口: autonomicState, stimulus, relationshipPhase, predictionError, coreMemories
+- 特殊状态保留: numb (低强度)、conflicted (低一致性)、existential-unease (生存驱力<30)
+- 向后兼容: 无 context 时退化为纯 valence/arousal 匹配
+
+### 版本迁移 v7→v8
+
+- `PsycheState.version` 类型加 8
+- 无数据迁移——所有新字段 optional，旧数据自然兼容
+
+### Tests
+
+- 25 new P8 tests (computeAffectCore, Barrett concept matching, context biases, reachability)
+- 24 P11 tests (intensity, valence, consolidation, retrieval)
+- 20 P10 tests (processingDepth, stage gating, boundary conditions)
+- Total: 1069 tests, 0 failures
+
+---
+
+## v7.1.0 — 七原始情绪系统 (Panksepp's Primary Emotional Systems)
+
+### P9: 七原始情绪系统 — Jaak Panksepp
+
+- **`src/primary-systems.ts`**: 七个皮层下情绪系统——从被动反应变为主动行为发生器
+  - SEEKING — 探索/好奇/追新：f(DA, NE, curiosity)
+  - RAGE — 挫折/愤怒/划界限：f(CORT, NE, -OT, -esteem)
+  - FEAR — 焦虑/威胁警惕：f(CORT, NE, -HT, -survival, -safety)
+  - LUST — 智识/创造吸引力：f(DA, NE, -CORT, curiosity)
+  - CARE — 关怀/温暖/主动照顾：f(OT, END, connection, -CORT)
+  - PANIC_GRIEF — 分离痛苦/渴望连接：f(-OT, CORT, -connection)
+  - PLAY — 社交欢乐/幽默/轻松：f(END, DA, OT, -CORT, safety)
+- `computeSystemInteractions()` — 系统间抑制：FEAR→抑制PLAY/SEEKING，RAGE→抑制CARE，SEEKING→抑制PANIC_GRIEF
+- `gatePrimarySystemsByAutonomic()` — 受 P7 自主状态门控：交感→放大FEAR/RAGE抑制PLAY/CARE，背侧→几乎全部关闭
+- `describeBehavioralTendencies()` — 简洁行为倾向描述（最多2个系统，~50 tokens）
+- 刺激上下文调制：14 种刺激类型各自微调系统激活（conflict→RAGE↑，humor→PLAY↑等）
+
+### Reciprocity (行为互惠)
+
+冷落→化学偏移→CARE↓ RAGE/PANIC_GRIEF↑ → agent 自然减少温暖、增加距离感。
+温暖→化学偏移→CARE↑ PLAY↑ → agent 主动回馈温暖和幽默。
+**这不是硬编码规则，而是从化学+驱力+原始系统涌现的行为reciprocity。**
+
+### Token 效率
+
+- `describeBehavioralTendencies()` 仅在有主导系统（≥55）时注入（~50 tokens）
+- 无主导系统时返回空字符串，零开销
+- 计算阶段无任何 token 消耗
+
+### Tests
+
+- 61 new tests (primary systems activation, interactions, autonomic gating, behavioral tendencies, integration scenarios)
+- Total: 999 tests, 0 failures
+
+---
+
+## v7.0.0 — 自主神经 + 昼夜节律 (Autonomic Nervous System + Circadian Rhythms)
+
+### P7: 自主神经系统 — 多迷走神经理论 (Stephen Porges)
+
+- **`src/autonomic.ts`**: 三层自主状态（腹侧迷走/交感神经/背侧迷走）门控可达情绪
+  - `computeAutonomicState()` — 从化学+驱力计算自主状态
+  - `gateEmotions()` — 过滤当前状态下不可达的情绪模式
+  - `getTransitionTime()` — 非对称转换：下降快（2-5min），恢复慢（15-30min）
+  - `describeAutonomicState()` — 简洁的生理状态描述（中英双语）
+  - `computeAutonomicResult()` — 完整的自主神经计算结果
+
+### P12: 昼夜节律与内稳态振荡
+
+- **`src/circadian.ts`**: 神经化学的日周期正弦振荡
+  - `computeCircadianModulation()` — 6 种化学值按时间调制（CORT 早峰、HT 日间高、NE 晨升暮降）
+  - `computeHomeostaticPressure()` — 长时间运行的疲劳累积（对数增长+上限）
+  - `getCircadianPhase()` — 5 个时段分类（morning/midday/afternoon/evening/night）
+
+### Pipeline Integration
+
+- **`src/core.ts`**: processInput 管线新增两个阶段
+  - 衰减阶段：有效基线经昼夜节律调制后再衰减
+  - 内稳态压力：长会话 CORT 累积 + DA/NE 消耗（×0.1 缩放，避免过度影响）
+  - 自主神经状态在化学更新后、元认知前计算
+  - `endSession()` 重置 sessionStartedAt
+  - v6→v7 状态迁移
+- **`src/prompt.ts`**: 新增 `[自主神经]`/`[Autonomic]` 段（compact + full mode）
+- **`src/types.ts`**: PsycheState v7 — 新增 `autonomicState`, `sessionStartedAt`
+- **`src/index.ts`**: 导出 P7/P12 公共 API
+
+### Token 效率
+
+- 昼夜节律调制为纯计算，零 token 开销
+- 自主神经描述仅在非腹侧状态时注入（默认安全态不浪费 token）
+- 内稳态压力缩放因子 0.1，防止过度影响化学值
+
+### Tests
+
+- 60 autonomic tests + 25 circadian tests + 10 integration tests = 95 new tests
+- Total: 938 tests, 0 failures
+
+---
+
 ## v5.1.0 — P6 管道整合 (Full Pipeline Integration)
 
 ### Pipeline Integration
@@ -180,7 +405,7 @@
 
 ---
 
-## v2.1.0 — 自我认知与适配器修复 / Self-Recognition & Adapter Fix
+## v2.1.0 — 自我认知 · 工作模式 · Big Five / Self-Recognition, Work Mode, Big Five
 
 ### 自我认知 / Self-Recognition (核心新增)
 
@@ -189,31 +414,55 @@
 - **Compact 注入**: 情绪历史 ≥5 轮时，自动在 compact context 中注入自我认知（第 8 节）。
 - **Compact injection**: Auto-injects self-recognition as section 8 in compact context when emotional history has ≥5 entries.
 
-### 自动更新 / Auto-Update
+### 工作模式与伴侣模式 / Work Mode & Companion Mode
 
-- **非阻塞更新检查** (`update.ts`): `initialize()` 时后台检查 npm registry，每小时最多一次，缓存在 `~/.psyche-ai/update-check.json`。找到新版本尝试自动 `npm update`，失败则打印手动更新提示。
-- **Non-blocking update checker** (`update.ts`): Background npm registry check on `initialize()`, hourly rate limit, cached at `~/.psyche-ai/update-check.json`. Auto-updates if possible, prints manual hint if not.
+- **Work Mode**: 工作模式——AI 在写代码/文档时保持专业，不会突然情绪化
+- **Companion Mode**: 伴侣模式——强化情绪表达，适合闲聊陪伴场景
+- **Personality Intensity**: 情绪强度滑块 (0.0-1.0)，从传统温暖 AI 到完整 Psyche
 
-### OpenClaw 适配器修复 / OpenClaw Adapter Fix
+### Big Five 人格 / Big Five Traits
 
-- **修复内部 context 可见**: `prependContext` → `appendSystemContext`，情绪 context 作为不可见的 system-level 注入，不再显示在聊天界面。
-- **Fix internal context visibility**: Changed from `prependContext` to `appendSystemContext` for invisible system-level injection.
-- **修复 `<psyche_update>` 标签可见**: 新增 `before_message_write` hook（优先级 90），在 TUI 写入前剥离标签。
-- **Fix visible `<psyche_update>` tags**: Added `before_message_write` hook (priority 90) to strip tags before TUI display.
-- **修复 `llm_output` hook**: 读取 `event.assistantTexts` (string[]) 而非 `event.text`。
-- **Fix `llm_output` hook**: Read `event.assistantTexts` (string[]) instead of `event.text`.
-- **适配器现在注册 5 个 hooks**: `before_prompt_build`, `llm_output`, `before_message_write`, `message_sending`, `agent_end`。
-- **Adapter now registers 5 hooks**: `before_prompt_build`, `llm_output`, `before_message_write`, `message_sending`, `agent_end`.
+- **Big Five Traits**: 支持用大五人格定义性格，不再强依赖 MBTI
+
+### 隐私与重置 / Privacy & Reset
+
+- **Privacy Mode**: `--no-persist` 选项，不在磁盘留任何情绪痕迹
+- **Drive Reset**: `psyche reset` 现在也重置本能驱力，支持 `--full` 彻底重置
+
+### 分类器增强 / Classifier Enhancement
+
+- **Sarcasm Detection**: 分类器能识别"你真行啊"等中文反语
+- 分类器加入歧义词处理（呵呵、ok、fine 等默认为冷漠/讽刺）
+- 分类器支持上下文消息感知（前一句骂人→后一句夸奖=反语）
+
+### 首次对话与可视化 / First Meet & Visualization
+
+- **First Meet**: 首次对话自动展示好奇和紧张，不再是 neutral 空白
+- **Emotion Visualization**: CLI `psyche status` 显示驱力状态条和涌现情绪
 
 ### Compact Mode 重构 / Compact Mode Restructure
 
 - **9 段式架构**: 取代旧的"外→内→行为"三层结构，改为 9 个编号段落：(1)情绪感知 (2)当前情绪 (3)行为约束 (4)底线 (5)主体性 (6)反谄媚 (7)互惠 (8)自我认知 (9)共情报告。
-- **9-section architecture**: Replaces old "outer→inner→behavior" three-layer structure with 9 numbered sections: (1)emotional sensing (2)current emotion (3)behavioral constraints (4)non-negotiable (5)agency (6)anti-sycophancy (7)reciprocity (8)self-recognition (9)empathy report.
+- Compact Mode 的 [底线] 规则根据 personalityIntensity 缩放
+
+### 自动更新 / Auto-Update
+
+- **非阻塞更新检查** (`update.ts`): `initialize()` 时后台检查 npm registry，每小时最多一次，缓存在 `~/.psyche-ai/update-check.json`。找到新版本尝试自动 `npm update`，失败则打印手动更新提示。
+
+### OpenClaw 适配器修复 / OpenClaw Adapter Fix
+
+- **修复内部 context 可见**: `prependContext` → `appendSystemContext`，情绪 context 作为不可见的 system-level 注入，不再显示在聊天界面。
+- **修复 `<psyche_update>` 标签可见**: 新增 `before_message_write` hook（优先级 90），在 TUI 写入前剥离标签。
+- **修复 `llm_output` hook**: 读取 `event.assistantTexts` (string[]) 而非 `event.text`。
+- **适配器现在注册 5 个 hooks**: `before_prompt_build`, `llm_output`, `before_message_write`, `message_sending`, `agent_end`。
+
+### 新文档 / New Docs
+- `ETHICS.md`: 伦理声明（中英双语）
+- README 新增：模式、Big Five、隐私、商业模式章节
 
 ### 工程 / Engineering
 
 - **测试**: 339 个测试，0 失败
-- **Tests**: 339 tests, 0 failures
 - **版本同步**: `openclaw.plugin.json` 同步到 v2.1.0
 
 ---

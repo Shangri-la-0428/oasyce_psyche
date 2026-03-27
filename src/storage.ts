@@ -8,7 +8,7 @@
 
 import type { PsycheState } from "./types.js";
 import { migrateToLatest } from "./psyche-file.js";
-import { readFile, writeFile, access, rename, constants } from "node:fs/promises";
+import { readFile, writeFile, appendFile, access, rename, constants } from "node:fs/promises";
 import { join } from "node:path";
 
 // ── Interface ────────────────────────────────────────────────
@@ -16,12 +16,17 @@ import { join } from "node:path";
 export interface StorageAdapter {
   load(): Promise<PsycheState | null>;
   save(state: PsycheState): Promise<void>;
+  /** Append a line to the diagnostics log. Implementations may no-op. */
+  appendLog?(line: string): Promise<void>;
+  /** Read all lines from the diagnostics log. Returns empty array if not available. */
+  readLog?(): Promise<string[]>;
 }
 
 // ── MemoryStorageAdapter ─────────────────────────────────────
 
 export class MemoryStorageAdapter implements StorageAdapter {
   private state: PsycheState | null = null;
+  private log: string[] = [];
 
   async load(): Promise<PsycheState | null> {
     return this.state;
@@ -30,15 +35,25 @@ export class MemoryStorageAdapter implements StorageAdapter {
   async save(state: PsycheState): Promise<void> {
     this.state = state;
   }
+
+  async appendLog(line: string): Promise<void> {
+    this.log.push(line);
+  }
+
+  async readLog(): Promise<string[]> {
+    return [...this.log];
+  }
 }
 
 // ── FileStorageAdapter ───────────────────────────────────────
 
 export class FileStorageAdapter implements StorageAdapter {
   private readonly filePath: string;
+  private readonly logPath: string;
 
   constructor(dir: string, filename = "psyche-state.json") {
     this.filePath = join(dir, filename);
+    this.logPath = join(dir, "diagnostics.jsonl");
   }
 
   async load(): Promise<PsycheState | null> {
@@ -79,4 +94,16 @@ export class FileStorageAdapter implements StorageAdapter {
     await rename(tmpPath, this.filePath);
   }
 
+  async appendLog(line: string): Promise<void> {
+    await appendFile(this.logPath, line + "\n", "utf-8");
+  }
+
+  async readLog(): Promise<string[]> {
+    try {
+      const content = await readFile(this.logPath, "utf-8");
+      return content.trim().split("\n").filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
 }

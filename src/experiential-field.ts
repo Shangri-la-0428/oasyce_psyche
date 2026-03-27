@@ -16,8 +16,10 @@
 import type {
   PsycheState,
   ChemicalState,
+  ChemicalSnapshot,
   InnateDrives,
   RelationshipState,
+  StimulusType,
   Locale,
   DriveType,
 } from "./types.js";
@@ -25,6 +27,7 @@ import { CHEMICAL_KEYS, DRIVE_KEYS } from "./types.js";
 
 import type { MetacognitiveAssessment } from "./metacognition.js";
 import type { DecisionBiasVector } from "./decision-bias.js";
+import type { AutonomicState } from "./autonomic.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -74,6 +77,77 @@ const CHEM_LOW = 35;
 /** If total activation is below this, the state is "flat/numb" */
 const FLATNESS_THRESHOLD = 0.15;
 
+// ── Barrett Construction Context ─────────────────────────────
+
+/**
+ * Context for Barrett's constructed emotion model.
+ * Provides situational cues that bias concept matching beyond raw chemistry.
+ */
+export interface ConstructionContext {
+  autonomicState?: AutonomicState;
+  stimulus?: StimulusType | null;
+  relationshipPhase?: string;
+  predictionError?: number;
+  coreMemories?: ChemicalSnapshot[];
+}
+
+// ── Affect Core (Russell Circumplex) ─────────────────────────
+
+/**
+ * Map chemistry to valence + arousal — the two fundamental affective dimensions
+ * (Russell's Circumplex Model of Affect, 1980).
+ *
+ * Valence: pleasure ↔ displeasure (-1 to 1)
+ * Arousal: activation level (0 to 1)
+ */
+export function computeAffectCore(
+  chemistry: ChemicalState,
+): { valence: number; arousal: number } {
+  const { DA, HT, OT, END, CORT, NE } = chemistry;
+
+  // Valence: positive chemicals push up, stress pushes down
+  // CORT weighted 1.5× (cortisol is the dominant negative signal)
+  // NE weighted 0.5× (arousing but not inherently negative)
+  const rawValence = (DA - 50) + (HT - 50) + (OT - 50) + (END - 50) - (CORT - 50) * 1.5 - (NE - 50) * 0.5;
+  const valence = Math.max(-1, Math.min(1, rawValence / 250));
+
+  // Arousal: NE dominant, CORT and DA contribute
+  const rawArousal = NE + CORT * 0.5 + DA * 0.3;
+  const arousal = Math.max(0, Math.min(1, rawArousal / 180));
+
+  return { valence, arousal };
+}
+
+// ── Barrett Concept Space ────────────────────────────────────
+
+interface QualityConcept {
+  quality: ExperientialQuality;
+  valenceCenter: number;    // -1 to 1
+  arousalCenter: number;    // 0 to 1
+  radius: number;           // matching radius in affective space
+  contextBiases: Partial<Record<string, number>>;
+}
+
+/**
+ * Each ExperientialQuality occupies a region in the Russell Circumplex.
+ * Matching = Euclidean distance from the concept center, within its radius.
+ * Context biases allow situational factors to pull toward specific concepts.
+ */
+const QUALITY_CONCEPTS: QualityConcept[] = [
+  { quality: "flow",             valenceCenter: 0.35, arousalCenter: 0.6,  radius: 0.25, contextBiases: {} },
+  { quality: "contentment",      valenceCenter: 0.4,  arousalCenter: 0.2,  radius: 0.25, contextBiases: { close: 0.1, deep: 0.15 } },
+  { quality: "yearning",         valenceCenter: -0.2, arousalCenter: 0.4,  radius: 0.3,  contextBiases: { stranger: 0.1 } },
+  { quality: "vigilance",        valenceCenter: -0.15,arousalCenter: 0.7,  radius: 0.35, contextBiases: { sympathetic: 0.2 } },
+  { quality: "creative-surge",   valenceCenter: 0.65, arousalCenter: 0.75, radius: 0.25, contextBiases: {} },
+  { quality: "wounded-retreat",  valenceCenter: -0.5, arousalCenter: 0.3,  radius: 0.25, contextBiases: { criticism: 0.2 } },
+  { quality: "warm-connection",  valenceCenter: 0.45, arousalCenter: 0.35, radius: 0.25, contextBiases: { deep: 0.2, close: 0.15 } },
+  { quality: "restless-boredom", valenceCenter: -0.1, arousalCenter: 0.15, radius: 0.2,  contextBiases: { boredom: 0.3 } },
+  { quality: "existential-unease", valenceCenter: -0.6, arousalCenter: 0.5, radius: 0.25, contextBiases: {} },
+  { quality: "playful-mischief", valenceCenter: 0.55, arousalCenter: 0.55, radius: 0.2,  contextBiases: { humor: 0.2 } },
+  { quality: "conflicted",       valenceCenter: 0.0,  arousalCenter: 0.5,  radius: 0.2,  contextBiases: {} },
+  { quality: "numb",             valenceCenter: 0.0,  arousalCenter: 0.05, radius: 0.15, contextBiases: { "dorsal-vagal": 0.3 } },
+];
+
 // ── Main Export ──────────────────────────────────────────────
 
 /**
@@ -87,13 +161,14 @@ export function computeExperientialField(
   state: PsycheState,
   metacognition?: MetacognitiveAssessment,
   decisionBias?: DecisionBiasVector,
+  context?: ConstructionContext,
 ): ExperientialField {
   const locale = state.meta.locale ?? "zh";
   const rel = state.relationships._default ?? state.relationships[Object.keys(state.relationships)[0]];
 
   const coherence = computeCoherence(state.current, state.baseline, state.drives, rel);
   const intensity = computeIntensity(state.current, state.baseline);
-  const quality = selectQuality(state, coherence, intensity, rel, metacognition, decisionBias);
+  const quality = constructQuality(state, coherence, intensity, rel, metacognition, context);
   const phenomenalDescription = generatePhenomenalDescription(quality, state, coherence, intensity, locale);
   const narrative = generateNarrative(quality, state, coherence, intensity, rel, locale, metacognition);
 
@@ -210,23 +285,26 @@ function computeIntensity(current: ChemicalState, baseline: ChemicalState): numb
   return clamp01(totalDeviation / 240);
 }
 
-// ── Quality Selection ────────────────────────────────────────
+// ── Quality Construction (Barrett's Constructed Emotion) ─────
 
 /**
- * Select the dominant experiential quality based on the full state pattern.
+ * Construct the dominant experiential quality using Barrett's theory:
+ *   1. Chemistry → valence + arousal (Russell Circumplex)
+ *   2. Concept matching: find closest quality in affective space
+ *   3. Context biases: autonomic state, stimulus, relationship, memories
  *
- * This is NOT just "what's the highest chemical" — it considers the
- * interaction between chemistry, drives, relationship, and coherence.
+ * Special override states (numb, conflicted, existential-unease) are
+ * preserved as hard gates — these represent extreme conditions where
+ * the normal construction process doesn't apply.
  */
-function selectQuality(
+function constructQuality(
   state: PsycheState,
   coherence: number,
   intensity: number,
   relationship: RelationshipState | undefined,
   metacognition?: MetacognitiveAssessment,
-  decisionBias?: DecisionBiasVector,
+  context?: ConstructionContext,
 ): ExperientialQuality {
-  const c = state.current;
   const d = state.drives;
 
   // ── Special states first (override everything) ──
@@ -246,116 +324,103 @@ function selectQuality(
     return "existential-unease";
   }
 
-  // ── Pattern-based quality detection ──
-  // Score each quality and pick the best fit.
-  const scores: Record<ExperientialQuality, number> = {
-    "flow": 0,
-    "contentment": 0,
-    "yearning": 0,
-    "vigilance": 0,
-    "creative-surge": 0,
-    "wounded-retreat": 0,
-    "warm-connection": 0,
-    "restless-boredom": 0,
-    "existential-unease": 0,
-    "playful-mischief": 0,
-    "conflicted": 0,
-    "numb": 0,
-  };
+  // ── Barrett Step 1: Chemistry → Affect Core ──
+  const { valence, arousal } = computeAffectCore(state.current);
 
-  // Flow: NE + DA high, CORT low, curiosity satisfied, high coherence
-  if (c.NE > CHEM_HIGH && c.DA > CHEM_HIGH - 5 && c.CORT < CHEM_LOW + 5) {
-    scores["flow"] += 0.6;
-    if (d.curiosity > 60) scores["flow"] += 0.2;
-    if (coherence > 0.7) scores["flow"] += 0.2;
-  }
+  // ── Barrett Step 2+3: Concept matching with context ──
+  const contextKeys = buildContextKeys(context, relationship);
 
-  // Contentment: HT + OT stable/high, CORT low, drives mostly satisfied
-  if (c.HT > 55 && c.CORT < 45) {
-    scores["contentment"] += 0.3;
-    if (c.OT > 50) scores["contentment"] += 0.15;
-    if (meanDriveValue(d) > 60) scores["contentment"] += 0.3;
-    if (coherence > 0.6) scores["contentment"] += 0.15;
-  }
-
-  // Yearning: connection/esteem drives hungry, OT may be low or high (wanting)
-  {
-    const connectionHunger = d.connection < DRIVE_HUNGRY_THRESHOLD ? (DRIVE_HUNGRY_THRESHOLD - d.connection) / DRIVE_HUNGRY_THRESHOLD : 0;
-    const esteemHunger = d.esteem < DRIVE_HUNGRY_THRESHOLD ? (DRIVE_HUNGRY_THRESHOLD - d.esteem) / DRIVE_HUNGRY_THRESHOLD : 0;
-    const hungerSignal = Math.max(connectionHunger, esteemHunger);
-    if (hungerSignal > 0.3) {
-      scores["yearning"] += hungerSignal * 0.6;
-      // OT elevated (wanting connection) makes yearning stronger
-      if (c.OT > 50) scores["yearning"] += 0.15;
-      // OT depleted (missing connection) also valid
-      if (c.OT < CHEM_LOW) scores["yearning"] += 0.1;
-    }
-  }
-
-  // Vigilance: CORT high, safety/survival drives hungry
-  if (c.CORT > CHEM_HIGH - 5) {
-    scores["vigilance"] += 0.4;
-    if (d.safety < DRIVE_HUNGRY_THRESHOLD) scores["vigilance"] += 0.25;
-    if (c.NE > 55) scores["vigilance"] += 0.15;
-    if (d.survival < 50) scores["vigilance"] += 0.2;
-  }
-
-  // Creative surge: DA + NE elevated, low stress, curiosity drive satisfied or hungry+seeking
-  if (c.DA > CHEM_HIGH - 5 && c.NE > 55 && c.CORT < 45) {
-    scores["creative-surge"] += 0.5;
-    if (c.END > 50) scores["creative-surge"] += 0.15;
-    if (d.curiosity > 50 || d.curiosity < DRIVE_HUNGRY_THRESHOLD) scores["creative-surge"] += 0.15;
-    if (decisionBias && decisionBias.creativityBias > 0.65) scores["creative-surge"] += 0.15;
-  }
-
-  // Wounded retreat: CORT high, OT low, pulling back. Relationship may be strained.
-  if (c.CORT > 55 && c.OT < 45 && c.HT < 45) {
-    scores["wounded-retreat"] += 0.5;
-    if (c.DA < CHEM_LOW) scores["wounded-retreat"] += 0.15;
-    if (relationship && relationship.trust < 40) scores["wounded-retreat"] += 0.2;
-    if (c.NE < 50) scores["wounded-retreat"] += 0.1;
-  }
-
-  // Warm connection: OT high, trust high, CORT low
-  if (c.OT > CHEM_HIGH && c.CORT < 45) {
-    scores["warm-connection"] += 0.5;
-    if (relationship && relationship.trust > 60) scores["warm-connection"] += 0.2;
-    if (c.END > 50) scores["warm-connection"] += 0.15;
-    if (relationship && relationship.intimacy > 50) scores["warm-connection"] += 0.15;
-  }
-
-  // Restless boredom: low stimulation across the board, drives mildly hungry
-  if (c.DA < 45 && c.NE < 45) {
-    scores["restless-boredom"] += 0.3;
-    if (c.CORT < 45) scores["restless-boredom"] += 0.15;
-    if (d.curiosity < 50) scores["restless-boredom"] += 0.25;
-    if (intensity < 0.3) scores["restless-boredom"] += 0.15;
-  }
-
-  // Playful mischief: END high, social energy, safe
-  if (c.END > CHEM_HIGH && c.CORT < CHEM_LOW + 5) {
-    scores["playful-mischief"] += 0.5;
-    if (c.DA > 55) scores["playful-mischief"] += 0.15;
-    if (d.safety > 60) scores["playful-mischief"] += 0.15;
-    if (c.OT > 50) scores["playful-mischief"] += 0.1;
-  }
-
-  // ── Pick highest scoring quality ──
   let bestQuality: ExperientialQuality = "contentment";
-  let bestScore = -1;
-  for (const [q, s] of Object.entries(scores) as [ExperientialQuality, number][]) {
-    if (s > bestScore) {
-      bestScore = s;
-      bestQuality = q;
+  let bestScore = -Infinity;
+
+  for (const concept of QUALITY_CONCEPTS) {
+    // Skip special states — already handled above
+    if (concept.quality === "numb" || concept.quality === "conflicted"
+      || concept.quality === "existential-unease") {
+      continue;
+    }
+
+    // Euclidean distance in affective space
+    const dv = valence - concept.valenceCenter;
+    const da = arousal - concept.arousalCenter;
+    const distance = Math.sqrt(dv * dv + da * da);
+
+    // Score: inverse distance, normalized by radius (Gaussian-like decay)
+    let score = Math.max(0, 1 - distance / concept.radius);
+
+    // Context biases: each matching context key adds its bias
+    for (const key of contextKeys) {
+      if (concept.contextBiases[key] !== undefined) {
+        score += concept.contextBiases[key]!;
+      }
+    }
+
+    // Core memory bias (P11): if related memories match this quality's region, boost
+    if (context?.coreMemories && context.coreMemories.length > 0) {
+      const memoryResonance = computeMemoryResonance(
+        context.coreMemories, concept.valenceCenter, concept.arousalCenter,
+      );
+      score += memoryResonance * 0.1;
+    }
+
+    // Prediction error: high error weakens the current concept (forces re-evaluation)
+    if (context?.predictionError !== undefined && context.predictionError > 0.3) {
+      score -= context.predictionError * 0.15;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestQuality = concept.quality;
     }
   }
 
-  // If no quality scored meaningfully, fall back to contentment or numb
-  if (bestScore < 0.2) {
+  // If no concept matched meaningfully, fall back
+  if (bestScore < 0.1) {
     return intensity < 0.2 ? "numb" : "contentment";
   }
 
   return bestQuality;
+}
+
+/**
+ * Build context keys for Barrett concept matching from available context signals.
+ */
+function buildContextKeys(
+  context?: ConstructionContext,
+  relationship?: RelationshipState,
+): string[] {
+  const keys: string[] = [];
+  if (context?.autonomicState) {
+    keys.push(context.autonomicState); // "ventral-vagal", "sympathetic", "dorsal-vagal"
+  }
+  if (context?.stimulus) {
+    keys.push(context.stimulus); // "praise", "criticism", "humor", etc.
+  }
+  if (relationship?.phase) {
+    keys.push(relationship.phase); // "stranger", "acquaintance", "familiar", "close", "deep"
+  }
+  return keys;
+}
+
+/**
+ * Compute how much core memories resonate with a given affective region.
+ * Returns 0-1 where 1 = strong resonance (memories cluster near the concept center).
+ */
+function computeMemoryResonance(
+  memories: ChemicalSnapshot[],
+  targetValence: number,
+  targetArousal: number,
+): number {
+  if (memories.length === 0) return 0;
+
+  let totalResonance = 0;
+  for (const mem of memories) {
+    const { valence: mv, arousal: ma } = computeAffectCore(mem.chemistry);
+    const dist = Math.sqrt((mv - targetValence) ** 2 + (ma - targetArousal) ** 2);
+    totalResonance += Math.max(0, 1 - dist / 0.5); // resonance fades at distance 0.5
+  }
+
+  return Math.min(1, totalResonance / memories.length);
 }
 
 // ── Phenomenal Description ───────────────────────────────────

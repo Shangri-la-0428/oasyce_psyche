@@ -7,10 +7,10 @@ import {
   loadState, saveState, initializeState, decayAndSave,
   parsePsycheUpdate, mergeUpdates, getRelationship,
   detectDisagreement, updateAgreementStreak, generatePsycheMd,
-  pushSnapshot,
+  pushSnapshot, compressSession,
 } from "../src/psyche-file.js";
-import type { PsycheState } from "../src/types.js";
-import { CHEMICAL_KEYS, DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE } from "../src/types.js";
+import type { PsycheState, ChemicalSnapshot } from "../src/types.js";
+import { CHEMICAL_KEYS, DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE, MAX_RELATIONSHIP_MEMORY } from "../src/types.js";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ function makeMinimalState(overrides: Partial<PsycheState> = {}): PsycheState {
     learning: { ...DEFAULT_LEARNING_STATE },
     metacognition: { ...DEFAULT_METACOGNITIVE_STATE },
     personhood: { ...DEFAULT_PERSONHOOD_STATE },
-    meta: { agentName: "TestAgent", createdAt: new Date().toISOString(), totalInteractions: 0, locale: "zh" },
+    meta: { agentName: "TestAgent", createdAt: new Date().toISOString(), totalInteractions: 0, locale: "zh", mode: "natural" as const },
     ...overrides,
   };
 }
@@ -179,63 +179,63 @@ describe("parsePsycheUpdate", () => {
     const text = `Some text\n<psyche_update>\nDA: 80\nHT: 60\nCORT: 30\nOT: 70\nNE: 55\nEND: 65\n</psyche_update>`;
     const result = parsePsycheUpdate(text);
     assert.ok(result);
-    assert.equal(result!.current!.DA, 80);
-    assert.equal(result!.current!.HT, 60);
+    assert.equal(result!.state.current!.DA, 80);
+    assert.equal(result!.state.current!.HT, 60);
   });
 
   it("parses Chinese colon format", () => {
     const text = `<psyche_update>\nDA：85\nHT：55\n</psyche_update>`;
     const result = parsePsycheUpdate(text);
     assert.ok(result);
-    assert.equal(result!.current!.DA, 85);
+    assert.equal(result!.state.current!.DA, 85);
   });
 
   it("parses decimal values", () => {
     const text = `<psyche_update>\nDA: 80.5\nHT: 55.7\n</psyche_update>`;
     const result = parsePsycheUpdate(text);
     assert.ok(result);
-    assert.equal(result!.current!.DA, 81); // rounded
-    assert.equal(result!.current!.HT, 56); // rounded
+    assert.equal(result!.state.current!.DA, 81); // rounded
+    assert.equal(result!.state.current!.HT, 56); // rounded
   });
 
   it("parses Chinese chemical names", () => {
     const text = `<psyche_update>\n多巴胺: 80\n血清素: 60\n</psyche_update>`;
     const result = parsePsycheUpdate(text);
     assert.ok(result);
-    assert.equal(result!.current!.DA, 80);
-    assert.equal(result!.current!.HT, 60);
+    assert.equal(result!.state.current!.DA, 80);
+    assert.equal(result!.state.current!.HT, 60);
   });
 
   it("parses English chemical names", () => {
     const text = `<psyche_update>\nDopamine: 80\nSerotonin: 60\n</psyche_update>`;
     const result = parsePsycheUpdate(text);
     assert.ok(result);
-    assert.equal(result!.current!.DA, 80);
-    assert.equal(result!.current!.HT, 60);
+    assert.equal(result!.state.current!.DA, 80);
+    assert.equal(result!.state.current!.HT, 60);
   });
 
   it("parses with reasons in parentheses", () => {
     const text = `<psyche_update>\nDA: 80 (受到赞美)\nCORT: 25 (放松了)\n</psyche_update>`;
     const result = parsePsycheUpdate(text);
     assert.ok(result);
-    assert.equal(result!.current!.DA, 80);
-    assert.equal(result!.current!.CORT, 25);
+    assert.equal(result!.state.current!.DA, 80);
+    assert.equal(result!.state.current!.CORT, 25);
   });
 
   it("clamps values above 100", () => {
     const text = `<psyche_update>\nDA: 150\nHT: 200\n</psyche_update>`;
     const result = parsePsycheUpdate(text);
     assert.ok(result);
-    assert.equal(result!.current!.DA, 100);
-    assert.equal(result!.current!.HT, 100);
+    assert.equal(result!.state.current!.DA, 100);
+    assert.equal(result!.state.current!.HT, 100);
   });
 
   it("ignores negative values (regex only matches digits)", () => {
     const text = `<psyche_update>\nDA: 80\nHT: -10\n</psyche_update>`;
     const result = parsePsycheUpdate(text);
     assert.ok(result);
-    assert.equal(result!.current!.DA, 80);
-    assert.equal(result!.current!.HT, undefined); // -10 not matched by [\d.]+
+    assert.equal(result!.state.current!.DA, 80);
+    assert.equal(result!.state.current!.HT, undefined); // -10 not matched by [\d.]+
   });
 
   it("returns null when no psyche_update tag", () => {
@@ -250,16 +250,38 @@ describe("parsePsycheUpdate", () => {
     const text = `<psyche_update>\nDA: 70\n用户状态: 焦虑\n投射结果: 感到紧张\n共鸣程度: match\n</psyche_update>`;
     const result = parsePsycheUpdate(text);
     assert.ok(result);
-    assert.ok(result!.empathyLog);
-    assert.equal(result!.empathyLog!.userState, "焦虑");
-    assert.equal(result!.empathyLog!.resonance, "match");
+    assert.ok(result!.state.empathyLog);
+    assert.equal(result!.state.empathyLog!.userState, "焦虑");
+    assert.equal(result!.state.empathyLog!.resonance, "match");
   });
 
   it("parses trust and intimacy updates", () => {
     const text = `<psyche_update>\nDA: 70\n信任度: 75\n亲密度: 60\n</psyche_update>`;
     const result = parsePsycheUpdate(text);
     assert.ok(result);
-    assert.ok(result!.relationships);
+    assert.ok(result!.state.relationships);
+  });
+
+  it("parses LLM-assisted stimulus classification", () => {
+    const text = `<psyche_update>\nstimulus: validation\nDA: 75\n</psyche_update>`;
+    const result = parsePsycheUpdate(text);
+    assert.ok(result);
+    assert.equal(result!.llmStimulus, "validation");
+    assert.equal(result!.state.current!.DA, 75);
+  });
+
+  it("ignores invalid stimulus type from LLM", () => {
+    const text = `<psyche_update>\nstimulus: nonsense\nDA: 75\n</psyche_update>`;
+    const result = parsePsycheUpdate(text);
+    assert.ok(result);
+    assert.equal(result!.llmStimulus, undefined);
+  });
+
+  it("parses stimulus-only update (no chemistry)", () => {
+    const text = `<psyche_update>\nstimulus: praise\n</psyche_update>`;
+    const result = parsePsycheUpdate(text);
+    assert.ok(result);
+    assert.equal(result!.llmStimulus, "praise");
   });
 });
 
@@ -392,7 +414,8 @@ describe("pushSnapshot", () => {
   });
 
   it("respects MAX_EMOTIONAL_HISTORY limit", () => {
-    const history = Array.from({ length: 10 }, (_, i) => ({
+    // MAX_EMOTIONAL_HISTORY is 30 (P11: raised from 10)
+    const history = Array.from({ length: 30 }, (_, i) => ({
       chemistry: { DA: 50, HT: 50, CORT: 50, OT: 50, NE: 50, END: 50 },
       stimulus: "casual" as const,
       dominantEmotion: null,
@@ -400,8 +423,8 @@ describe("pushSnapshot", () => {
     }));
     const state = makeMinimalState({ emotionalHistory: history });
     const updated = pushSnapshot(state, "surprise");
-    assert.equal(updated.emotionalHistory.length, 10);
-    assert.equal(updated.emotionalHistory[9].stimulus, "surprise");
+    assert.equal(updated.emotionalHistory.length, 30);
+    assert.equal(updated.emotionalHistory[29].stimulus, "surprise");
   });
 
   it("records dominant emotion when detected", () => {
@@ -443,5 +466,136 @@ describe("generatePsycheMd", () => {
     assert.ok(md.includes("怨恨"), "Should include resentment");
     assert.ok(md.includes("讽刺"), "Should include sarcasm stimulus");
     await rm(dir, { recursive: true });
+  });
+});
+
+// ── compressSession ──────────────────────────────────────────
+
+function makeSnapshot(overrides: Partial<ChemicalSnapshot> = {}): ChemicalSnapshot {
+  return {
+    chemistry: { DA: 50, HT: 50, CORT: 50, OT: 50, NE: 50, END: 50 },
+    stimulus: "casual",
+    dominantEmotion: null,
+    timestamp: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makeHistory(count: number, opts?: {
+  stimuli?: (ChemicalSnapshot["stimulus"])[];
+  emotions?: (string | null)[];
+  chemistryFn?: (i: number) => ChemicalSnapshot["chemistry"];
+}): ChemicalSnapshot[] {
+  const base = Date.now();
+  return Array.from({ length: count }, (_, i) => ({
+    chemistry: opts?.chemistryFn
+      ? opts.chemistryFn(i)
+      : { DA: 50 + i * 5, HT: 50, CORT: 50 - i * 3, OT: 50 + i * 3, NE: 50, END: 50 },
+    stimulus: opts?.stimuli?.[i] ?? "casual" as ChemicalSnapshot["stimulus"],
+    dominantEmotion: opts?.emotions?.[i] ?? null,
+    timestamp: new Date(base + i * 60000).toISOString(),
+  }));
+}
+
+describe("compressSession", () => {
+  it("returns state unchanged when history is empty", () => {
+    const state = makeMinimalState({ emotionalHistory: [] });
+    const result = compressSession(state);
+    assert.deepStrictEqual(result, state);
+  });
+
+  it("returns state unchanged when history has 1 entry", () => {
+    const state = makeMinimalState({ emotionalHistory: [makeSnapshot()] });
+    const result = compressSession(state);
+    assert.deepStrictEqual(result, state);
+  });
+
+  it("produces memory entry with date, stimuli, trajectory for 5 entries", () => {
+    const history = makeHistory(5, {
+      stimuli: ["praise", "praise", "praise", "casual", "casual"],
+      emotions: ["平静", "愉悦兴奋", "愉悦兴奋", "深度满足", "深度满足"],
+    });
+    const state = makeMinimalState({ emotionalHistory: history });
+    const result = compressSession(state);
+
+    const rel = result.relationships._default;
+    assert.ok(rel.memory, "Should have memory array");
+    assert.equal(rel.memory!.length, 1);
+
+    const summary = rel.memory![0];
+    assert.ok(summary.includes("5轮"), `Should contain turn count, got: ${summary}`);
+    assert.ok(summary.includes("刺激["), `Should contain stimuli section, got: ${summary}`);
+    assert.ok(summary.includes("praise×3"), `Should contain praise count, got: ${summary}`);
+    assert.ok(summary.includes("casual×2"), `Should contain casual count, got: ${summary}`);
+    assert.ok(summary.includes("弧线["), `Should contain emotion arc, got: ${summary}`);
+    assert.ok(summary.includes("倾向["), `Should contain tendency, got: ${summary}`);
+  });
+
+  it("clears emotionalHistory to empty array", () => {
+    const history = makeHistory(3);
+    const state = makeMinimalState({ emotionalHistory: history });
+    const result = compressSession(state);
+    assert.equal(result.emotionalHistory.length, 0);
+  });
+
+  it("respects MAX_RELATIONSHIP_MEMORY limit", () => {
+    const existingMemory = Array.from({ length: MAX_RELATIONSHIP_MEMORY }, (_, i) => `old-entry-${i}`);
+    const state = makeMinimalState({
+      emotionalHistory: makeHistory(3),
+      relationships: {
+        _default: { ...DEFAULT_RELATIONSHIP, memory: existingMemory },
+      },
+    });
+    const result = compressSession(state);
+    const mem = result.relationships._default.memory!;
+    assert.equal(mem.length, MAX_RELATIONSHIP_MEMORY, "Should not exceed MAX_RELATIONSHIP_MEMORY");
+    // Oldest entry should be trimmed, newest should be the session summary
+    assert.ok(!mem.includes("old-entry-0"), "Oldest entry should be trimmed");
+    assert.ok(mem[mem.length - 1].includes("轮"), "Last entry should be the new session summary");
+  });
+
+  it("includes peak event in summary", () => {
+    // Create history where turn 3 (index 2) has max deviation from baseline
+    const history = makeHistory(5, {
+      stimuli: ["casual", "casual", "praise", "casual", "casual"],
+      emotions: [null, null, "愉悦兴奋", null, null],
+      chemistryFn: (i) => i === 2
+        ? { DA: 95, HT: 50, CORT: 10, OT: 80, NE: 90, END: 50 }  // big deviation
+        : { DA: 50, HT: 50, CORT: 50, OT: 50, NE: 50, END: 50 },
+    });
+    const state = makeMinimalState({
+      emotionalHistory: history,
+      baseline: { DA: 50, HT: 50, CORT: 50, OT: 50, NE: 50, END: 50 },
+    });
+    const result = compressSession(state);
+    const summary = result.relationships._default.memory![0];
+    assert.ok(summary.includes("高峰[第3轮:praise→愉悦兴奋]"), `Peak should be turn 3, got: ${summary}`);
+  });
+
+  it("uses per-user relationship when userId provided", () => {
+    const history = makeHistory(3);
+    const state = makeMinimalState({ emotionalHistory: history });
+    const result = compressSession(state, "alice");
+    assert.ok(result.relationships.alice, "Should have alice relationship");
+    assert.ok(result.relationships.alice.memory!.length === 1, "alice should have 1 memory");
+    // _default should be unchanged
+    assert.equal(result.relationships._default.memory, undefined, "_default should have no memory");
+  });
+
+  it("produces English summary for en locale", () => {
+    const history = makeHistory(4, {
+      stimuli: ["praise", "intellectual", "praise", "casual"],
+      emotions: ["excited joy", "focused flow", "excited joy", null],
+    });
+    const state = makeMinimalState({
+      emotionalHistory: history,
+      meta: { agentName: "TestAgent", createdAt: new Date().toISOString(), totalInteractions: 0, locale: "en", mode: "natural" as const },
+    });
+    const result = compressSession(state);
+    const summary = result.relationships._default.memory![0];
+    assert.ok(summary.includes("turns"), `Should use 'turns' for en, got: ${summary}`);
+    assert.ok(summary.includes("stimuli["), `Should use 'stimuli' for en, got: ${summary}`);
+    assert.ok(summary.includes("tendency["), `Should use 'tendency' for en, got: ${summary}`);
+    assert.ok(summary.includes("peak["), `Should use 'peak' for en, got: ${summary}`);
   });
 });

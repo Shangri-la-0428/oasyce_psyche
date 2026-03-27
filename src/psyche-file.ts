@@ -15,9 +15,10 @@ import {
   MAX_EMOTIONAL_HISTORY, MAX_RELATIONSHIP_MEMORY,
 } from "./types.js";
 import { getBaseline, getDefaultSelfModel, extractMBTI, getSensitivity, getTemperament } from "./profiles.js";
-import { applyDecay, detectEmotions, describeEmotionalState, getExpressionHint, getBehaviorGuide } from "./chemistry.js";
-import { decayDrives, computeEffectiveBaseline } from "./drives.js";
+import { applyDecay, detectEmotions } from "./chemistry.js";
+import { decayDrives, computeEffectiveBaseline, updateTraitDrift } from "./drives.js";
 import { t } from "./i18n.js";
+import { computeSelfReflection } from "./self-recognition.js";
 
 const STATE_FILE = "psyche-state.json";
 const PSYCHE_MD = "PSYCHE.md";
@@ -168,11 +169,17 @@ export function pushSnapshot(
     ? (state.meta.locale === "en" ? emotions[0].name : emotions[0].nameZh)
     : null;
 
+  // P11: Compute intensity and valence for memory consolidation
+  const intensity = computeSnapshotIntensity(state.current, state.baseline);
+  const valence = computeSnapshotValence(state.current);
+
   const snapshot: ChemicalSnapshot = {
     chemistry: { ...state.current },
     stimulus,
     dominantEmotion,
     timestamp: new Date().toISOString(),
+    intensity,
+    valence,
   };
 
   const history = [...(state.emotionalHistory ?? []), snapshot];
@@ -205,6 +212,291 @@ export function pushSnapshot(
 export function getRelationship(state: PsycheState, userId?: string): RelationshipState {
   const key = userId ?? "_default";
   return state.relationships[key] ?? { ...DEFAULT_RELATIONSHIP };
+}
+
+// ── Tendency display labels ────────────────────────────────────
+
+const TENDENCY_LABEL_ZH: Record<string, string> = {
+  ascending: "上扬",
+  descending: "下沉",
+  volatile: "波动",
+  oscillating: "起伏",
+  stable: "平稳",
+};
+
+const TENDENCY_LABEL_EN: Record<string, string> = {
+  ascending: "ascending",
+  descending: "descending",
+  volatile: "volatile",
+  oscillating: "oscillating",
+  stable: "stable",
+};
+
+/**
+ * Compress the full emotionalHistory into a rich session summary and store it
+ * in the user's relationship.memory[]. Called ONCE at session end.
+ *
+ * Pure computation, no LLM calls.
+ */
+export function compressSession(
+  state: PsycheState,
+  userId?: string,
+): PsycheState {
+  const history = state.emotionalHistory ?? [];
+
+  // Need at least 2 entries for a meaningful summary
+  if (history.length < 2) return state;
+
+  const locale = state.meta.locale ?? "zh";
+  const isZh = locale === "zh";
+
+  const first = history[0];
+  const last = history[history.length - 1];
+
+  // ── Date range ──
+  const d1 = new Date(first.timestamp);
+  const d2 = new Date(last.timestamp);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const dateRange = isZh
+    ? `${d1.getMonth() + 1}月${d1.getDate()}日 ${pad(d1.getHours())}:${pad(d1.getMinutes())}-${pad(d2.getHours())}:${pad(d2.getMinutes())}`
+    : `${d1.getMonth() + 1}/${d1.getDate()} ${pad(d1.getHours())}:${pad(d1.getMinutes())}-${pad(d2.getHours())}:${pad(d2.getMinutes())}`;
+
+  // ── Turn count ──
+  const turnCount = history.length;
+
+  // ── Stimulus distribution ──
+  const stimuliCounts: Record<string, number> = {};
+  for (const snap of history) {
+    if (snap.stimulus) {
+      stimuliCounts[snap.stimulus] = (stimuliCounts[snap.stimulus] || 0) + 1;
+    }
+  }
+  const stimuliStr = Object.entries(stimuliCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, count]) => `${type}×${count}`)
+    .join(",");
+
+  // ── Chemical trajectory ──
+  const trajectoryParts: string[] = [];
+  for (const key of CHEMICAL_KEYS) {
+    const delta = last.chemistry[key] - first.chemistry[key];
+    if (Math.abs(delta) > 10) {
+      trajectoryParts.push(`${key}${Math.round(first.chemistry[key])}→${Math.round(last.chemistry[key])}`);
+    }
+  }
+
+  // ── Emotion arc ──
+  const emotions: string[] = [];
+  for (const snap of history) {
+    if (snap.dominantEmotion && (emotions.length === 0 || emotions[emotions.length - 1] !== snap.dominantEmotion)) {
+      emotions.push(snap.dominantEmotion);
+    }
+  }
+  const emotionArc = emotions.join("→");
+
+  // ── Peak event ──
+  let peakIdx = 0;
+  let peakDeviation = 0;
+  for (let i = 0; i < history.length; i++) {
+    let deviation = 0;
+    for (const key of CHEMICAL_KEYS) {
+      deviation += Math.abs(history[i].chemistry[key] - state.baseline[key]);
+    }
+    if (deviation > peakDeviation) {
+      peakDeviation = deviation;
+      peakIdx = i;
+    }
+  }
+  const peakSnap = history[peakIdx];
+  const peakLabel = isZh
+    ? `第${peakIdx + 1}轮:${peakSnap.stimulus ?? "?"}→${peakSnap.dominantEmotion ?? "?"}`
+    : `turn${peakIdx + 1}:${peakSnap.stimulus ?? "?"}→${peakSnap.dominantEmotion ?? "?"}`;
+
+  // ── Tendency ──
+  const reflection = computeSelfReflection(history, locale);
+  const tendencyLabel = isZh
+    ? (TENDENCY_LABEL_ZH[reflection.tendency] ?? reflection.tendency)
+    : (TENDENCY_LABEL_EN[reflection.tendency] ?? reflection.tendency);
+
+  // ── Build summary string ──
+  const turnsLabel = isZh ? "轮" : "turns";
+  const stimLabel = isZh ? "刺激" : "stimuli";
+  const trajLabel = isZh ? "轨迹" : "trajectory";
+  const arcLabel = isZh ? "弧线" : "arc";
+  const peakEventLabel = isZh ? "高峰" : "peak";
+  const tendLabel = isZh ? "倾向" : "tendency";
+
+  let summary = `${dateRange}(${turnCount}${turnsLabel})`;
+  if (stimuliStr) summary += `: ${stimLabel}[${stimuliStr}]`;
+  if (trajectoryParts.length > 0) summary += ` ${trajLabel}[${trajectoryParts.join(" ")}]`;
+  if (emotionArc) summary += ` ${arcLabel}[${emotionArc}]`;
+  summary += ` ${peakEventLabel}[${peakLabel}]`;
+  summary += ` ${tendLabel}[${tendencyLabel}]`;
+
+  // ── Store in relationship memory ──
+  const relKey = userId ?? "_default";
+  const existing = state.relationships[relKey] ?? { ...DEFAULT_RELATIONSHIP };
+  const memory = [...(existing.memory ?? [])];
+  memory.push(summary);
+  if (memory.length > MAX_RELATIONSHIP_MEMORY) {
+    memory.splice(0, memory.length - MAX_RELATIONSHIP_MEMORY);
+  }
+
+  const updatedRel = { ...existing, memory };
+  const updatedRelationships = { ...state.relationships, [relKey]: updatedRel };
+
+  // ── P11: Consolidate and keep only core memories ──
+  const consolidated = consolidateHistory(history, MAX_EMOTIONAL_HISTORY);
+  const coreMemories = consolidated.filter((s) => s.isCoreMemory);
+
+  // ── v9: Update trait drift from session patterns ──
+  const currentDrift = state.traitDrift ?? {
+    accumulators: { praiseExposure: 0, pressureExposure: 0, neglectExposure: 0, connectionExposure: 0, conflictExposure: 0 },
+    sessionCount: 0,
+    baselineDelta: {},
+    decayRateModifiers: {},
+    sensitivityModifiers: {},
+  };
+  const updatedDrift = updateTraitDrift(currentDrift, history, state.learning);
+
+  // ── Clear non-core history, preserve core memories + last snapshot ──
+  // Always keep the most recent snapshot for cross-session context continuity.
+  // Without this, the next session has no recentStimuli for contextual priming.
+  const lastSnapshot = history[history.length - 1];
+  const preserved = coreMemories.some(
+    (s) => s.timestamp === lastSnapshot.timestamp,
+  )
+    ? coreMemories
+    : [...coreMemories, lastSnapshot];
+
+  return {
+    ...state,
+    emotionalHistory: preserved,
+    relationships: updatedRelationships,
+    traitDrift: updatedDrift,
+  };
+}
+
+// ── P11: Emotional Memory Consolidation (McGaugh/Squire) ────
+
+/**
+ * Compute snapshot intensity: how far current chemistry deviates from baseline.
+ * Returns 0-1 (0 = at baseline, 1 = maximum possible deviation).
+ */
+export function computeSnapshotIntensity(
+  current: ChemicalState,
+  baseline: ChemicalState,
+): number {
+  let totalDeviation = 0;
+  for (const key of CHEMICAL_KEYS) {
+    totalDeviation += Math.abs(current[key] - baseline[key]);
+  }
+  return Math.min(1, totalDeviation / 600);
+}
+
+/**
+ * Compute emotional valence from chemistry.
+ * Returns -1 (negative) to 1 (positive).
+ */
+export function computeSnapshotValence(chemistry: ChemicalState): number {
+  const raw = (
+    (chemistry.DA - 50) + (chemistry.HT - 50) + (chemistry.OT - 50)
+    + (chemistry.END - 50) - (chemistry.CORT - 50) - (chemistry.NE - 50) * 0.3
+  ) / 250;
+  return Math.max(-1, Math.min(1, raw));
+}
+
+/** Minimum intensity threshold for a snapshot to be stored (P11) */
+const INTENSITY_STORE_THRESHOLD = 0.15;
+
+/** Core memory intensity threshold */
+const CORE_MEMORY_THRESHOLD = 0.6;
+
+/** Maximum core memories to keep */
+const MAX_CORE_MEMORIES = 5;
+
+/**
+ * Consolidate emotional history: mark core memories, fade weak ones.
+ * Called at session end or when history overflows.
+ */
+export function consolidateHistory(
+  snapshots: ChemicalSnapshot[],
+  maxEntries: number = MAX_EMOTIONAL_HISTORY,
+): ChemicalSnapshot[] {
+  if (snapshots.length === 0) return [];
+
+  // Mark core memories
+  const marked = snapshots.map((s) => ({
+    ...s,
+    isCoreMemory: s.isCoreMemory || (s.intensity !== undefined && s.intensity >= CORE_MEMORY_THRESHOLD),
+  }));
+
+  // Separate core and non-core
+  const core = marked.filter((s) => s.isCoreMemory);
+  const nonCore = marked.filter((s) => !s.isCoreMemory);
+
+  // Enforce core memory limit (always, not just when over maxEntries)
+  let keptCore = core;
+  if (core.length > MAX_CORE_MEMORIES) {
+    const sorted = [...core].sort((a, b) => (b.intensity ?? 0) - (a.intensity ?? 0));
+    keptCore = sorted.slice(0, MAX_CORE_MEMORIES);
+    // Demoted cores become non-core
+    const demoted = sorted.slice(MAX_CORE_MEMORIES).map((s) => ({ ...s, isCoreMemory: false }));
+    nonCore.push(...demoted);
+  }
+
+  // If within limits after core trimming, keep all
+  if (keptCore.length + nonCore.length <= maxEntries) {
+    return [...keptCore, ...nonCore]
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  }
+
+  // Fill remaining slots with non-core (highest intensity first)
+  const remainingSlots = maxEntries - keptCore.length;
+  const keptNonCore = [...nonCore]
+    .sort((a, b) => (b.intensity ?? 0) - (a.intensity ?? 0))
+    .slice(0, Math.max(0, remainingSlots));
+
+  // Merge and sort chronologically
+  return [...keptCore, ...keptNonCore]
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+}
+
+/**
+ * Retrieve memories related to current chemistry and stimulus.
+ * Uses chemical similarity + stimulus matching + core memory bonus.
+ */
+export function retrieveRelatedMemories(
+  history: ChemicalSnapshot[],
+  currentChemistry: ChemicalState,
+  stimulus: StimulusType | null,
+  limit: number = 3,
+): ChemicalSnapshot[] {
+  if (history.length === 0) return [];
+
+  const scored = history.map((snap) => {
+    // Chemical similarity (Euclidean distance normalized)
+    let sumSqDiff = 0;
+    for (const key of CHEMICAL_KEYS) {
+      const diff = snap.chemistry[key] - currentChemistry[key];
+      sumSqDiff += diff * diff;
+    }
+    const maxDist = Math.sqrt(6) * 100; // theoretical max distance
+    const similarity = 1 - Math.sqrt(sumSqDiff) / maxDist;
+
+    // Stimulus match bonus
+    const stimulusBonus = (stimulus && snap.stimulus === stimulus) ? 0.2 : 0;
+
+    // Core memory bonus
+    const coreBonus = snap.isCoreMemory ? 0.1 : 0;
+
+    return { snap, score: similarity + stimulusBonus + coreBonus };
+  });
+
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((s) => s.snap);
 }
 
 /**
@@ -335,6 +627,7 @@ export async function initializeState(
       createdAt: now,
       totalInteractions: 0,
       locale,
+      mode: "natural",
     },
   };
 
@@ -378,14 +671,22 @@ export async function decayAndSave(workspaceDir: string, state: PsycheState): Pr
   return updated;
 }
 
+/** Result of parsing a <psyche_update> block */
+export interface PsycheUpdateResult {
+  state: Partial<PsycheState>;
+  /** LLM-assisted stimulus classification (when algorithm was uncertain) */
+  llmStimulus?: StimulusType;
+}
+
 /**
  * Parse a <psyche_update> block from LLM output.
  * v0.2: supports decimals, Chinese names, English names.
+ * v2.1: supports LLM-assisted stimulus classification.
  */
 export function parsePsycheUpdate(
   text: string,
   logger: Logger = NOOP_LOGGER,
-): Partial<PsycheState> | null {
+): PsycheUpdateResult | null {
   const match = text.match(/<psyche_update>([\s\S]*?)<\/psyche_update>/);
   if (!match) return null;
 
@@ -427,32 +728,51 @@ export function parsePsycheUpdate(
     };
   }
 
+  // Parse LLM-assisted stimulus classification
+  let llmStimulus: StimulusType | undefined;
+  const stimulusMatch = block.match(/(?:stimulus|刺激类型)\s*[:：]\s*(\w+)/i);
+  if (stimulusMatch) {
+    const candidate = stimulusMatch[1].trim().toLowerCase();
+    const VALID_STIMULI: Set<string> = new Set([
+      "praise", "criticism", "humor", "intellectual", "intimacy", "conflict",
+      "neglect", "surprise", "casual", "sarcasm", "authority", "validation",
+      "boredom", "vulnerability",
+    ]);
+    if (VALID_STIMULI.has(candidate)) {
+      llmStimulus = candidate as StimulusType;
+    }
+  }
+
   // Parse relationship updates
   const trustMatch = block.match(/(?:信任度|trust)\s*[:：]\s*(\d+)/i);
   const intimacyMatch = block.match(/(?:亲密度|intimacy)\s*[:：]\s*(\d+)/i);
 
-  if (Object.keys(updates).length === 0 && !empathyLog && !trustMatch) {
+  if (Object.keys(updates).length === 0 && !empathyLog && !trustMatch && !llmStimulus) {
     logger.debug(t("log.parse_debug", "zh", { snippet: block.slice(0, 100) }));
     return null;
   }
 
-  const result: Partial<PsycheState> = {};
+  const stateUpdates: Partial<PsycheState> = {};
 
   if (Object.keys(updates).length > 0) {
     // Store as partial — will be merged field-by-field in mergeUpdates
-    result.current = updates as ChemicalState;
+    stateUpdates.current = updates as ChemicalState;
   }
   if (empathyLog) {
-    result.empathyLog = empathyLog;
+    stateUpdates.empathyLog = empathyLog;
   }
   if (trustMatch || intimacyMatch) {
     const rel: Partial<RelationshipState> = {};
     if (trustMatch) rel.trust = Math.max(0, Math.min(100, parseInt(trustMatch[1], 10)));
     if (intimacyMatch) rel.intimacy = Math.max(0, Math.min(100, parseInt(intimacyMatch[1], 10)));
     // Store as relationships._default for merging
-    result.relationships = { _default: rel as RelationshipState };
+    stateUpdates.relationships = { _default: rel as RelationshipState };
   }
 
+  const result: PsycheUpdateResult = { state: stateUpdates };
+  if (llmStimulus) {
+    result.llmStimulus = llmStimulus;
+  }
   return result;
 }
 

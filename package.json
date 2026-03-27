@@ -1,6 +1,6 @@
 {
   "name": "psyche-ai",
-  "version": "5.1.0",
+  "version": "9.1.2",
   "description": "Artificial Psyche — universal emotional intelligence plugin for any AI agent",
   "type": "module",
   "main": "dist/index.js",
@@ -36,7 +36,8 @@
     "build:test": "tsc -p tsconfig.test.json",
     "test": "npm run build && npm run build:test && node --test dist-test/tests/*.test.js",
     "typecheck": "tsc --noEmit --strict",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "demo": "node scripts/demo-ab.js"
   },
   "license": "MIT",
   "repository": {
@@ -86,6 +87,7 @@
     ]
   },
   "devDependencies": {
+    "@types/node": "^25.5.0",
     "typescript": "^5.9.3"
   }
 }

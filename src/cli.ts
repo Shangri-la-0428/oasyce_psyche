@@ -3,17 +3,21 @@
 // psyche — Artificial Psyche CLI (v0.2)
 //
 // Usage:
-//   psyche init <dir> [--mbti TYPE] [--name NAME] [--lang LOCALE]
+//   psyche init <dir> [--mbti TYPE] [--name NAME] [--lang LOCALE] [--mode MODE] [--traits "O:80,C:40,E:90,A:60,N:30"] [--no-persist]
 //   psyche status <dir> [--json] [--user ID]
 //   psyche inject <dir> [--protocol] [--json] [--lang LOCALE] [--user ID]
 //   psyche decay <dir>
 //   psyche update <dir> '{"DA":80,"CORT":45}' [--user ID]
-//   psyche reset <dir>
+//   psyche mode <dir> <natural|work|companion>
+//   psyche intensity              Show info about personality intensity config
+//   psyche reset <dir> [--full]
+//   psyche diagnose <dir> [--github]
 //   psyche profiles [--json] [--mbti TYPE]
 // ============================================================
 
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { readFile } from "node:fs/promises";
 import {
   loadState,
   saveState,
@@ -24,11 +28,14 @@ import {
   getRelationship,
 } from "./psyche-file.js";
 import type { Logger } from "./psyche-file.js";
-import { describeEmotionalState, getExpressionHint } from "./chemistry.js";
-import { getBaseline, getTemperament, getSensitivity, getDefaultSelfModel } from "./profiles.js";
+import { describeEmotionalState, getExpressionHint, detectEmotions } from "./chemistry.js";
+import { runHealthCheck, generateReport, formatReport, toGitHubIssueBody, formatLogEntry } from "./diagnostics.js";
+import type { SessionMetrics } from "./diagnostics.js";
+import { getBaseline, getTemperament, getSensitivity, getDefaultSelfModel, traitsToBaseline } from "./profiles.js";
 import { buildDynamicContext, buildProtocolContext } from "./prompt.js";
-import type { MBTIType, PsycheState, Locale } from "./types.js";
-import { CHEMICAL_KEYS, CHEMICAL_NAMES_ZH } from "./types.js";
+import { t } from "./i18n.js";
+import type { MBTIType, PsycheState, Locale, PsycheMode, PersonalityTraits } from "./types.js";
+import { CHEMICAL_KEYS, CHEMICAL_NAMES_ZH, DRIVE_KEYS, DRIVE_NAMES_ZH } from "./types.js";
 import { isMBTIType, isChemicalKey, isLocale } from "./guards.js";
 
 // ── Logger ───────────────────────────────────────────────────
@@ -67,6 +74,27 @@ function printChemistry(state: PsycheState): void {
   }
 }
 
+function printDrives(state: PsycheState): void {
+  const icons: Record<string, string> = { survival: "🛡️", safety: "🏠", connection: "🤝", esteem: "⭐", curiosity: "🔍" };
+  for (const key of DRIVE_KEYS) {
+    const val = Math.round(state.drives[key]);
+    const icon = icons[key] ?? "·";
+    const status = val >= 60 ? "🟢" : val >= 40 ? "🟡" : "🔴";
+    const nameZh = DRIVE_NAMES_ZH[key].padEnd(6);
+    console.log(`  ${icon} ${nameZh} ${bar(val, 20)} ${String(val).padStart(3)} ${status}`);
+  }
+}
+
+function printEmotions(state: PsycheState): void {
+  const emotions = detectEmotions(state.current);
+  if (emotions.length > 0) {
+    const names = emotions.map((e) => e.nameZh).join("、");
+    console.log(`  涌现情绪: ${names}`);
+  } else {
+    console.log(`  涌现情绪: 平静`);
+  }
+}
+
 function die(msg: string): never {
   console.error(`error: ${msg}`);
   process.exit(1);
@@ -74,7 +102,7 @@ function die(msg: string): never {
 
 // ── Commands ─────────────────────────────────────────────────
 
-async function cmdInit(dir: string, mbti?: string, name?: string, lang?: string): Promise<void> {
+async function cmdInit(dir: string, mbti?: string, name?: string, lang?: string, mode?: string, traits?: string, noPersist?: boolean): Promise<void> {
   const absDir = resolve(dir);
 
   const opts: { mbti?: MBTIType; name?: string; locale?: Locale } = {};
@@ -89,7 +117,46 @@ async function cmdInit(dir: string, mbti?: string, name?: string, lang?: string)
     opts.locale = lang as Locale;
   }
 
+  if (mode) {
+    const validModes = ["natural", "work", "companion"];
+    if (!validModes.includes(mode)) die(`invalid mode: ${mode}. Valid: ${validModes.join(", ")}`);
+  }
+
+  // Parse traits string like "O:80,C:40,E:90,A:60,N:30"
+  let parsedTraits: PersonalityTraits | undefined;
+  if (traits) {
+    const traitMap: Record<string, keyof PersonalityTraits> = {
+      O: "openness", C: "conscientiousness", E: "extraversion", A: "agreeableness", N: "neuroticism",
+    };
+    const parsed: Partial<PersonalityTraits> = {};
+    for (const pair of traits.split(",")) {
+      const [key, val] = pair.trim().split(":");
+      const traitKey = traitMap[key?.toUpperCase()];
+      if (!traitKey) die(`invalid trait key: ${key}. Valid: O, C, E, A, N`);
+      const num = parseInt(val, 10);
+      if (isNaN(num) || num < 0 || num > 100) die(`trait value must be 0-100: ${val}`);
+      parsed[traitKey] = num;
+    }
+    if (Object.keys(parsed).length !== 5) die("all 5 traits required: O, C, E, A, N");
+    parsedTraits = parsed as PersonalityTraits;
+  }
+
   const state = await initializeState(absDir, opts, cliLogger);
+
+  // Apply parsed traits to override baseline
+  if (parsedTraits) {
+    const { baseline } = traitsToBaseline(parsedTraits);
+    state.baseline = baseline;
+    state.current = { ...baseline };
+    await saveState(absDir, state);
+    await generatePsycheMd(absDir, state);
+  }
+
+  // Apply mode after initialization
+  if (mode) {
+    state.meta.mode = mode as PsycheMode;
+    await saveState(absDir, state);
+  }
 
   console.log(`\nPsyche initialized for ${state.meta.agentName} (${state.mbti})\n`);
   printChemistry(state);
@@ -122,6 +189,12 @@ async function cmdStatus(dir: string, json: boolean, userId?: string): Promise<v
 
   console.log(`\n${state.meta.agentName} (${state.mbti}) — ${emotion}\n`);
   printChemistry(state);
+
+  console.log();
+  printDrives(state);
+  printEmotions(state);
+  console.log(`  Mode: ${state.meta.mode ?? "natural"} — ${t(`mode.${state.meta.mode ?? "natural"}`, locale)}`);
+
   console.log(`\n  Expression: ${hint}`);
   console.log(`  Relationship (${userId ?? "_default"}): trust ${relationship.trust}, intimacy ${relationship.intimacy} (${relationship.phase})`);
   console.log(`  Interactions: ${state.meta.totalInteractions}`);
@@ -212,20 +285,26 @@ async function cmdUpdate(dir: string, updateJson: string, userId?: string): Prom
   console.log();
 }
 
-async function cmdReset(dir: string): Promise<void> {
+async function cmdReset(dir: string, full: boolean): Promise<void> {
   const absDir = resolve(dir);
   const state = await loadState(absDir, cliLogger);
 
   state.current = { ...state.baseline };
+  state.drives = { survival: 80, safety: 70, connection: 60, esteem: 60, curiosity: 70 };
   state.updatedAt = new Date().toISOString();
   state.empathyLog = null;
   state.agreementStreak = 0;
   state.lastDisagreement = null;
+  state.emotionalHistory = [];
+
+  if (full) {
+    state.relationships = { _default: { trust: 50, intimacy: 30, phase: "acquaintance" } };
+  }
 
   await saveState(absDir, state);
   await generatePsycheMd(absDir, state);
 
-  console.log(`\n${state.meta.agentName} reset to baseline (${state.mbti})\n`);
+  console.log(`\n${state.meta.agentName} reset to baseline (${state.mbti})${full ? " [full reset including relationships]" : ""}\n`);
   printChemistry(state);
   console.log();
 }
@@ -305,6 +384,97 @@ function cmdProfiles(json: boolean, mbti?: string): void {
   }
 }
 
+async function cmdMode(dir: string, newMode: string): Promise<void> {
+  const absDir = resolve(dir);
+  const validModes = ["natural", "work", "companion"];
+  if (!validModes.includes(newMode)) die(`invalid mode: ${newMode}. Valid: ${validModes.join(", ")}`);
+
+  const state = await loadState(absDir, cliLogger);
+  state.meta.mode = newMode as PsycheMode;
+  await saveState(absDir, state);
+
+  console.log(`\n${state.meta.agentName} mode set to: ${newMode}\n`);
+}
+
+function cmdIntensity(): void {
+  console.log(`
+Personality intensity controls how strongly Psyche affects AI behavior.
+
+  0.0 = Traditional warm AI (no emotional variation)
+  0.5 = Subtle emotional responses
+  0.7 = Default
+  1.0 = Full Psyche experience
+
+Set via PsycheEngine config:
+  new PsycheEngine({ personalityIntensity: 0.7 }, storage)
+
+Or in OpenClaw plugin config:
+  { "personalityIntensity": 0.7 }
+`);
+}
+
+async function cmdDiagnose(dir: string, github: boolean): Promise<void> {
+  const absDir = resolve(dir);
+  const state = await loadState(absDir, cliLogger);
+
+  // Try to load last session metrics from diagnostics.jsonl
+  const logPath = resolve(absDir, "diagnostics.jsonl");
+  let lastMetrics: SessionMetrics | null = null;
+  try {
+    const logContent = await readFile(logPath, "utf-8");
+    const lines = logContent.trim().split("\n").filter(Boolean);
+    if (lines.length > 0) {
+      const lastEntry = JSON.parse(lines[lines.length - 1]);
+      // Reconstruct partial metrics from log entry
+      lastMetrics = {
+        inputCount: lastEntry.inputs ?? 0,
+        classifiedCount: Math.round((lastEntry.classifyRate ?? 0) * (lastEntry.inputs ?? 0)),
+        stimulusDistribution: {},
+        avgConfidence: lastEntry.classifyRate ?? 0,
+        totalChemistryDelta: lastEntry.chemDelta ?? 0,
+        maxChemistryDelta: 0,
+        errors: [],
+        startedAt: lastEntry.t ?? new Date().toISOString(),
+        lastActivityAt: lastEntry.t ?? new Date().toISOString(),
+      };
+    }
+  } catch {
+    // No log file yet — that's fine
+  }
+
+  // Build metrics (use last session or empty)
+  const metrics: SessionMetrics = lastMetrics ?? {
+    inputCount: 0,
+    classifiedCount: 0,
+    stimulusDistribution: {},
+    avgConfidence: 0,
+    totalChemistryDelta: 0,
+    maxChemistryDelta: 0,
+    errors: [],
+    startedAt: new Date().toISOString(),
+    lastActivityAt: new Date().toISOString(),
+  };
+
+  const report = generateReport(state, metrics, "9.1.2");
+
+  if (github) {
+    console.log(toGitHubIssueBody(report));
+  } else {
+    console.log("\n" + formatReport(report) + "\n");
+
+    // Show log history summary if available
+    try {
+      const logContent = await readFile(logPath, "utf-8");
+      const lines = logContent.trim().split("\n").filter(Boolean);
+      if (lines.length > 1) {
+        console.log(`  ${lines.length} session(s) logged in diagnostics.jsonl\n`);
+      }
+    } catch {
+      console.log("  No diagnostics.jsonl yet — will be created after first OpenClaw session.\n");
+    }
+  }
+}
+
 // ── Usage ────────────────────────────────────────────────────
 
 function usage(): void {
@@ -313,12 +483,15 @@ psyche — Artificial Psyche CLI (v0.2)
 Plug-and-play emotional intelligence for any AI agent.
 
 Usage:
-  psyche init <dir> [--mbti TYPE] [--name NAME] [--lang LOCALE]
+  psyche init <dir> [--mbti TYPE] [--name NAME] [--lang LOCALE] [--mode MODE] [--traits "O:80,C:40,..."] [--no-persist]
   psyche status <dir> [--json] [--user ID]
   psyche inject <dir> [--protocol] [--json] [--lang LOCALE] [--user ID]
   psyche decay <dir>
   psyche update <dir> '{"DA":80,"CORT":45}' [--user ID]
-  psyche reset <dir>
+  psyche mode <dir> <natural|work|companion>
+  psyche intensity              Show info about personality intensity config
+  psyche reset <dir> [--full]
+  psyche diagnose <dir> [--github]   Run health checks & show diagnostic report
   psyche profiles [--mbti TYPE] [--json]
 
 Options:
@@ -373,11 +546,14 @@ async function main(): Promise<void> {
             mbti: { type: "string" },
             name: { type: "string" },
             lang: { type: "string" },
+            mode: { type: "string" },
+            traits: { type: "string" },
+            "no-persist": { type: "boolean", default: false },
           },
           allowPositionals: true,
         });
         if (positionals.length === 0) die("missing <dir> argument");
-        await cmdInit(positionals[0], values.mbti, values.name, values.lang);
+        await cmdInit(positionals[0], values.mbti, values.name, values.lang, values.mode, values.traits, values["no-persist"]);
         break;
       }
 
@@ -432,8 +608,15 @@ async function main(): Promise<void> {
       }
 
       case "reset": {
-        if (rest.length === 0) die("missing <dir> argument");
-        await cmdReset(rest[0]);
+        const { values: resetVals, positionals: resetPos } = parseArgs({
+          args: rest,
+          options: {
+            full: { type: "boolean", default: false },
+          },
+          allowPositionals: true,
+        });
+        if (resetPos.length === 0) die("missing <dir> argument");
+        await cmdReset(resetPos[0], resetVals.full ?? false);
         break;
       }
 
@@ -447,6 +630,30 @@ async function main(): Promise<void> {
           allowPositionals: true,
         });
         cmdProfiles(values.json ?? false, values.mbti);
+        break;
+      }
+
+      case "diagnose": {
+        const { values: diagVals, positionals: diagPos } = parseArgs({
+          args: rest,
+          options: {
+            github: { type: "boolean", default: false },
+          },
+          allowPositionals: true,
+        });
+        if (diagPos.length === 0) die("missing <dir> argument");
+        await cmdDiagnose(diagPos[0], diagVals.github ?? false);
+        break;
+      }
+
+      case "mode": {
+        if (rest.length < 2) die("usage: psyche mode <dir> <natural|work|companion>");
+        await cmdMode(rest[0], rest[1]);
+        break;
+      }
+
+      case "intensity": {
+        cmdIntensity();
         break;
       }
 

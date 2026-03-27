@@ -24,7 +24,7 @@ function makeState(overrides: Partial<PsycheState> = {}): PsycheState {
     learning: { ...DEFAULT_LEARNING_STATE },
     metacognition: { ...DEFAULT_METACOGNITIVE_STATE },
     personhood: { ...DEFAULT_PERSONHOOD_STATE },
-    meta: { agentName: "TestBot", createdAt: new Date().toISOString(), totalInteractions: 0, locale: "zh" },
+    meta: { agentName: "TestBot", createdAt: new Date().toISOString(), totalInteractions: 0, locale: "zh", mode: "natural" as const },
     ...overrides,
   };
 }

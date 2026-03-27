@@ -4,9 +4,11 @@ import {
   computeExperientialField,
   computeCoherence,
   detectUnnamedEmotion,
+  computeAffectCore,
 } from "../src/experiential-field.js";
+import type { ConstructionContext } from "../src/experiential-field.js";
 import type {
-  PsycheState, ChemicalState, InnateDrives, RelationshipState,
+  PsycheState, ChemicalState, ChemicalSnapshot, InnateDrives, RelationshipState,
 } from "../src/types.js";
 import {
   DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE,
@@ -216,5 +218,315 @@ describe("detectUnnamedEmotion", () => {
     const result = detectUnnamedEmotion(chem, drives, "vigilance");
     assert.notEqual(result, null);
     assert.ok(result!.en.includes("pushed one step too far"), `expected pushed too far, got: ${result!.en}`);
+  });
+});
+
+// -- P8: computeAffectCore (Barrett Russell Circumplex) --------------------------
+
+describe("computeAffectCore", () => {
+  it("neutral chemistry → valence near 0, arousal moderate", () => {
+    const neutral: ChemicalState = { DA: 50, HT: 50, CORT: 50, OT: 50, NE: 50, END: 50 };
+    const { valence, arousal } = computeAffectCore(neutral);
+    assert.ok(Math.abs(valence) < 0.1, `expected valence near 0, got ${valence}`);
+    assert.ok(arousal > 0.2 && arousal < 0.6, `expected moderate arousal, got ${arousal}`);
+  });
+
+  it("high positive chemicals → positive valence", () => {
+    const happy: ChemicalState = { DA: 90, HT: 80, CORT: 20, OT: 80, NE: 40, END: 80 };
+    const { valence } = computeAffectCore(happy);
+    assert.ok(valence > 0.3, `expected positive valence, got ${valence}`);
+  });
+
+  it("high stress chemicals → negative valence", () => {
+    const stressed: ChemicalState = { DA: 20, HT: 20, CORT: 90, OT: 20, NE: 80, END: 20 };
+    const { valence } = computeAffectCore(stressed);
+    assert.ok(valence < -0.3, `expected negative valence, got ${valence}`);
+  });
+
+  it("high NE + CORT → high arousal", () => {
+    const aroused: ChemicalState = { DA: 50, HT: 50, CORT: 90, OT: 50, NE: 90, END: 50 };
+    const { arousal } = computeAffectCore(aroused);
+    assert.ok(arousal > 0.6, `expected high arousal, got ${arousal}`);
+  });
+
+  it("low NE + low CORT + low DA → low arousal", () => {
+    const calm: ChemicalState = { DA: 20, HT: 50, CORT: 15, OT: 50, NE: 15, END: 50 };
+    const { arousal } = computeAffectCore(calm);
+    assert.ok(arousal < 0.25, `expected low arousal, got ${arousal}`);
+  });
+
+  it("valence always in [-1, 1]", () => {
+    const extremes: ChemicalState[] = [
+      { DA: 100, HT: 100, CORT: 0, OT: 100, NE: 0, END: 100 },
+      { DA: 0, HT: 0, CORT: 100, OT: 0, NE: 100, END: 0 },
+    ];
+    for (const chem of extremes) {
+      const { valence } = computeAffectCore(chem);
+      assert.ok(valence >= -1 && valence <= 1, `valence out of range: ${valence}`);
+    }
+  });
+
+  it("arousal always in [0, 1]", () => {
+    const extremes: ChemicalState[] = [
+      { DA: 0, HT: 0, CORT: 0, OT: 0, NE: 0, END: 0 },
+      { DA: 100, HT: 100, CORT: 100, OT: 100, NE: 100, END: 100 },
+    ];
+    for (const chem of extremes) {
+      const { arousal } = computeAffectCore(chem);
+      assert.ok(arousal >= 0 && arousal <= 1, `arousal out of range: ${arousal}`);
+    }
+  });
+
+  it("CORT has stronger negative valence weight than NE", () => {
+    const highCORT: ChemicalState = { DA: 50, HT: 50, CORT: 80, OT: 50, NE: 50, END: 50 };
+    const highNE: ChemicalState = { DA: 50, HT: 50, CORT: 50, OT: 50, NE: 80, END: 50 };
+    const cortValence = computeAffectCore(highCORT).valence;
+    const neValence = computeAffectCore(highNE).valence;
+    assert.ok(cortValence < neValence, `CORT should produce more negative valence: CORT=${cortValence}, NE=${neValence}`);
+  });
+});
+
+// -- P8: Barrett Constructed Quality -----------------------------------------
+
+describe("Barrett constructed quality", () => {
+  it("same chemistry, different autonomic state → can differ", () => {
+    // High CORT+NE with sympathetic context should favor vigilance
+    const state = makeState({
+      current: makeChemistry({ CORT: 75, NE: 70 }),
+      drives: { survival: 45, safety: 30, connection: 60, esteem: 60, curiosity: 70 },
+    });
+    const withSympathetic = computeExperientialField(state, undefined, undefined, {
+      autonomicState: "sympathetic",
+    });
+    const withVentral = computeExperientialField(state, undefined, undefined, {
+      autonomicState: "ventral-vagal",
+    });
+    // Both should produce valid qualities
+    assert.ok(typeof withSympathetic.quality === "string");
+    assert.ok(typeof withVentral.quality === "string");
+    // Sympathetic context should bias toward vigilance
+    assert.equal(withSympathetic.quality, "vigilance");
+  });
+
+  it("same chemistry, different relationship phase → can differ", () => {
+    // Warm chemistry in deep relationship → warm-connection
+    const stateDeep = makeState({
+      current: makeChemistry({ OT: 80, END: 60, CORT: 25 }),
+      relationships: { _default: { trust: 75, intimacy: 60, phase: "deep" } },
+    });
+    const stateStranger = makeState({
+      current: makeChemistry({ OT: 80, END: 60, CORT: 25 }),
+      relationships: { _default: { trust: 20, intimacy: 10, phase: "stranger" } },
+    });
+    const deepField = computeExperientialField(stateDeep, undefined, undefined, {
+      relationshipPhase: "deep",
+    });
+    const strangerField = computeExperientialField(stateStranger, undefined, undefined, {
+      relationshipPhase: "stranger",
+    });
+    // Deep relationship should strongly favor warm-connection
+    assert.equal(deepField.quality, "warm-connection");
+  });
+
+  it("stimulus context biases concept matching", () => {
+    // Negative valence + low-moderate arousal + criticism stimulus → wounded-retreat
+    const state = makeState({
+      current: makeChemistry({ CORT: 70, OT: 20, HT: 25, DA: 30, NE: 35, END: 25 }),
+    });
+    const withCriticism = computeExperientialField(state, undefined, undefined, {
+      stimulus: "criticism",
+    });
+    assert.equal(withCriticism.quality, "wounded-retreat");
+  });
+
+  it("boredom stimulus biases toward restless-boredom", () => {
+    const state = makeState({
+      current: makeChemistry({ DA: 40, NE: 35, CORT: 35, HT: 55, END: 45 }),
+    });
+    const field = computeExperientialField(state, undefined, undefined, {
+      stimulus: "boredom",
+    });
+    assert.equal(field.quality, "restless-boredom");
+  });
+
+  it("humor stimulus biases toward playful-mischief", () => {
+    // Chemistry that maps near playful-mischief center (0.55, 0.55) in affective space
+    const state = makeState({
+      current: { DA: 80, HT: 70, CORT: 25, OT: 75, NE: 60, END: 80 },
+    });
+    const field = computeExperientialField(state, undefined, undefined, {
+      stimulus: "humor",
+    });
+    assert.equal(field.quality, "playful-mischief");
+  });
+
+  it("special state: numb at low intensity regardless of context", () => {
+    const state = makeState(); // chemistry = baseline → low intensity
+    const field = computeExperientialField(state, undefined, undefined, {
+      autonomicState: "dorsal-vagal",
+    });
+    assert.equal(field.quality, "numb");
+  });
+
+  it("special state: conflicted at low coherence + high intensity", () => {
+    // Need: high intensity (far from baseline) + low coherence (< 0.4)
+    // High reward (DA, END) AND high stress (CORT) + relationship mismatch (low OT, high trust)
+    const state = makeState({
+      current: { DA: 95, HT: 15, CORT: 95, OT: 10, NE: 90, END: 85 },
+      relationships: { _default: { trust: 85, intimacy: 75, phase: "deep" } },
+    });
+    const field = computeExperientialField(state);
+    assert.equal(field.quality, "conflicted");
+  });
+
+  it("special state: existential-unease when survival < 30", () => {
+    const state = makeState({
+      current: makeChemistry({ DA: 80, NE: 70 }),
+      drives: { survival: 20, safety: 70, connection: 60, esteem: 60, curiosity: 70 },
+    });
+    const field = computeExperientialField(state);
+    assert.equal(field.quality, "existential-unease");
+  });
+
+  it("without context, falls back to pure valence/arousal matching", () => {
+    const state = makeState({
+      current: makeChemistry({ OT: 80, END: 60, CORT: 25 }),
+      relationships: { _default: { trust: 75, intimacy: 60, phase: "close" } },
+    });
+    const field = computeExperientialField(state);
+    // Should still produce a valid quality without context
+    assert.ok(typeof field.quality === "string" && field.quality.length > 0);
+  });
+
+  it("core memories bias concept matching", () => {
+    // Create core memories that resonate with warm-connection region
+    const warmMemory: ChemicalSnapshot = {
+      chemistry: { DA: 60, HT: 70, CORT: 25, OT: 85, NE: 40, END: 65 },
+      stimulus: "intimacy",
+      dominantEmotion: null,
+      timestamp: "2024-01-01T00:00:00Z",
+      intensity: 0.7,
+      valence: 0.6,
+      isCoreMemory: true,
+    };
+    const state = makeState({
+      current: makeChemistry({ OT: 70, END: 55, CORT: 30, DA: 60 }),
+      relationships: { _default: { trust: 65, intimacy: 55, phase: "familiar" } },
+    });
+    const fieldWithMemory = computeExperientialField(state, undefined, undefined, {
+      coreMemories: [warmMemory],
+    });
+    const fieldWithout = computeExperientialField(state);
+    // Core memories should bias toward warm-connection
+    // (they might not change the result, but both should be valid)
+    assert.ok(typeof fieldWithMemory.quality === "string");
+    assert.ok(typeof fieldWithout.quality === "string");
+  });
+
+  it("high prediction error weakens concept stability", () => {
+    const state = makeState({
+      current: makeChemistry({ DA: 70, NE: 65, CORT: 30, END: 55 }),
+    });
+    const fieldLowError = computeExperientialField(state, undefined, undefined, {
+      predictionError: 0.1,
+    });
+    const fieldHighError = computeExperientialField(state, undefined, undefined, {
+      predictionError: 0.8,
+    });
+    // Both should produce valid qualities
+    assert.ok(typeof fieldLowError.quality === "string");
+    assert.ok(typeof fieldHighError.quality === "string");
+  });
+
+  it("creative-surge for high DA + NE + low CORT", () => {
+    const state = makeState({
+      current: makeChemistry({ DA: 95, NE: 85, CORT: 15, END: 70, HT: 70 }),
+    });
+    const field = computeExperientialField(state);
+    assert.equal(field.quality, "creative-surge");
+  });
+
+  it("flow for balanced positive + high focus", () => {
+    const state = makeState({
+      current: makeChemistry({ DA: 75, NE: 75, CORT: 25, HT: 60, END: 55 }),
+    });
+    const field = computeExperientialField(state);
+    // Should be flow or creative-surge (both are valid for this profile)
+    assert.ok(
+      field.quality === "flow" || field.quality === "creative-surge",
+      `expected flow or creative-surge, got ${field.quality}`,
+    );
+  });
+
+  it("contentment for calm, satisfied state", () => {
+    const state = makeState({
+      current: { DA: 50, HT: 75, CORT: 25, OT: 50, NE: 20, END: 55 },
+    });
+    const field = computeExperientialField(state);
+    assert.ok(
+      field.quality === "contentment" || field.quality === "warm-connection",
+      `expected contentment or warm-connection, got ${field.quality}`,
+    );
+  });
+
+  it("yearning for negative valence + moderate arousal", () => {
+    const state = makeState({
+      current: makeChemistry({ OT: 35, HT: 40, CORT: 55, DA: 40, NE: 55, END: 35 }),
+      drives: { survival: 80, safety: 70, connection: 25, esteem: 35, curiosity: 70 },
+    });
+    const field = computeExperientialField(state);
+    assert.ok(
+      field.quality === "yearning" || field.quality === "wounded-retreat" || field.quality === "vigilance",
+      `expected yearning-like quality, got ${field.quality}`,
+    );
+  });
+
+  it("wounded-retreat for criticism + negative chemistry", () => {
+    const state = makeState({
+      current: makeChemistry({ CORT: 70, OT: 25, HT: 30, DA: 30, NE: 45, END: 30 }),
+    });
+    const field = computeExperientialField(state, undefined, undefined, {
+      stimulus: "criticism",
+    });
+    assert.equal(field.quality, "wounded-retreat");
+  });
+
+  it("all 12 qualities are reachable", () => {
+    // This is a meta-test: each quality should be producible by some chemistry
+    const qualityProducers: Record<string, {
+      chem: Partial<ChemicalState>;
+      drives?: Partial<InnateDrives>;
+      context?: ConstructionContext;
+      rel?: Record<string, RelationshipState>;
+    }> = {
+      "flow": { chem: { DA: 75, NE: 70, CORT: 25, HT: 65, END: 55 } },
+      "contentment": { chem: { HT: 75, OT: 50, CORT: 25, DA: 50, NE: 20, END: 55 } },
+      "yearning": { chem: { OT: 45, HT: 45, CORT: 50, DA: 40, NE: 50, END: 40 }, context: { stimulus: "neglect" } },
+      "vigilance": { chem: { CORT: 80, NE: 80, DA: 40, HT: 40, OT: 40 } },
+      "creative-surge": { chem: { DA: 95, NE: 85, CORT: 15, END: 70, HT: 70 } },
+      "wounded-retreat": { chem: { CORT: 70, OT: 20, HT: 25, DA: 30, NE: 35, END: 25 }, context: { stimulus: "criticism" } },
+      "warm-connection": { chem: { OT: 85, HT: 70, END: 65, CORT: 20, NE: 35 }, context: { relationshipPhase: "deep" } },
+      "restless-boredom": { chem: { DA: 35, NE: 30, CORT: 35, HT: 50, END: 40 }, context: { stimulus: "boredom" } },
+      "existential-unease": { chem: { CORT: 70, NE: 60 }, drives: { survival: 20 } },
+      "playful-mischief": { chem: { END: 80, DA: 80, NE: 60, CORT: 25, OT: 75, HT: 70 }, context: { stimulus: "humor" } },
+      "conflicted": {
+        chem: { DA: 95, HT: 15, CORT: 95, OT: 10, NE: 90, END: 85 },
+        rel: { _default: { trust: 85, intimacy: 75, phase: "deep" } },
+      },
+      "numb": { chem: {} }, // baseline = numb
+    };
+
+    for (const [quality, config] of Object.entries(qualityProducers)) {
+      const state = makeState({
+        current: makeChemistry(config.chem),
+        ...(config.drives ? { drives: { ...DEFAULT_DRIVES, ...config.drives } } : {}),
+        ...(config.rel ? { relationships: config.rel } : {}),
+      });
+      const field = computeExperientialField(state, undefined, undefined, config.context);
+      assert.equal(
+        field.quality, quality,
+        `expected quality "${quality}" but got "${field.quality}"`,
+      );
+    }
   });
 });

@@ -154,13 +154,23 @@ export function applyDecay(
   current: ChemicalState,
   baseline: ChemicalState,
   minutesElapsed: number,
+  decayRateModifiers?: Partial<Record<keyof ChemicalState, number>>,
 ): ChemicalState {
   if (minutesElapsed <= 0) return { ...current };
 
   const result = { ...current };
   for (const key of CHEMICAL_KEYS) {
     const speed = CHEMICAL_DECAY_SPEED[key];
-    const factor = Math.pow(DECAY_FACTORS[speed], minutesElapsed / 60);
+    const baseFactor = Math.pow(DECAY_FACTORS[speed], minutesElapsed / 60);
+    // v9: decayRateModifiers alter decay speed per chemical
+    // > 1 = slower recovery (trauma: factor closer to 1)
+    // < 1 = faster recovery (resilience: factor closer to 0)
+    let factor = baseFactor;
+    if (decayRateModifiers?.[key] !== undefined) {
+      const mod = decayRateModifiers[key]!;
+      // Raise the factor to the modifier power: mod>1 → slower decay, mod<1 → faster
+      factor = Math.pow(baseFactor, 1 / mod);
+    }
     result[key] = clamp(
       baseline[key] + (current[key] - baseline[key]) * factor,
     );
@@ -179,6 +189,7 @@ export function applyStimulus(
   sensitivity: number,
   maxDelta: number,
   logger?: { warn: (msg: string) => void },
+  recentSameCount?: number,
 ): ChemicalState {
   const vector = STIMULUS_VECTORS[stimulus];
   if (!vector) {
@@ -186,11 +197,32 @@ export function applyStimulus(
     return { ...current };
   }
 
+  // v9: Habituation — Weber-Fechner diminishing returns
+  // First 2 exposures: 100%. 3rd: 77%, 5th: 53%, 10th: 29%
+  let effectiveSensitivity = sensitivity;
+  if (recentSameCount !== undefined && recentSameCount > 2) {
+    effectiveSensitivity *= 1 / (1 + 0.3 * (recentSameCount - 2));
+  }
+
   const result = { ...current };
   for (const key of CHEMICAL_KEYS) {
-    const raw = vector[key] * sensitivity;
+    const raw = vector[key] * effectiveSensitivity;
     const clamped = Math.max(-maxDelta, Math.min(maxDelta, raw));
-    result[key] = clamp(current[key] + clamped);
+    // Boundary softening: logarithmic compression near 0 and 100.
+    // The closer to the boundary, the harder to push further —
+    // preserves discriminability and prevents "dead zone" saturation.
+    const cur = current[key];
+    let effective = clamped;
+    if (clamped > 0 && cur > 75) {
+      // Pushing toward 100: compress by how close we are to ceiling
+      const headroom = (100 - cur) / 25; // 1.0 at 75, 0.0 at 100
+      effective = clamped * headroom;
+    } else if (clamped < 0 && cur < 25) {
+      // Pushing toward 0: compress by how close we are to floor
+      const headroom = cur / 25; // 1.0 at 25, 0.0 at 0
+      effective = clamped * headroom;
+    }
+    result[key] = clamp(cur + effective);
   }
   return result;
 }

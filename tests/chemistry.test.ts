@@ -310,3 +310,86 @@ describe("STIMULUS_VECTORS", () => {
   });
 
 });
+
+// ── Habituation (v9) ────────────────────────────────────────
+
+describe("habituation (Weber-Fechner)", () => {
+  it("first 2 exposures have full effect (recentSameCount <= 2)", () => {
+    const base = makeState();
+    const first = applyStimulus(base, "praise", 1.0, 25, undefined, 1);
+    const second = applyStimulus(base, "praise", 1.0, 25, undefined, 2);
+    // Both should be identical (no habituation)
+    assert.equal(first.DA, second.DA, "1st and 2nd exposure should be equal");
+  });
+
+  it("3rd exposure is reduced (~77%)", () => {
+    const base = makeState();
+    const first = applyStimulus(base, "praise", 1.0, 25, undefined, 1);
+    const third = applyStimulus(base, "praise", 1.0, 25, undefined, 3);
+    const firstDelta = first.DA - base.DA;
+    const thirdDelta = third.DA - base.DA;
+    const ratio = thirdDelta / firstDelta;
+    assert.ok(ratio > 0.7 && ratio < 0.85,
+      `3rd exposure ratio should be ~0.77, got ${ratio.toFixed(3)}`);
+  });
+
+  it("5th exposure is about half (~53%)", () => {
+    const base = makeState();
+    const first = applyStimulus(base, "praise", 1.0, 25, undefined, 1);
+    const fifth = applyStimulus(base, "praise", 1.0, 25, undefined, 5);
+    const ratio = (fifth.DA - base.DA) / (first.DA - base.DA);
+    assert.ok(ratio > 0.45 && ratio < 0.6,
+      `5th exposure ratio should be ~0.53, got ${ratio.toFixed(3)}`);
+  });
+
+  it("10th exposure is about 29%", () => {
+    const base = makeState();
+    const first = applyStimulus(base, "praise", 1.0, 25, undefined, 1);
+    const tenth = applyStimulus(base, "praise", 1.0, 25, undefined, 10);
+    const ratio = (tenth.DA - base.DA) / (first.DA - base.DA);
+    assert.ok(ratio > 0.2 && ratio < 0.4,
+      `10th exposure ratio should be ~0.29, got ${ratio.toFixed(3)}`);
+  });
+
+  it("undefined recentSameCount has full effect (backward compat)", () => {
+    const base = makeState();
+    const noCount = applyStimulus(base, "praise", 1.0, 25);
+    const firstCount = applyStimulus(base, "praise", 1.0, 25, undefined, 1);
+    assert.equal(noCount.DA, firstCount.DA, "undefined count should equal count=1");
+  });
+
+  it("works for negative stimulus (criticism)", () => {
+    const base = makeState();
+    const first = applyStimulus(base, "criticism", 1.0, 25, undefined, 1);
+    const fifth = applyStimulus(base, "criticism", 1.0, 25, undefined, 5);
+    const firstDelta = Math.abs(first.CORT - base.CORT);
+    const fifthDelta = Math.abs(fifth.CORT - base.CORT);
+    assert.ok(fifthDelta < firstDelta,
+      "5th criticism should have smaller CORT effect");
+  });
+
+  it("habituation only reduces magnitude, doesn't reverse direction", () => {
+    const base = makeState();
+    const result = applyStimulus(base, "praise", 1.0, 25, undefined, 20);
+    assert.ok(result.DA >= base.DA, "DA should still increase even at high count");
+  });
+
+  it("all values remain in [0, 100] with high habituation", () => {
+    const base = makeState();
+    const result = applyStimulus(base, "conflict", 1.5, 30, undefined, 50);
+    assertInRange(result);
+  });
+
+  it("habituation with count=0 behaves same as count=undefined", () => {
+    const base = makeState();
+    const r1 = applyStimulus(base, "praise", 1.0, 25, undefined, 0);
+    const r2 = applyStimulus(base, "praise", 1.0, 25, undefined, undefined);
+    assert.equal(r1.DA, r2.DA);
+  });
+
+  it("habituation with count=100 still produces some effect", () => {
+    const base = makeState();
+    const result = applyStimulus(base, "praise", 1.0, 25, undefined, 100);
+    assert.ok(result.DA > base.DA, "Should still have some effect even at count=100");
+  });
+});

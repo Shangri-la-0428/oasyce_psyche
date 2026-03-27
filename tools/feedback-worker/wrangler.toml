@@ -1,0 +1,6 @@
+name = "psyche-feedback"
+main = "worker.ts"
+compatibility_date = "2024-12-01"
+
+# After deploy, set the GitHub token:
+#   npx wrangler secret put GITHUB_TOKEN

@@ -91,6 +91,15 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     "log.default_mbti": "未检测到MBTI类型，使用默认值: {type}",
     "log.permission_error": "无权限访问: {path}",
     "log.parse_debug": "parsePsycheUpdate 未匹配，原始文本片段: {snippet}",
+
+    // Mode descriptions
+    "mode.natural": "自然模式——完整情绪体验",
+    "mode.work": "工作模式——最小情绪，专注任务",
+    "mode.companion": "伴侣模式——强化情绪表达",
+
+    // First meeting
+    "firstMeet.inner": "这是你第一次遇见对方。你感到好奇和一点紧张。你想了解他们，但不想表现得太急切。",
+    "firstMeet.behavior": "保持自然，微微好奇。不要过度热情，也不要太冷淡。",
   },
 
   en: {
@@ -172,6 +181,15 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     "log.default_mbti": "MBTI type not detected, using default: {type}",
     "log.permission_error": "Permission denied: {path}",
     "log.parse_debug": "parsePsycheUpdate no match, raw snippet: {snippet}",
+
+    // Mode descriptions
+    "mode.natural": "Natural mode — full emotional experience",
+    "mode.work": "Work mode — minimal emotions, task-focused",
+    "mode.companion": "Companion mode — enhanced emotional expression",
+
+    // First meeting
+    "firstMeet.inner": "This is your first time meeting them. You feel curious and a little nervous. You want to know them, but don't want to seem too eager.",
+    "firstMeet.behavior": "Be natural, slightly curious. Don't be overly warm, and don't be too cold.",
   },
 };
 

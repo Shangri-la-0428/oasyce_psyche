@@ -4,9 +4,10 @@ import {
   decayDrives, feedDrives, detectExistentialThreat,
   computeEffectiveBaseline, computeEffectiveSensitivity,
   computeMaslowWeights, buildDriveContext, hasCriticalDrive,
+  updateTraitDrift,
 } from "../src/drives.js";
-import { DEFAULT_DRIVES } from "../src/types.js";
-import type { InnateDrives, ChemicalState } from "../src/types.js";
+import { DEFAULT_DRIVES, DEFAULT_TRAIT_DRIFT } from "../src/types.js";
+import type { InnateDrives, ChemicalState, TraitDriftState, ChemicalSnapshot, LearningState } from "../src/types.js";
 
 const ENFP_BASELINE: ChemicalState = { DA: 75, HT: 55, CORT: 30, OT: 60, NE: 65, END: 70 };
 
@@ -399,5 +400,351 @@ describe("drive-chemistry integration", () => {
     const drives: InnateDrives = { survival: 50, safety: 50, connection: 50, esteem: 50, curiosity: 50 };
     const effective = computeEffectiveBaseline(ENFP_BASELINE, drives);
     assert.deepStrictEqual(effective, ENFP_BASELINE);
+  });
+});
+
+// ── Trait Drift (v9: Path B) ─────────────────────────────────
+
+const NEUTRAL_CHEM: ChemicalState = { DA: 50, HT: 50, CORT: 50, OT: 50, NE: 50, END: 50 };
+
+function makeSnapshot(overrides: Partial<ChemicalSnapshot> = {}): ChemicalSnapshot {
+  return {
+    chemistry: { ...NEUTRAL_CHEM },
+    stimulus: null,
+    dominantEmotion: null,
+    timestamp: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makeLearning(outcomes: { adaptiveScore: number }[] = []): LearningState {
+  return {
+    learnedVectors: [],
+    predictionHistory: [],
+    outcomeHistory: outcomes.map((o, i) => ({
+      turnIndex: i,
+      stimulus: null,
+      adaptiveScore: o.adaptiveScore,
+      signals: { driveDelta: 0, relationshipDelta: 0, userWarmthDelta: 0, conversationContinued: true },
+      timestamp: new Date().toISOString(),
+    })),
+    totalOutcomesProcessed: outcomes.length,
+  };
+}
+
+function makeDrift(overrides: Partial<TraitDriftState> = {}): TraitDriftState {
+  return {
+    ...DEFAULT_TRAIT_DRIFT,
+    accumulators: { ...DEFAULT_TRAIT_DRIFT.accumulators },
+    baselineDelta: { ...DEFAULT_TRAIT_DRIFT.baselineDelta },
+    decayRateModifiers: { ...DEFAULT_TRAIT_DRIFT.decayRateModifiers },
+    sensitivityModifiers: { ...DEFAULT_TRAIT_DRIFT.sensitivityModifiers },
+    ...overrides,
+  };
+}
+
+describe("updateTraitDrift", () => {
+  it("returns unchanged drift for < 2 history entries", () => {
+    const drift = makeDrift();
+    const result = updateTraitDrift(drift, [makeSnapshot()], makeLearning());
+    assert.deepStrictEqual(result, drift);
+  });
+
+  it("increments sessionCount", () => {
+    const history = Array.from({ length: 5 }, () => makeSnapshot({ stimulus: "casual" }));
+    const result = updateTraitDrift(makeDrift(), history, makeLearning());
+    assert.equal(result.sessionCount, 1);
+  });
+
+  it("praise-heavy session increases praiseExposure accumulator", () => {
+    const history = Array.from({ length: 10 }, () =>
+      makeSnapshot({ stimulus: "praise" }),
+    );
+    const result = updateTraitDrift(makeDrift(), history, makeLearning());
+    assert.ok(result.accumulators.praiseExposure > 0,
+      `praiseExposure should be positive, got ${result.accumulators.praiseExposure}`);
+  });
+
+  it("criticism-heavy session decreases praiseExposure", () => {
+    const history = Array.from({ length: 10 }, () =>
+      makeSnapshot({ stimulus: "criticism" }),
+    );
+    const result = updateTraitDrift(makeDrift(), history, makeLearning());
+    assert.ok(result.accumulators.praiseExposure < 0,
+      `praiseExposure should be negative, got ${result.accumulators.praiseExposure}`);
+  });
+
+  it("high-CORT session increases pressureExposure", () => {
+    const history = Array.from({ length: 5 }, () =>
+      makeSnapshot({ chemistry: { ...NEUTRAL_CHEM, CORT: 80 } }),
+    );
+    const result = updateTraitDrift(makeDrift(), history, makeLearning());
+    assert.ok(result.accumulators.pressureExposure > 0,
+      `pressureExposure should increase from high CORT, got ${result.accumulators.pressureExposure}`);
+  });
+
+  it("neglect-heavy session increases neglectExposure", () => {
+    const history = Array.from({ length: 10 }, () =>
+      makeSnapshot({ stimulus: "neglect" }),
+    );
+    const result = updateTraitDrift(makeDrift(), history, makeLearning());
+    assert.ok(result.accumulators.neglectExposure > 0);
+  });
+
+  it("intimacy-heavy session increases connectionExposure", () => {
+    const history = Array.from({ length: 10 }, () =>
+      makeSnapshot({ stimulus: "intimacy" }),
+    );
+    const result = updateTraitDrift(makeDrift(), history, makeLearning());
+    assert.ok(result.accumulators.connectionExposure > 0);
+  });
+
+  it("conflict-heavy session increases conflictExposure", () => {
+    const history = Array.from({ length: 10 }, () =>
+      makeSnapshot({ stimulus: "conflict" }),
+    );
+    const result = updateTraitDrift(makeDrift(), history, makeLearning());
+    assert.ok(result.accumulators.conflictExposure > 0);
+  });
+
+  // ── Dimension 1: Baseline drift ──
+
+  it("positive praiseExposure drifts OT and DA baseline up", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: 60, pressureExposure: 0, neglectExposure: 0, connectionExposure: 0, conflictExposure: 0 },
+    });
+    const history = Array.from({ length: 5 }, () => makeSnapshot({ stimulus: "praise" }));
+    const result = updateTraitDrift(drift, history, makeLearning());
+    assert.ok((result.baselineDelta.OT ?? 0) > 0, "OT baseline should drift up");
+    assert.ok((result.baselineDelta.DA ?? 0) > 0, "DA baseline should drift up");
+  });
+
+  it("negative praiseExposure drifts HT down and CORT up", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: -60, pressureExposure: 0, neglectExposure: 0, connectionExposure: 0, conflictExposure: 0 },
+    });
+    const history = Array.from({ length: 5 }, () => makeSnapshot({ stimulus: "criticism" }));
+    const result = updateTraitDrift(drift, history, makeLearning());
+    assert.ok((result.baselineDelta.HT ?? 0) < 0, "HT baseline should drift down");
+    assert.ok((result.baselineDelta.CORT ?? 0) > 0, "CORT baseline should drift up");
+  });
+
+  it("high pressureExposure drifts CORT up and HT down", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: 0, pressureExposure: 60, neglectExposure: 0, connectionExposure: 0, conflictExposure: 0 },
+    });
+    const history = Array.from({ length: 5 }, () =>
+      makeSnapshot({ chemistry: { ...NEUTRAL_CHEM, CORT: 80 } }),
+    );
+    const result = updateTraitDrift(drift, history, makeLearning());
+    assert.ok((result.baselineDelta.CORT ?? 0) > 0, "CORT should drift up from pressure");
+    assert.ok((result.baselineDelta.HT ?? 0) < 0, "HT should drift down from pressure");
+  });
+
+  it("baseline drift is clamped to ±15", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: 0, pressureExposure: 100, neglectExposure: 100, connectionExposure: 0, conflictExposure: 100 },
+    });
+    const history = Array.from({ length: 5 }, () =>
+      makeSnapshot({ chemistry: { ...NEUTRAL_CHEM, CORT: 90 } }),
+    );
+    const result = updateTraitDrift(drift, history, makeLearning());
+    for (const key of ["DA", "HT", "CORT", "OT", "NE", "END"] as const) {
+      const val = result.baselineDelta[key] ?? 0;
+      assert.ok(val >= -15 && val <= 15, `${key} delta ${val} should be in [-15, 15]`);
+    }
+  });
+
+  // ── Dimension 2: Decay rate modifiers ──
+
+  it("high pressure + negative outcomes → trauma (CORT decay slower)", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: 0, pressureExposure: 50, neglectExposure: 0, connectionExposure: 0, conflictExposure: 0 },
+    });
+    const learning = makeLearning(
+      Array.from({ length: 10 }, () => ({ adaptiveScore: -0.3 })),
+    );
+    const history = Array.from({ length: 5 }, () =>
+      makeSnapshot({ chemistry: { ...NEUTRAL_CHEM, CORT: 80 } }),
+    );
+    const result = updateTraitDrift(drift, history, learning);
+    assert.ok((result.decayRateModifiers.CORT ?? 1) > 1,
+      `Trauma: CORT decay modifier should be > 1, got ${result.decayRateModifiers.CORT}`);
+  });
+
+  it("high pressure + positive outcomes → resilience (CORT decay faster)", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: 0, pressureExposure: 50, neglectExposure: 0, connectionExposure: 0, conflictExposure: 0 },
+    });
+    const learning = makeLearning(
+      Array.from({ length: 10 }, () => ({ adaptiveScore: 0.5 })),
+    );
+    const history = Array.from({ length: 5 }, () =>
+      makeSnapshot({ chemistry: { ...NEUTRAL_CHEM, CORT: 80 } }),
+    );
+    const result = updateTraitDrift(drift, history, learning);
+    assert.ok((result.decayRateModifiers.CORT ?? 1) < 1,
+      `Resilience: CORT decay modifier should be < 1, got ${result.decayRateModifiers.CORT}`);
+  });
+
+  it("high neglect → OT decay slower (clingy)", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: 0, pressureExposure: 0, neglectExposure: 50, connectionExposure: 0, conflictExposure: 0 },
+    });
+    const history = Array.from({ length: 5 }, () => makeSnapshot({ stimulus: "neglect" }));
+    const result = updateTraitDrift(drift, history, makeLearning());
+    assert.ok((result.decayRateModifiers.OT ?? 1) > 1,
+      `Neglect: OT decay should be slower, got ${result.decayRateModifiers.OT}`);
+  });
+
+  it("high connection → OT decay faster (secure)", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: 0, pressureExposure: 0, neglectExposure: 0, connectionExposure: 50, conflictExposure: 0 },
+    });
+    const history = Array.from({ length: 5 }, () => makeSnapshot({ stimulus: "intimacy" }));
+    const result = updateTraitDrift(drift, history, makeLearning());
+    assert.ok((result.decayRateModifiers.OT ?? 1) < 1,
+      `Secure: OT decay should be faster, got ${result.decayRateModifiers.OT}`);
+  });
+
+  it("decay modifiers clamped to [0.5, 2.0]", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: 0, pressureExposure: 100, neglectExposure: 100, connectionExposure: 0, conflictExposure: 0 },
+    });
+    const history = Array.from({ length: 5 }, () =>
+      makeSnapshot({ chemistry: { ...NEUTRAL_CHEM, CORT: 95 } }),
+    );
+    const result = updateTraitDrift(drift, history, makeLearning());
+    for (const key of ["DA", "HT", "CORT", "OT", "NE", "END"] as const) {
+      const val = result.decayRateModifiers[key];
+      if (val !== undefined) {
+        assert.ok(val >= 0.5 && val <= 2.0, `${key} decay mod ${val} should be in [0.5, 2.0]`);
+      }
+    }
+  });
+
+  // ── Dimension 3: Sensitivity modifiers ──
+
+  it("high conflictExposure → desensitized to conflict", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: 0, pressureExposure: 0, neglectExposure: 0, connectionExposure: 0, conflictExposure: 60 },
+    });
+    const history = Array.from({ length: 5 }, () => makeSnapshot({ stimulus: "conflict" }));
+    const result = updateTraitDrift(drift, history, makeLearning());
+    assert.ok((result.sensitivityModifiers.conflict ?? 1) < 1,
+      `Should be desensitized to conflict, got ${result.sensitivityModifiers.conflict}`);
+  });
+
+  it("high neglectExposure → sensitized to intimacy", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: 0, pressureExposure: 0, neglectExposure: 60, connectionExposure: 0, conflictExposure: 0 },
+    });
+    const history = Array.from({ length: 5 }, () => makeSnapshot({ stimulus: "neglect" }));
+    const result = updateTraitDrift(drift, history, makeLearning());
+    assert.ok((result.sensitivityModifiers.intimacy ?? 1) > 1,
+      `Should be sensitized to intimacy, got ${result.sensitivityModifiers.intimacy}`);
+  });
+
+  it("negative praiseExposure → sensitized to criticism", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: -60, pressureExposure: 0, neglectExposure: 0, connectionExposure: 0, conflictExposure: 0 },
+    });
+    const history = Array.from({ length: 5 }, () => makeSnapshot({ stimulus: "criticism" }));
+    const result = updateTraitDrift(drift, history, makeLearning());
+    assert.ok((result.sensitivityModifiers.criticism ?? 1) > 1,
+      `Should be sensitized to criticism, got ${result.sensitivityModifiers.criticism}`);
+  });
+
+  it("high connectionExposure → sensitized to vulnerability", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: 0, pressureExposure: 0, neglectExposure: 0, connectionExposure: 60, conflictExposure: 0 },
+    });
+    const history = Array.from({ length: 5 }, () => makeSnapshot({ stimulus: "intimacy" }));
+    const result = updateTraitDrift(drift, history, makeLearning());
+    assert.ok((result.sensitivityModifiers.vulnerability ?? 1) > 1,
+      `Should be sensitized to vulnerability, got ${result.sensitivityModifiers.vulnerability}`);
+  });
+
+  it("sensitivity modifiers clamped to [0.5, 2.0]", () => {
+    const drift = makeDrift({
+      accumulators: { praiseExposure: -100, pressureExposure: 0, neglectExposure: 100, connectionExposure: 100, conflictExposure: 100 },
+    });
+    const history = Array.from({ length: 5 }, () => makeSnapshot({ stimulus: "conflict" }));
+    const result = updateTraitDrift(drift, history, makeLearning());
+    for (const key of Object.keys(result.sensitivityModifiers) as (keyof typeof result.sensitivityModifiers)[]) {
+      const val = result.sensitivityModifiers[key];
+      if (val !== undefined) {
+        assert.ok(val >= 0.5 && val <= 2.0, `${key} sensitivity mod ${val} should be in [0.5, 2.0]`);
+      }
+    }
+  });
+});
+
+// ── computeEffectiveBaseline with traitDrift ────────────────
+
+describe("computeEffectiveBaseline with traitDrift", () => {
+  it("applies baseline delta from trait drift", () => {
+    const drift = makeDrift();
+    drift.baselineDelta = { CORT: 10, OT: -5 };
+    const drives = makeDrives();
+    const effective = computeEffectiveBaseline(ENFP_BASELINE, drives, drift);
+    assert.ok(effective.CORT > ENFP_BASELINE.CORT, "CORT should be raised by drift");
+    assert.ok(effective.OT < ENFP_BASELINE.OT, "OT should be lowered by drift");
+  });
+
+  it("drift delta stacks with drive deficits", () => {
+    const drift = makeDrift();
+    drift.baselineDelta = { CORT: 10 };
+    const drives = makeDrives({ survival: 20 }); // survival deficit also raises CORT
+    const withDrift = computeEffectiveBaseline(ENFP_BASELINE, drives, drift);
+    const withoutDrift = computeEffectiveBaseline(ENFP_BASELINE, drives);
+    assert.ok(withDrift.CORT > withoutDrift.CORT,
+      "drift should add to drive-based CORT increase");
+  });
+});
+
+// ── computeEffectiveSensitivity with traitDrift ─────────────
+
+describe("computeEffectiveSensitivity with traitDrift", () => {
+  it("applies sensitivity modifier from trait drift", () => {
+    const drift = makeDrift();
+    drift.sensitivityModifiers = { criticism: 1.5 };
+    const drives = makeDrives();
+    const withDrift = computeEffectiveSensitivity(1.0, drives, "criticism", drift);
+    const withoutDrift = computeEffectiveSensitivity(1.0, drives, "criticism");
+    assert.ok(withDrift > withoutDrift,
+      `sensitized criticism should be higher: ${withDrift} vs ${withoutDrift}`);
+  });
+
+  it("desensitization reduces effective sensitivity", () => {
+    const drift = makeDrift();
+    drift.sensitivityModifiers = { conflict: 0.6 };
+    const drives = makeDrives();
+    const result = computeEffectiveSensitivity(1.0, drives, "conflict", drift);
+    assert.ok(result < 1.0, `desensitized conflict should be < 1.0, got ${result}`);
+  });
+
+  it("no modifier for untracked stimulus type", () => {
+    const drift = makeDrift();
+    drift.sensitivityModifiers = { conflict: 0.6 };
+    const drives = makeDrives();
+    const result = computeEffectiveSensitivity(1.0, drives, "praise", drift);
+    assert.equal(result, 1.0, "praise should be unaffected");
+  });
+});
+
+// ── Trait drift accumulator boundaries ───────────────────────
+
+describe("trait drift accumulator boundaries", () => {
+  it("accumulators are clamped to -100..100 range", () => {
+    const drift = makeDrift();
+    drift.accumulators.praiseExposure = 99;
+    const history = Array.from({ length: 20 }, () => makeSnapshot({
+      stimulus: "praise" as const,
+    }));
+    const learning = { learnedVectors: [], predictionHistory: [], outcomeHistory: [], totalOutcomesProcessed: 0 };
+    const result = updateTraitDrift(drift, history, learning);
+    assert.ok(result.accumulators.praiseExposure <= 100,
+      `praiseExposure should not exceed 100, got ${result.accumulators.praiseExposure}`);
   });
 });

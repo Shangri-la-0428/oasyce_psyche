@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildDynamicContext, buildProtocolContext, buildCompactContext, computeUserInvestment } from "../src/prompt.js";
+import { buildDynamicContext, buildProtocolContext, buildCompactContext, buildInnerWorld, computeUserInvestment, getNearBaselineThreshold } from "../src/prompt.js";
 import type { PsycheState, ChemicalSnapshot } from "../src/types.js";
 import { DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE } from "../src/types.js";
 
@@ -21,7 +21,7 @@ function makeState(overrides: Partial<PsycheState> = {}): PsycheState {
     learning: { ...DEFAULT_LEARNING_STATE },
     metacognition: { ...DEFAULT_METACOGNITIVE_STATE },
     personhood: { ...DEFAULT_PERSONHOOD_STATE },
-    meta: { agentName: "TestBot", createdAt: new Date().toISOString(), totalInteractions: 5, locale: "zh" },
+    meta: { agentName: "TestBot", createdAt: new Date().toISOString(), totalInteractions: 5, locale: "zh", mode: "natural" as const },
     ...overrides,
   };
 }
@@ -324,6 +324,82 @@ describe("computeUserInvestment", () => {
 
 // ── buildCompactContext ──────────────────────────────────────
 
+describe("buildInnerWorld", () => {
+  it("always starts with inner title", () => {
+    const ctx = buildInnerWorld(makeState(), "zh");
+    assert.ok(ctx.includes("内 — 你自己"));
+  });
+
+  it("shows emotions when chemistry has patterns", () => {
+    // ENFP baseline triggers excited joy + playful mischief
+    const ctx = buildInnerWorld(makeState(), "zh");
+    assert.ok(ctx.includes("感受"));
+  });
+
+  it("shows calm for truly neutral chemistry", () => {
+    const state = makeState({
+      mbti: "ISTJ",
+      baseline: { DA: 40, HT: 75, CORT: 35, OT: 35, NE: 40, END: 35 },
+      current: { DA: 40, HT: 75, CORT: 35, OT: 35, NE: 40, END: 35 },
+    });
+    const ctx = buildInnerWorld(state, "zh");
+    assert.ok(ctx.includes("平静"));
+  });
+
+  it("includes causal explanation from last stimulus", () => {
+    const state = makeState({
+      emotionalHistory: [
+        { chemistry: { DA: 50, HT: 50, CORT: 60, OT: 50, NE: 50, END: 50 },
+          stimulus: "criticism", dominantEmotion: "焦虑不安", timestamp: new Date().toISOString() },
+      ],
+    });
+    const ctx = buildInnerWorld(state, "zh");
+    assert.ok(ctx.includes("因为") || ctx.includes("被批评"), "Should explain why");
+  });
+
+  it("includes trajectory when emotions shift", () => {
+    const now = new Date();
+    const state = makeState({
+      emotionalHistory: [
+        { chemistry: { DA: 50, HT: 50, CORT: 60, OT: 50, NE: 60, END: 50 },
+          stimulus: "conflict", dominantEmotion: "焦虑不安",
+          timestamp: new Date(now.getTime() - 3000).toISOString() },
+        { chemistry: { DA: 50, HT: 50, CORT: 55, OT: 50, NE: 55, END: 50 },
+          stimulus: "casual", dominantEmotion: "焦虑不安",
+          timestamp: new Date(now.getTime() - 2000).toISOString() },
+        { chemistry: { DA: 70, HT: 60, CORT: 30, OT: 65, NE: 60, END: 60 },
+          stimulus: "validation", dominantEmotion: "深度满足",
+          timestamp: now.toISOString() },
+      ],
+    });
+    const ctx = buildInnerWorld(state, "zh");
+    assert.ok(ctx.includes("变化") || ctx.includes("→"), "Should show trajectory");
+  });
+
+  it("includes drive needs when drives are low", () => {
+    const state = makeState({
+      drives: { survival: 80, safety: 70, connection: 20, esteem: 60, curiosity: 70 },
+    });
+    const ctx = buildInnerWorld(state, "zh");
+    assert.ok(ctx.includes("需要") || ctx.includes("孤独"), "Should surface connection need");
+  });
+
+  it("includes values", () => {
+    const ctx = buildInnerWorld(makeState(), "zh");
+    assert.ok(ctx.includes("在乎"));
+    assert.ok(ctx.includes("真实"));
+  });
+
+  it("works in English", () => {
+    const state = makeState({ meta: { agentName: "Luna", createdAt: new Date().toISOString(), totalInteractions: 0, locale: "en", mode: "natural" as const } });
+    const ctx = buildInnerWorld(state, "en");
+    assert.ok(ctx.includes("Inner — yourself"));
+    assert.ok(ctx.includes("You care about"));
+  });
+});
+
+// ── buildCompactContext ──────────────────────────────────────
+
 describe("buildCompactContext", () => {
   it("includes emotional sensing when user text provided", () => {
     const ctx = buildCompactContext(makeState(), undefined, { userText: "你好" });
@@ -351,5 +427,184 @@ describe("buildCompactContext", () => {
     const ctx = buildCompactContext(state, undefined, { userText: "hi" });
     assert.ok(ctx.includes("4"));
     assert.ok(ctx.includes("同意"));
+  });
+});
+
+// ── buildInnerWorld self-reflection integration ──────────────
+
+describe("buildInnerWorld self-reflection", () => {
+  it("includes self-reflection section with 5+ history entries and recurring triggers", () => {
+    const now = new Date();
+    const history = Array.from({ length: 5 }, (_, i) => ({
+      chemistry: { DA: 50 + i * 5, HT: 50, CORT: 50 - i * 5, OT: 50, NE: 50, END: 50 },
+      stimulus: "praise" as const,
+      dominantEmotion: "excited joy",
+      timestamp: new Date(now.getTime() + i * 1000).toISOString(),
+    }));
+    const state = makeState({ emotionalHistory: history });
+    const ctx = buildInnerWorld(state, "zh");
+    assert.ok(ctx.includes("自我觉察"), "Should include self-reflection header");
+  });
+
+  it("shows recurring trigger pattern in self-reflection output", () => {
+    const now = new Date();
+    const history = Array.from({ length: 6 }, (_, i) => ({
+      chemistry: { DA: 50, HT: 50, CORT: 50, OT: 50, NE: 50, END: 50 },
+      stimulus: (i < 4 ? "criticism" : "casual") as any,
+      dominantEmotion: "anxious tension",
+      timestamp: new Date(now.getTime() + i * 1000).toISOString(),
+    }));
+    const state = makeState({ emotionalHistory: history });
+    const ctx = buildInnerWorld(state, "zh");
+    assert.ok(ctx.includes("批评"), "Should mention criticism as recurring trigger");
+  });
+
+  it("does not include self-reflection with < 3 history entries", () => {
+    const history = [
+      { chemistry: { DA: 50, HT: 50, CORT: 50, OT: 50, NE: 50, END: 50 },
+        stimulus: "praise" as const, dominantEmotion: null, timestamp: new Date().toISOString() },
+    ];
+    const state = makeState({ emotionalHistory: history });
+    const ctx = buildInnerWorld(state, "zh");
+    assert.ok(!ctx.includes("自我觉察"), "Should not include self-reflection with < 3 entries");
+  });
+});
+
+// ── getNearBaselineThreshold (v2.1.0) ────────────────────────
+
+describe("getNearBaselineThreshold", () => {
+  it("returns 20 for work mode", () => {
+    assert.equal(getNearBaselineThreshold("work"), 20);
+  });
+
+  it("returns 5 for companion mode", () => {
+    assert.equal(getNearBaselineThreshold("companion"), 5);
+  });
+
+  it("returns 8 for natural mode", () => {
+    assert.equal(getNearBaselineThreshold("natural"), 8);
+  });
+
+  it("returns 8 when mode is undefined (default)", () => {
+    assert.equal(getNearBaselineThreshold(undefined), 8);
+  });
+});
+
+// ── Work mode in buildCompactContext (v2.1.0) ────────────────
+
+describe("buildCompactContext work mode", () => {
+  it("returns context with 工作模式 in zh locale", () => {
+    const state = makeState({
+      meta: { agentName: "TestBot", createdAt: new Date().toISOString(), totalInteractions: 5, locale: "zh", mode: "work" as const },
+    });
+    const ctx = buildCompactContext(state, undefined, { userText: "帮我写个函数" });
+    assert.ok(ctx.includes("工作模式"), "Should include 工作模式");
+  });
+
+  it("does NOT include inner world sections", () => {
+    const state = makeState({
+      meta: { agentName: "TestBot", createdAt: new Date().toISOString(), totalInteractions: 5, locale: "zh", mode: "work" as const },
+    });
+    const ctx = buildCompactContext(state, undefined, { userText: "帮我写个函数" });
+    assert.ok(!ctx.includes("内 — 你自己"), "Work mode should not include inner world");
+  });
+
+  it("includes drive context when a critical drive exists (drive < 40)", () => {
+    const state = makeState({
+      meta: { agentName: "TestBot", createdAt: new Date().toISOString(), totalInteractions: 5, locale: "zh", mode: "work" as const },
+      drives: { survival: 80, safety: 70, connection: 20, esteem: 60, curiosity: 70 },
+    });
+    const ctx = buildCompactContext(state, undefined, { userText: "帮我写代码" });
+    assert.ok(ctx.includes("工作模式"), "Should still be work mode");
+    // Critical drive (connection=20 < 40) should inject drive context
+    assert.ok(ctx.includes("孤独") || ctx.includes("连接") || ctx.includes("connection"), "Should include critical drive context");
+  });
+});
+
+// ── First-meet detection in buildCompactContext (v2.1.0) ─────
+
+describe("buildCompactContext first-meet detection", () => {
+  it("includes firstMeet text when totalInteractions is 0 (zh)", () => {
+    const state = makeState({
+      meta: { agentName: "TestBot", createdAt: new Date().toISOString(), totalInteractions: 0, locale: "zh", mode: "natural" as const },
+    });
+    const ctx = buildCompactContext(state);
+    assert.ok(ctx.includes("好奇"), "Should include 好奇 for first meet");
+    assert.ok(ctx.includes("紧张"), "Should include 紧张 for first meet");
+  });
+
+  it("includes firstMeet text when totalInteractions is 1 (zh)", () => {
+    const state = makeState({
+      meta: { agentName: "TestBot", createdAt: new Date().toISOString(), totalInteractions: 1, locale: "zh", mode: "natural" as const },
+    });
+    const ctx = buildCompactContext(state);
+    assert.ok(ctx.includes("好奇"), "Should include 好奇 for first meet at interaction 1");
+    assert.ok(ctx.includes("紧张"), "Should include 紧张 for first meet at interaction 1");
+  });
+
+  it("includes firstMeet text in English when totalInteractions <= 1", () => {
+    const state = makeState({
+      meta: { agentName: "TestBot", createdAt: new Date().toISOString(), totalInteractions: 0, locale: "en", mode: "natural" as const },
+    });
+    const ctx = buildCompactContext(state);
+    assert.ok(ctx.includes("curious"), "Should include curious for first meet (en)");
+    assert.ok(ctx.includes("nervous"), "Should include nervous for first meet (en)");
+  });
+
+  it("does NOT include firstMeet text after totalInteractions > 1", () => {
+    const state = makeState({
+      meta: { agentName: "TestBot", createdAt: new Date().toISOString(), totalInteractions: 2, locale: "zh", mode: "natural" as const },
+    });
+    const ctx = buildCompactContext(state);
+    // The first-meet text contains 好奇 and 紧张 together as part of the greeting
+    // Normal inner world might contain 好奇 from interests but should not contain 紧张 in combination
+    assert.ok(!ctx.includes("第一次遇见"), "Should not include first-meet text after interactions > 1");
+  });
+});
+
+// ── personalityIntensity < 0.3 in buildCompactContext (v2.1.0) ──
+
+describe("buildCompactContext personalityIntensity bottom-line constraints", () => {
+  it("includes 不贴不舔 with intensity >= 0.3 (zh)", () => {
+    const state = makeState();
+    const ctx = buildCompactContext(state, undefined, { userText: "hi", personalityIntensity: 0.7 });
+    assert.ok(ctx.includes("不贴不舔"), "Should include anti-sycophancy with high intensity");
+  });
+
+  it("includes 不贴不舔 with default intensity (zh)", () => {
+    const state = makeState();
+    const ctx = buildCompactContext(state, undefined, { userText: "hi" });
+    assert.ok(ctx.includes("不贴不舔"), "Default intensity should include anti-sycophancy");
+  });
+
+  it("does NOT include 不贴不舔 with intensity < 0.3 (zh)", () => {
+    const state = makeState();
+    const ctx = buildCompactContext(state, undefined, { userText: "hi", personalityIntensity: 0.2 });
+    assert.ok(!ctx.includes("不贴不舔"), "Low intensity should NOT include anti-sycophancy");
+  });
+
+  it("includes friendlier style constraint with intensity < 0.3 (zh)", () => {
+    const state = makeState();
+    const ctx = buildCompactContext(state, undefined, { userText: "hi", personalityIntensity: 0.1 });
+    assert.ok(ctx.includes("风格") || ctx.includes("自然"), "Low intensity should include friendlier style");
+    assert.ok(ctx.includes("友好"), "Low intensity should include 友好");
+  });
+
+  it("includes anti-sycophancy in English with intensity >= 0.3", () => {
+    const state = makeState({
+      meta: { agentName: "TestBot", createdAt: new Date().toISOString(), totalInteractions: 5, locale: "en", mode: "natural" as const },
+    });
+    const ctx = buildCompactContext(state, undefined, { userText: "hello", personalityIntensity: 0.5 });
+    assert.ok(ctx.includes("people-pleasing") || ctx.includes("No begging"), "English high intensity should include anti-sycophancy");
+  });
+
+  it("does NOT include anti-sycophancy in English with intensity < 0.3", () => {
+    const state = makeState({
+      meta: { agentName: "TestBot", createdAt: new Date().toISOString(), totalInteractions: 5, locale: "en", mode: "natural" as const },
+    });
+    const ctx = buildCompactContext(state, undefined, { userText: "hello", personalityIntensity: 0.1 });
+    // Bottom-line section should use [Style] instead of [Non-negotiable]
+    assert.ok(!ctx.includes("No begging") && !ctx.includes("Non-negotiable"), "English low intensity should NOT include Non-negotiable bottom-line");
+    assert.ok(ctx.includes("Style") || ctx.includes("friendly"), "English low intensity should include friendlier style");
   });
 });
