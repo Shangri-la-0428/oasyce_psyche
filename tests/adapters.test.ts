@@ -37,6 +37,19 @@ describe("psycheMiddleware (Vercel AI)", () => {
     assert.ok(result.system.length > 0, "Should inject psyche context");
   });
 
+  it("transformParams clamps maxTokens from response contract", async () => {
+    const mw = psycheMiddleware(engine);
+    const result = await mw.transformParams({
+      type: "generate",
+      params: {
+        maxTokens: 2000,
+        prompt: [{ role: "user", content: "你好" }],
+      },
+    });
+    assert.equal(typeof result.maxTokens, "number");
+    assert.ok((result.maxTokens as number) < 2000, `got ${result.maxTokens}`);
+  });
+
   it("transformParams preserves existing system prompt", async () => {
     const mw = psycheMiddleware(engine);
     const result = await mw.transformParams({
@@ -206,6 +219,14 @@ describe("PsycheLangChain", () => {
     const msg = await lc.getSystemMessage("hello", { userId: "alice" });
     assert.ok(typeof msg === "string");
   });
+
+  it("prepareInvocation returns system message and mechanical hints", async () => {
+    const prepared = await lc.prepareInvocation("你好", { maxTokens: 2000 });
+    assert.ok(prepared.systemMessage.length > 0);
+    assert.equal(typeof prepared.maxTokens, "number");
+    assert.equal(typeof prepared.requireConfirmation, "boolean");
+    assert.ok((prepared.maxTokens ?? 0) < 2000);
+  });
 });
 
 // ── HTTP Adapter ───────────────────────────────────────
@@ -267,6 +288,9 @@ describe("createPsycheServer (HTTP)", () => {
     assert.ok(typeof data.dynamicContext === "string");
     assert.ok(data.dynamicContext.length > 0);
     assert.equal(data.stimulus, "praise");
+    assert.ok(data.subjectivityKernel);
+    assert.ok(data.responseContract);
+    assert.ok(data.generationControls);
   });
 
   it("POST /process-output strips tags", async () => {

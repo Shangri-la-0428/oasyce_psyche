@@ -163,13 +163,16 @@ export function register(api: PluginApi) {
           inputText,
           { userId: ctx.userId as string | undefined },
         );
+        const controls = result.generationControls;
 
         const state = engine.getState();
         logger.info(
           `Psyche [input] stimulus=${result.stimulus ?? "none"} | ` +
           `DA:${Math.round(state.current.DA)} HT:${Math.round(state.current.HT)} ` +
           `CORT:${Math.round(state.current.CORT)} OT:${Math.round(state.current.OT)} | ` +
-          `context=${result.dynamicContext.length}chars`,
+          `context=${result.dynamicContext.length}chars` +
+          (controls?.maxTokens ? ` | out<=${controls.maxTokens}t` : "") +
+          (controls?.requireConfirmation ? " | confirm" : ""),
         );
 
         const systemParts = [result.systemContext, result.dynamicContext].filter(Boolean);

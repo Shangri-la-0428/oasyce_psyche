@@ -439,6 +439,83 @@ export interface PolicyModifiers {
   avoidTopics: string[];
 }
 
+// ── Subjectivity Kernel (v9.3) ──────────────────────────────
+
+/**
+ * Compact, machine-readable subjective state for AI-first integrations.
+ *
+ * Unlike prompt prose, this is intended to be the narrow behavioral ABI:
+ * hosts and prompt renderers can consume one stable structure instead of
+ * reinterpreting multiple overlapping narrative sections.
+ */
+export interface SubjectivityKernel {
+  /** Overall activation/available energy. 0 = drained, 1 = highly energized */
+  vitality: number;
+  /** Internal pressure/load. 0 = relaxed, 1 = overloaded/shutdown */
+  tension: number;
+  /** Social warmth/openness. 0 = cold, 1 = warm/open */
+  warmth: number;
+  /** Boundary guarding intensity. 0 = open, 1 = highly guarded */
+  guard: number;
+  /** Coarse pressure regime */
+  pressureMode: "open" | "steady" | "guarded" | "strained" | "shutdown";
+  /** Initiative stance */
+  initiativeMode: "proactive" | "balanced" | "reactive";
+  /** Expression bandwidth */
+  expressionMode: "expansive" | "steady" | "brief";
+  /** Social distance stance */
+  socialDistance: "warm" | "measured" | "withdrawn";
+  /** Action boundary stance */
+  boundaryMode: "open" | "guarded" | "confirm-first";
+  /** Where attention is most likely to gravitate */
+  attentionAnchor: "bond" | "novelty" | "threat" | "feeling" | "routine";
+  /** Lowest active need, if any */
+  dominantNeed: DriveType | null;
+}
+
+/**
+ * Narrow behavioral contract for the next reply.
+ *
+ * This sits one layer above SubjectivityKernel: the kernel expresses
+ * "how it feels", while the response contract expresses "how to reply"
+ * in a compact, host-consumable form.
+ */
+export interface ResponseContract {
+  /** Maximum suggested sentence count */
+  maxSentences: number;
+  /** Maximum suggested character count, when a concrete cap is available */
+  maxChars?: number;
+  /** Expression bandwidth for the next reply */
+  expressionMode: SubjectivityKernel["expressionMode"];
+  /** Initiative stance for the next reply */
+  initiativeMode: SubjectivityKernel["initiativeMode"];
+  /** Social distance stance for the next reply */
+  socialDistance: SubjectivityKernel["socialDistance"];
+  /** Boundary stance for the next reply */
+  boundaryMode: SubjectivityKernel["boundaryMode"];
+  /** Tone particle usage for style mirroring */
+  toneParticles: "match" | "avoid" | "natural";
+  /** Emoji budget for the next reply */
+  emojiLimit: 0 | 1 | 2;
+  /** Whether to enforce anti-sycophancy/authenticity more strictly */
+  authenticityMode: "strict" | "friendly";
+  /** Which internal report, if any, should be requested in <psyche_update> */
+  updateMode: "none" | "stimulus" | "empathy" | "stimulus+empathy";
+}
+
+/**
+ * Mechanical generation controls derived from the emotional state.
+ *
+ * These are intentionally narrow so hosts can consume them without
+ * understanding the full psyche model.
+ */
+export interface GenerationControls {
+  /** Suggested output token cap for this turn */
+  maxTokens?: number;
+  /** Whether the host should require explicit confirmation before acting */
+  requireConfirmation: boolean;
+}
+
 // ── Trait Drift (v9) ─────────────────────────────────────────
 
 /**

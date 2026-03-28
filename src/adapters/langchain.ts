@@ -56,6 +56,30 @@ export class PsycheLangChain {
   }
 
   /**
+   * Prepare both prompt text and mechanical invocation hints for a LangChain call.
+   *
+   * Hosts can wire `maxTokens` and confirmation UX directly from this result
+   * instead of re-parsing prompt prose.
+   */
+  async prepareInvocation(
+    userText: string,
+    opts?: { userId?: string; maxTokens?: number },
+  ): Promise<{ systemMessage: string; maxTokens?: number; requireConfirmation: boolean }> {
+    const result = await this.engine.processInput(userText, opts);
+    const controls = {
+      ...(result.generationControls ?? {}),
+      maxTokens: result.generationControls?.maxTokens !== undefined && opts?.maxTokens !== undefined
+        ? Math.min(opts.maxTokens, result.generationControls.maxTokens)
+        : result.generationControls?.maxTokens ?? opts?.maxTokens,
+    };
+    return {
+      systemMessage: result.systemContext + "\n\n" + result.dynamicContext,
+      maxTokens: controls.maxTokens,
+      requireConfirmation: controls.requireConfirmation ?? false,
+    };
+  }
+
+  /**
    * Process the LLM response text.
    * Strips <psyche_update> tags and updates internal state.
    *

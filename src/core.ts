@@ -12,7 +12,7 @@
 // Orchestrates: chemistry, classify, prompt, profiles, guards, learning
 // ============================================================
 
-import type { PsycheState, StimulusType, Locale, MBTIType, ChemicalState, OutcomeScore, PsycheMode, PersonalityTraits, PolicyModifiers, ClassifierProvider } from "./types.js";
+import type { PsycheState, StimulusType, Locale, MBTIType, ChemicalState, OutcomeScore, PsycheMode, PersonalityTraits, PolicyModifiers, ClassifierProvider, SubjectivityKernel, ResponseContract, GenerationControls } from "./types.js";
 import { DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE, DEFAULT_ENERGY_BUDGETS, DEFAULT_TRAIT_DRIFT } from "./types.js";
 import type { StorageAdapter } from "./storage.js";
 import { MemoryStorageAdapter } from "./storage.js";
@@ -49,6 +49,9 @@ import {
   computePrimarySystems, computeSystemInteractions,
   gatePrimarySystemsByAutonomic, describeBehavioralTendencies,
 } from "./primary-systems.js";
+import { computeSubjectivityKernel, buildSubjectivityContext } from "./subjectivity.js";
+import { computeResponseContract, buildResponseContractContext } from "./response-contract.js";
+import { deriveGenerationControls } from "./host-controls.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -90,6 +93,12 @@ export interface ProcessInputResult {
   stimulus: StimulusType | null;
   /** v9: Structured behavioral policy modifiers — machine-readable "off baseline" signals */
   policyModifiers?: PolicyModifiers;
+  /** v9.3: Compact machine-readable subjective state for AI-first hosts */
+  subjectivityKernel?: SubjectivityKernel;
+  /** v9.3: Compact next-reply behavioral envelope */
+  responseContract?: ResponseContract;
+  /** v9.3: Mechanical host controls derived from the reply envelope */
+  generationControls?: GenerationControls;
   /**
    * v9: Ready-to-use LLM prompt fragment summarizing current behavioral policy.
    *
@@ -706,7 +715,20 @@ export class PsycheEngine {
 
     // v9: Compute structured policy modifiers
     const policyModifiers = computePolicyModifiers(state);
+    const subjectivityKernel = computeSubjectivityKernel(state, policyModifiers);
+    const subjectivityCtx = buildSubjectivityContext(subjectivityKernel, locale);
+    const responseContract = computeResponseContract(subjectivityKernel, {
+      locale,
+      userText: text || undefined,
+      algorithmStimulus: appliedStimulus,
+      personalityIntensity: this.cfg.personalityIntensity,
+    });
+    const responseContractCtx = buildResponseContractContext(responseContract, locale);
     const policyCtx = buildPolicyContext(policyModifiers, locale, state.drives);
+    const generationControls = deriveGenerationControls({
+      responseContract,
+      policyModifiers,
+    });
 
     // P10: Append processing depth info to autonomic description when depth is low
     let autonomicDesc: string | undefined;
@@ -735,10 +757,15 @@ export class PsycheEngine {
           autonomicDescription: autonomicDesc,
           autonomicState: autonomicResult.state,
           primarySystemsDescription: primarySystemsDescription || undefined,
+          subjectivityContext: subjectivityCtx,
+          responseContractContext: responseContractCtx,
           policyContext: policyCtx || undefined,
         }),
         stimulus: appliedStimulus,
         policyModifiers,
+        subjectivityKernel,
+        responseContract,
+        generationControls,
         policyContext: policyCtx,
       };
     }
@@ -758,6 +785,9 @@ export class PsycheEngine {
       }),
       stimulus: appliedStimulus,
       policyModifiers,
+      subjectivityKernel,
+      responseContract,
+      generationControls,
       policyContext: policyCtx,
     };
   }

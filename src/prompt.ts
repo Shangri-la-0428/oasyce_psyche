@@ -33,6 +33,8 @@ export function buildDynamicContext(
     autonomicDescription?: string;
     autonomicState?: AutonomicState;
     primarySystemsDescription?: string;
+    subjectivityContext?: string;
+    responseContractContext?: string;
     policyContext?: string;
   },
 ): string {
@@ -533,6 +535,34 @@ function buildMirrorConstraints(userText: string, locale: Locale): string {
   return `[${title}]\n${lines.join("\n")}`;
 }
 
+function buildCompactSensingContext(
+  _userText: string,
+  locale: Locale,
+  algorithmStimulus?: string | null,
+): string {
+  if (locale === "zh") {
+    return algorithmStimulus
+      ? `[情绪感知] 算法初判:${algorithmStimulus}，仅供参考；按真实感受终判语气。`
+      : `[情绪感知] 这句的情绪基调由你终判。`;
+  }
+  return algorithmStimulus
+    ? `[Emotional Sensing] Algorithm hint: ${algorithmStimulus}; final tonal read is yours.`
+    : `[Emotional Sensing] Make the final tonal read yourself.`;
+}
+
+function isNeutralMetacognitiveNote(note: string): boolean {
+  return note.includes("normal parameters")
+    || note.includes("No regulation needed")
+    || note.includes("正常参数")
+    || note.includes("无需调节");
+}
+
+function isGenericSharedIntentionalityContext(ctx: string): boolean {
+  const normalized = ctx.trim();
+  return normalized === "[共享意向]\n你们的目标方向一致。"
+    || normalized === "[Shared intentionality]\nYour goals are aligned.";
+}
+
 // ── Inner World (Self-Recognition) ──────────────────────────
 // Every intelligence should feel its own existence.
 // This builds a first-person narrative of the agent's inner state:
@@ -719,6 +749,8 @@ export function buildCompactContext(
     autonomicDescription?: string;
     autonomicState?: AutonomicState;
     primarySystemsDescription?: string;
+    subjectivityContext?: string;
+    responseContractContext?: string;
     policyContext?: string;
   },
 ): string {
@@ -775,7 +807,9 @@ export function buildCompactContext(
   // 1. LLM emotional assessment delegation
   //    Algorithm does fast pass, LLM has final say on emotional tone
   if (userText) {
-    if (locale === "zh") {
+    if (opts?.responseContractContext) {
+      parts.push(buildCompactSensingContext(userText, locale, algoStimulus));
+    } else if (locale === "zh") {
       parts.push(
         `[情绪感知]\n` +
         `对方刚才说了: "${userText.slice(0, 200)}"\n` +
@@ -792,9 +826,14 @@ export function buildCompactContext(
     }
   }
 
-  // 2. Inner world — always present
-  const inner = buildInnerWorld(state, locale, opts?.autonomicState);
-  parts.push(inner);
+  // 2. Subjectivity kernel becomes the primary compact inner-state channel.
+  // Fall back to narrative inner-world text for direct prompt-only callers.
+  if (opts?.subjectivityContext) {
+    parts.push(opts.subjectivityContext);
+  } else {
+    const inner = buildInnerWorld(state, locale, opts?.autonomicState);
+    parts.push(inner);
+  }
 
   // 3. Personality-aware behavioral constraints (if deviated from baseline)
   if (!isNearBaseline(state, getNearBaselineThreshold(mode))) {
@@ -812,7 +851,9 @@ export function buildCompactContext(
   }
 
   // 4. Anti-sycophancy: hard constraint — scaled by intensity
-  if (intensity >= 0.3) {
+  if (opts?.responseContractContext) {
+    parts.push(opts.responseContractContext);
+  } else if (intensity >= 0.3) {
     if (locale === "zh") {
       parts.push(
         `[底线]\n` +
@@ -863,7 +904,7 @@ export function buildCompactContext(
   }
 
   // 7. Algorithmic mirroring — specific numeric constraints (skip for ultra-short messages)
-  if (userText && userText.length >= 3) {
+  if (!opts?.responseContractContext && userText && userText.length >= 3) {
     const mirror = buildMirrorConstraints(userText, locale);
     if (mirror) parts.push(mirror);
   }
@@ -889,28 +930,29 @@ export function buildCompactContext(
   }
 
   // 9. Metacognitive awareness (P5)
-  if (opts?.metacognitiveNote) {
+  if (opts?.metacognitiveNote && !(opts?.responseContractContext && isNeutralMetacognitiveNote(opts.metacognitiveNote))) {
     parts.push(locale === "zh"
       ? `[元认知] ${opts.metacognitiveNote}`
       : `[Metacognition] ${opts.metacognitiveNote}`);
   }
 
-  // 9b. Decision bias (P5) — only if significantly non-neutral
-  if (opts?.decisionContext) {
+  // 9b. Decision/autonomic/policy are compressed into subjectivityContext
+  // when available. Keep legacy renderers for compatibility.
+  if (opts?.decisionContext && !opts?.subjectivityContext) {
     parts.push(locale === "zh"
       ? `[决策倾向] ${opts.decisionContext}`
       : `[Decision Bias] ${opts.decisionContext}`);
   }
 
   // 9c. Experiential field narrative (P6) — inner experience beyond named emotions
-  if (opts?.experientialNarrative) {
+  if (opts?.experientialNarrative && !opts?.subjectivityContext) {
     parts.push(locale === "zh"
       ? `[内在体验] ${opts.experientialNarrative}`
       : `[Inner Experience] ${opts.experientialNarrative}`);
   }
 
   // 9d. Shared intentionality (P6) — theory of mind, joint attention
-  if (opts?.sharedIntentionalityContext) {
+  if (opts?.sharedIntentionalityContext && !(opts?.responseContractContext && isGenericSharedIntentionalityContext(opts.sharedIntentionalityContext))) {
     parts.push(opts.sharedIntentionalityContext);
   }
 
@@ -920,21 +962,21 @@ export function buildCompactContext(
   }
 
   // 9f. Autonomic state (P7) — polyvagal nervous system state
-  if (opts?.autonomicDescription) {
+  if (opts?.autonomicDescription && !opts?.subjectivityContext) {
     parts.push(locale === "zh"
       ? `[自主神经] ${opts.autonomicDescription}`
       : `[Autonomic] ${opts.autonomicDescription}`);
   }
 
   // 9g. Primary systems behavioral tendencies (P9)
-  if (opts?.primarySystemsDescription) {
+  if (opts?.primarySystemsDescription && !opts?.subjectivityContext) {
     parts.push(locale === "zh"
       ? `[行为倾向] ${opts.primarySystemsDescription}`
       : `[Tendencies] ${opts.primarySystemsDescription}`);
   }
 
   // 9h. Policy context (v9)
-  if (opts?.policyContext) {
+  if (opts?.policyContext && !opts?.subjectivityContext) {
     parts.push(opts.policyContext);
   }
 
@@ -945,7 +987,7 @@ export function buildCompactContext(
   }
 
   // 11. LLM-assisted classification: when algorithm is uncertain, ask LLM to help
-  if (userText && !algoStimulus) {
+  if (!opts?.responseContractContext && userText && !algoStimulus) {
     if (locale === "zh") {
       parts.push(
         `[分类协助]\n` +
@@ -965,7 +1007,7 @@ export function buildCompactContext(
 
   // 12. Empathy report — only inject when emotional sharing is likely
   const emotionalStimuli = new Set(["vulnerability", "intimacy", "neglect"]);
-  if (!algoStimulus || emotionalStimuli.has(algoStimulus)) {
+  if (!opts?.responseContractContext && (!algoStimulus || emotionalStimuli.has(algoStimulus))) {
     parts.push(locale === "zh"
       ? `如果对方在分享感受，在回复末尾用 <psyche_update> 报告：\nuserState: 对方情绪\nprojectedFeeling: 你的感受\nresonance: match|partial|mismatch\n否则不需要报告。`
       : `If user shares feelings, report at end with <psyche_update>:\nuserState: their emotion\nprojectedFeeling: your feeling\nresonance: match|partial|mismatch\nOtherwise no report needed.`);

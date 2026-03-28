@@ -7,7 +7,7 @@
 //   const server = createPsycheServer(engine, { port: 3210 });
 //
 // Endpoints:
-//   POST /process-input  { text, userId? }  → { systemContext, dynamicContext, stimulus, policyModifiers?, policyContext }
+//   POST /process-input  { text, userId? }  → { systemContext, dynamicContext, stimulus, policyModifiers?, subjectivityKernel?, responseContract?, generationControls?, policyContext }
 //   POST /process-output { text, userId? }  → { cleanedText, stateChanged }
 //   GET  /state                             → PsycheState
 //   GET  /protocol?locale=zh                → { protocol }

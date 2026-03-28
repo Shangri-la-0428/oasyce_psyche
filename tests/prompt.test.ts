@@ -428,6 +428,40 @@ describe("buildCompactContext", () => {
     assert.ok(ctx.includes("4"));
     assert.ok(ctx.includes("同意"));
   });
+
+  it("uses subjectivityContext as the primary compact inner-state channel when provided", () => {
+    const ctx = buildCompactContext(makeState(), undefined, {
+      userText: "hi",
+      subjectivityContext: "[主观内核] 内压平衡，注意关系。",
+      decisionContext: "[决策倾向] 倾向安全策略",
+      autonomicDescription: "处于警觉状态",
+      primarySystemsDescription: "SEEKING low",
+      policyContext: "[行为策略] 简短回复",
+    });
+    assert.ok(ctx.includes("[主观内核]"));
+    assert.ok(!ctx.includes("[决策倾向]"), `got: ${ctx}`);
+    assert.ok(!ctx.includes("[自主神经]"), `got: ${ctx}`);
+    assert.ok(!ctx.includes("[行为策略]"), `got: ${ctx}`);
+  });
+
+  it("does not echo raw user text when responseContractContext is present", () => {
+    const ctx = buildCompactContext(makeState(), undefined, {
+      userText: "你真的让我有点失望",
+      responseContractContext: "[回应契约] 最多2句；不贴不舔。",
+    });
+    assert.ok(ctx.includes("情绪感知"));
+    assert.ok(!ctx.includes("你真的让我有点失望"), `got: ${ctx}`);
+  });
+
+  it("omits experiential narrative when subjectivityContext is present", () => {
+    const ctx = buildCompactContext(makeState(), undefined, {
+      userText: "hi",
+      subjectivityContext: "[主观内核] 内压平衡，注意关系。",
+      responseContractContext: "[回应契约] 最多2句；不贴不舔。",
+      experientialNarrative: "胸口发紧，想靠近又想后退。",
+    });
+    assert.ok(!ctx.includes("[内在体验]"), `got: ${ctx}`);
+  });
 });
 
 // ── buildInnerWorld self-reflection integration ──────────────

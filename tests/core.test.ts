@@ -330,13 +330,13 @@ END: 75 (happy)
     assert.ok(result.dynamicContext.includes("emotionally natural"), `Got: ${result.dynamicContext}`);
   });
 
-  it("compact mode includes user text for LLM assessment", async () => {
+  it("compact mode does not repeat raw user text when response contract is present", async () => {
     const s = new MemoryStorageAdapter();
     const e = new PsycheEngine({ mbti: "ENFP", name: "Luna", locale: "zh" }, s);
     await e.initialize();
     const result = await e.processInput("滚");
-    assert.ok(result.dynamicContext.includes("滚"), "Should include user text");
     assert.ok(result.dynamicContext.includes("情绪感知"), "Should have emotional sensing section");
+    assert.ok(!result.dynamicContext.includes("滚"), `Should avoid echoing raw user text, got: ${result.dynamicContext}`);
   });
 
   it("compact mode includes anti-sycophancy constraint", async () => {
@@ -354,6 +354,24 @@ END: 75 (happy)
     const result = await e.processInput("你太棒了！");
     assert.ok(result.dynamicContext.includes("算法初判"), "Should include algorithm hint");
     assert.ok(result.dynamicContext.includes("praise"), "Should show praise stimulus");
+  });
+
+  it("compact mode returns mechanical generation controls", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP", name: "Luna", locale: "zh" }, s);
+    await e.initialize();
+    const result = await e.processInput("你好");
+    assert.equal(typeof result.generationControls?.requireConfirmation, "boolean");
+    assert.equal(typeof result.generationControls?.maxTokens, "number");
+  });
+
+  it("compact mode stays within a tight prompt budget for common messages", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP", name: "Luna", locale: "zh" }, s);
+    await e.initialize();
+    await e.processInput("你好");
+    const result = await e.processInput("你真的让我有点失望");
+    assert.ok(result.dynamicContext.length < 180, `expected compact budget, got ${result.dynamicContext.length}: ${result.dynamicContext}`);
   });
 
   it("compact mode returns behavioral context when chemistry deviates", async () => {
@@ -801,6 +819,17 @@ describe("PsycheEngine — first-meet detection", () => {
 // ── v9.1: Pluggable classifier integration ──────────────────
 
 describe("pluggable classifier in PsycheEngine", () => {
+  it("processInput returns subjectivityKernel in compact mode", async () => {
+    const storage = new MemoryStorageAdapter();
+    const engine = new PsycheEngine({ mbti: "INFJ", compactMode: true }, storage);
+    await engine.initialize();
+    const result = await engine.processInput("你好");
+    assert.ok(result.subjectivityKernel, "subjectivityKernel should be present");
+    assert.ok(result.responseContract, "responseContract should be present");
+    assert.equal(typeof result.subjectivityKernel?.tension, "number");
+    assert.ok(result.dynamicContext.includes("主观内核"), `Got: ${result.dynamicContext}`);
+  });
+
   it("uses custom ClassifierProvider when configured", async () => {
     const storage = new MemoryStorageAdapter();
     const engine = new PsycheEngine({

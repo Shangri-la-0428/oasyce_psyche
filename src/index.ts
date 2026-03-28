@@ -28,7 +28,7 @@ export type {
   MetacognitiveState, RegulationRecord, DefensePatternRecord,
   RegulationStrategyType, DefenseMechanismType,
   PersonhoodState, PersistedCausalInsight, GrowthDirection,
-  PersonalityTraits, PsycheMode, PolicyModifiers,
+  PersonalityTraits, PsycheMode, PolicyModifiers, SubjectivityKernel, ResponseContract, GenerationControls,
   TraitDriftState, EnergyBudgets,
   ClassifierProvider, ClassifierContext, ClassificationResult,
 } from "./types.js";
@@ -93,6 +93,11 @@ export {
   computePolicyModifiers, buildPolicyContext,
 } from "./decision-bias.js";
 export type { DecisionBiasVector, AttentionWeights } from "./decision-bias.js";
+
+// Subjectivity kernel (v9.3)
+export { computeSubjectivityKernel, buildSubjectivityContext } from "./subjectivity.js";
+export { computeResponseContract, buildResponseContractContext } from "./response-contract.js";
+export { deriveGenerationControls } from "./host-controls.js";
 
 // Experiential field (P6 + P8 Barrett construction)
 export { computeExperientialField, computeCoherence, detectUnnamedEmotion, computeAffectCore } from "./experiential-field.js";

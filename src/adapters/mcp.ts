@@ -161,7 +161,8 @@ server.tool(
   "process_input",
   "Process user input through the emotional engine. Returns emotional " +
   "context to inject into the LLM system prompt (systemContext + dynamicContext), " +
-  "detected stimulus type, and behavioral policy modifiers. " +
+  "detected stimulus type, behavioral policy modifiers, the narrow AI-first ABI " +
+  "(subjectivityKernel + responseContract), and generationControls. " +
   "Call this BEFORE generating a response to the user.",
   {
     text: z.string().describe("The user's message text"),
@@ -178,6 +179,9 @@ server.tool(
           dynamicContext: result.dynamicContext,
           stimulus: result.stimulus,
           policyModifiers: result.policyModifiers ?? null,
+          subjectivityKernel: result.subjectivityKernel ?? null,
+          responseContract: result.responseContract ?? null,
+          generationControls: result.generationControls ?? null,
           policyContext: result.policyContext,
         }, null, 2),
       }],
