@@ -224,10 +224,6 @@ export class DiagnosticCollector {
   private metrics: SessionMetrics;
   private prevChemistry: ChemicalState | null = null;
   private confidences: number[] = [];
-  /** Consecutive inputs with no classification — for real-time alerting */
-  private consecutiveNone = 0;
-  /** Callback for real-time warnings (set by adapter) */
-  onWarning?: (message: string) => void;
 
   constructor() {
     const now = new Date().toISOString();
@@ -257,16 +253,6 @@ export class DiagnosticCollector {
       this.metrics.classifiedCount++;
       this.metrics.stimulusDistribution[stimulus] =
         (this.metrics.stimulusDistribution[stimulus] ?? 0) + 1;
-      this.consecutiveNone = 0;
-    } else {
-      this.consecutiveNone++;
-      if (this.consecutiveNone >= 3) {
-        this.onWarning?.(
-          `Psyche: ${this.consecutiveNone} consecutive inputs with no classification ` +
-          `(0/${this.metrics.inputCount} total). Possible causes: empty input text, ` +
-          `wrong event field, or classifier rules don't match input language.`,
-        );
-      }
     }
 
     this.confidences.push(confidence);
