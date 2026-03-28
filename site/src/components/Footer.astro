@@ -3,12 +3,22 @@
 
 <footer class="footer">
   <div class="footer-inner">
-    <div class="footer-links">
-      <a href="https://www.npmjs.com/package/psyche-ai" target="_blank" rel="noopener noreferrer">npm</a>
-      <span class="footer-sep">/</span>
-      <a href="https://github.com/Shangri-la-0428/psyche-ai" target="_blank" rel="noopener noreferrer">github</a>
-      <span class="footer-sep">/</span>
-      <a href="https://discord.gg/7JMnFzqKbm" target="_blank" rel="noopener noreferrer">discord</a>
+    <div class="footer-cluster">
+      <div class="footer-links">
+        <a href="https://www.npmjs.com/package/psyche-ai" target="_blank" rel="noopener noreferrer">npm</a>
+        <span class="footer-sep">/</span>
+        <a href="https://github.com/Shangri-la-0428/psyche-ai" target="_blank" rel="noopener noreferrer">github</a>
+        <span class="footer-sep">/</span>
+        <a href="https://discord.gg/7JMnFzqKbm" target="_blank" rel="noopener noreferrer">discord</a>
+      </div>
+      <div class="footer-network">
+        <span class="footer-network-label">Oasyce Network</span>
+        <a href="https://spacetime.oasyce.com" target="_blank" rel="noopener noreferrer">Spacetime</a>
+        <span class="footer-sep">/</span>
+        <a href="https://thronglets.oasyce.com" target="_blank" rel="noopener noreferrer">Thronglets</a>
+        <span class="footer-sep">/</span>
+        <a href="https://chain.oasyce.com" target="_blank" rel="noopener noreferrer">Chain</a>
+      </div>
     </div>
     <div class="footer-copy">
       &copy; 2026 Shangri-la
@@ -42,6 +52,28 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .footer-cluster {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .footer-network {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 11px;
+  }
+
+  .footer-network-label {
+    color: var(--text-dim);
+    opacity: 0.75;
+    margin-right: 4px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
 
   .footer-links a {
@@ -80,5 +112,7 @@
 
   @media (max-width: 480px) {
     .footer-inner { flex-direction: column; gap: 12px; }
+    .footer-cluster { align-items: center; }
+    .footer-network { justify-content: center; }
   }
 </style>

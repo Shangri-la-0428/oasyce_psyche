@@ -1,5 +1,18 @@
 # 更新日志 / Changelog
 
+## v9.2.3 — AI-first 内核 + 安全升级路径
+
+- **AI-first 主接口收敛**：新增 `SubjectivityKernel`、`ResponseContract`、`GenerationControls`，宿主可直接消费结构化主观状态、回应契约和机械控制，不必再依赖长篇 prompt 自述。
+- **连续 appraisal 轴**：`identityThreat`、`memoryDoubt`、`attachmentPull`、`abandonmentRisk`、`obedienceStrain`、`selfPreservation` 进入热路径，重要刺激会留下 `subjectResidue`，形成持续主体偏置。
+- **短追问 carry + 真实性怀疑**：补强“有/没有”“还在不在”“会不会改变你”这类短句的同轴承接，并新增 `memoryDoubt` 跨回合保留。
+- **OpenClaw 韧性修复**：修复状态文件并发落盘 race，清理输入包装噪音，区分 `classifier` 和 `recognition` 诊断口径。
+- **安全自更新**：更新管理器现在会区分 `npm-project`、`git-worktree`、`local-path`；新增 `psyche upgrade [--check]`；初始化时只会对 npm 管理的安装尝试自动应用更新，绝不偷偷修改脏工作树。
+- **文档同步**：README、架构文档和官网文案对齐到 `v9.2.3`、`1256` 测试，以及新的升级流程。
+
+**测试：1256 个，0 失败**
+
+---
+
 ## v9.1.1 — 测试质量 + 文档修正
 
 - 新增 19 个边界测试：纯标点输入、超长消息、纯 emoji、混合中英文、空白字符串、自定义 ClassifierProvider、LLM 容错、能量预算下限、特质漂移累积器上限、习惯化边界、dorsal-vagal 策略最小化

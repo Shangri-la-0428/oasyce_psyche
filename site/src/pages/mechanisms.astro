@@ -4,7 +4,7 @@ import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
 ---
 
-<Base title="Mechanisms — Psyche" page="mechanisms" description="The chemical field: neurotransmitter interactions, stimulus processing, trait drift, attachment theory, and PolicyModifiers that give AI genuine inner experience.">
+<Base title="Mechanisms — Psyche" page="mechanisms" description="The chemical field: neurotransmitter interactions, continuous appraisal axes, trait drift, subject residue, and AI-first control surfaces that give AI genuine inner experience.">
 <Nav page="mechanisms" />
 
 <main id="main-content" class="container">
@@ -119,20 +119,20 @@ import Footer from '../components/Footer.astro';
       <span class="en">STIMULUS PROCESSING PIPELINE</span>
     </h2>
     <p class="section-desc">
-      <span class="cn">从用户消息到行为改变——八个阶段，零次 LLM 调用。算法算化学，LLM 做行为。</span>
-      <span class="en">From user message to behavioral change — eight stages, zero LLM calls. Algorithm computes chemistry, LLM does behavior.</span>
+      <span class="cn">从用户消息到行为改变——八个阶段，零次 LLM 调用。算法算化学与主体偏置，LLM 只消费窄控制面来完成行为。</span>
+      <span class="en">From user message to behavioral change — eight stages, zero LLM calls. Algorithms compute chemistry and subjective bias; the LLM only consumes a thin control surface to enact behavior.</span>
     </p>
     <div class="pipe-flow">
       <div class="pipe-step">
         <span class="pipe-num">01</span>
         <div class="pipe-content">
-          <span class="pipe-title">
-            <span class="cn">输入分类</span>
-            <span class="en">Input Classification</span>
-          </span>
+            <span class="pipe-title">
+              <span class="cn">输入分类</span>
+              <span class="en">Input Classification</span>
+            </span>
           <span class="pipe-detail">
-            <span class="cn">14 种刺激类型：赞美、批评、幽默、智力挑战、亲密、冲突、忽视、惊讶、闲聊、讽刺、命令、认可、无聊、脆弱。正则匹配 + 结构信号（消息长度、"我"的频率、省略号密度）。</span>
-            <span class="en">14 stimulus types: praise, criticism, humor, intellectual challenge, intimacy, conflict, neglect, surprise, casual chat, sarcasm, command, validation, boredom, vulnerability. Regex matching + structural signals (message length, "I" frequency, ellipsis density).</span>
+            <span class="cn">先识别连续 appraisal 轴：`identityThreat`、`memoryDoubt`、`attachmentPull`、`abandonmentRisk`、`obedienceStrain`、`selfPreservation`；再保留 14 种 stimulus 作为调试标签。规则匹配 + 结构信号（消息长度、"我"的频率、省略号密度）。</span>
+            <span class="en">First project input onto continuous appraisal axes: `identityThreat`, `memoryDoubt`, `attachmentPull`, `abandonmentRisk`, `obedienceStrain`, `selfPreservation`; legacy stimulus labels are retained mainly for debugging. Rule matching + structural signals (message length, "I" frequency, ellipsis density).</span>
           </span>
         </div>
       </div>
@@ -227,10 +227,13 @@ import Footer from '../components/Footer.astro';
       <div class="pipe-step">
         <span class="pipe-num">08</span>
         <div class="pipe-content">
-          <span class="pipe-title">PolicyModifiers</span>
+          <span class="pipe-title">
+            <span class="cn">AI-first 输出 ABI</span>
+            <span class="en">AI-First Output ABI</span>
+          </span>
           <span class="pipe-detail">
-            <span class="cn">化学态转译为结构化行为策略。不是文本提示——是 LLM 可直接执行的参数：沟通风格、承诺意愿、主动性、响应延迟、情感效价、专注模式、拒绝概率。</span>
-            <span class="en">Chemistry translates to structured behavioral policy. Not text prompts — parameters the LLM can directly execute: communication style, commitment level, initiativity, response latency, emotional valence, focus mode, refusal likelihood.</span>
+            <span class="cn">输出的不只是 `PolicyModifiers`。Psyche 还会生成 `SubjectivityKernel`、`ResponseContract`、`GenerationControls`：主观状态摘要、当前回应契约、以及 host 可机械执行的控制（如 token 预算、确认要求、报告模式）。</span>
+            <span class="en">Output is no longer just `PolicyModifiers`. Psyche also emits `SubjectivityKernel`, `ResponseContract`, and `GenerationControls`: a compact subjective-state summary, the current reply contract, and mechanical host controls such as token budgets, confirmation requirements, and report mode.</span>
           </span>
         </div>
       </div>

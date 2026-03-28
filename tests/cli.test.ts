@@ -31,6 +31,7 @@ describe("cli help", () => {
     assert.ok(stdout.includes("psyche"));
     assert.ok(stdout.includes("init"));
     assert.ok(stdout.includes("status"));
+    assert.ok(stdout.includes("upgrade"));
   });
 
   it("shows usage on no args", async () => {

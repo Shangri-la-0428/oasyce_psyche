@@ -6,6 +6,8 @@ interface Props {
 }
 
 const { title, description = "Virtual endocrine system that gives AI genuine inner experience. 6 neurotransmitters, trait drift, anti-sycophancy.", page = "home" } = Astro.props;
+const canonical = new URL(Astro.url.pathname, 'https://psyche.oasyce.com').toString();
+const keywords = "Psyche, psyche-ai, AI emotion engine, AI consciousness, virtual endocrine system, neurotransmitters, agent emotions, AI人格, AI情绪引擎, 虚拟内分泌系统, 神经递质, 智能体人格";
 
 import { ClientRouter } from 'astro:transitions';
 ---
@@ -17,12 +19,44 @@ import { ClientRouter } from 'astro:transitions';
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{title}</title>
   <meta name="description" content={description} />
+  <meta name="keywords" content={keywords} />
+  <meta name="robots" content="index,follow" />
+  <link rel="canonical" href={canonical} />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Psyche" />
   <meta property="og:title" content={title} />
   <meta property="og:description" content={description} />
+  <meta property="og:url" content={canonical} />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content={title} />
+  <meta name="twitter:description" content={description} />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/favicon.ico" />
   <meta name="theme-color" content="#000000" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Psyche" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="preload" href="/fonts/jetbrains-mono-var.woff2" as="font" type="font/woff2" crossorigin />
+  <script type="application/ld+json" set:html={JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'Psyche',
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'macOS, Linux, Windows',
+    url: canonical,
+    description,
+    softwareVersion: '9.2.3',
+    author: {
+      '@type': 'Organization',
+      name: 'Oasyce',
+    },
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'USD',
+    },
+  })} />
   <script is:inline>
     // Language — in <head> to prevent FOUC
     (function() {

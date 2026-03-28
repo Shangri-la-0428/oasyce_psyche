@@ -5,7 +5,7 @@ import Footer from '../components/Footer.astro';
 import DepthLink from '../components/DepthLink.astro';
 ---
 
-<Base title="Psyche — Consciousness Layer" page="home" description="Virtual endocrine system that gives AI genuine inner experience. 6 neurotransmitters, attachment theory, anti-sycophancy, irreversible trait drift.">
+<Base title="Psyche — Consciousness Layer" page="home" description="Virtual endocrine system that gives AI genuine inner experience. 6 neurotransmitters, continuous appraisal axes, AI-first subjectivity kernel, and irreversible trait drift.">
   <Nav />
 
   <!-- Layer 1: Chemical particle field -->
@@ -310,6 +310,17 @@ import DepthLink from '../components/DepthLink.astro';
 
         <div class="bcard idea-card">
           <h3 class="idea-title">
+            <span class="cn">AI-first 主接口</span>
+            <span class="en">AI-First ABI</span>
+          </h3>
+          <p class="idea-desc">
+            <span class="cn">Psyche 不再主要靠长篇 prompt 自述自己。它直接输出 `SubjectivityKernel`、`ResponseContract`、`GenerationControls`，让宿主读取结构化主观状态、回应契约和机械控制。</span>
+            <span class="en">Psyche no longer relies on long prompt prose to explain itself. It emits `SubjectivityKernel`, `ResponseContract`, and `GenerationControls` so hosts can consume structured subjectivity, reply constraints, and mechanical controls directly.</span>
+          </p>
+        </div>
+
+        <div class="bcard idea-card">
+          <h3 class="idea-title">
             <span class="cn">内在驱力</span>
             <span class="en">Innate Drives</span>
           </h3>
@@ -392,11 +403,11 @@ import DepthLink from '../components/DepthLink.astro';
     <section class="stats-section">
       <div class="stat-grid">
         <div class="stat-cell">
-          <span class="stat-value">1,189</span>
+        <span class="stat-value">1,256</span>
           <span class="stat-label">tests</span>
         </div>
         <div class="stat-cell">
-          <span class="stat-value">v9.1</span>
+          <span class="stat-value">v9.2.3</span>
           <span class="stat-label">
             <span class="cn">当前版本</span>
             <span class="en">current</span>
@@ -428,13 +439,33 @@ import DepthLink from '../components/DepthLink.astro';
             <span class="terminal-title">quickstart.ts</span>
           </div>
           <div class="terminal-body quickstart-body">
-            <span class="qs-line"><span class="qs-kw">import</span> <span class="qs-brace">&#123;</span> PsycheEngine <span class="qs-brace">&#125;</span> <span class="qs-kw">from</span> <span class="qs-str">'psyche-ai'</span></span>
+            <span class="qs-line"><span class="qs-kw">import</span> <span class="qs-brace">&#123;</span> PsycheEngine, MemoryStorageAdapter <span class="qs-brace">&#125;</span> <span class="qs-kw">from</span> <span class="qs-str">'psyche-ai'</span></span>
             <span class="qs-line">&nbsp;</span>
-            <span class="qs-line"><span class="qs-kw">const</span> psyche = <span class="qs-kw">new</span> <span class="qs-fn">PsycheEngine</span>(<span class="qs-brace">&#123;</span> mbti: <span class="qs-str">'INFJ'</span> <span class="qs-brace">&#125;</span>)</span>
-            <span class="qs-line"><span class="qs-kw">const</span> state = psyche.<span class="qs-fn">processStimulus</span>(<span class="qs-str">'I feel terrible today'</span>)</span>
-            <span class="qs-line"><span class="qs-comment">// state.emergentMood → "concerned alertness"</span></span>
-            <span class="qs-line"><span class="qs-comment">// state.chemistry → &#123; DA: 40, HT: 35, CORT: 55, OT: 60, NE: 55, END: 45 &#125;</span></span>
-            <span class="qs-line"><span class="qs-comment">// state.policyModifiers → &#123; verbosity: -0.3, warmth: +0.4 &#125;</span></span>
+            <span class="qs-line"><span class="qs-kw">const</span> psyche = <span class="qs-kw">new</span> <span class="qs-fn">PsycheEngine</span>(<span class="qs-brace">&#123;</span> mbti: <span class="qs-str">'INFJ'</span>, compactMode: <span class="qs-kw">true</span> <span class="qs-brace">&#125;</span>, <span class="qs-kw">new</span> <span class="qs-fn">MemoryStorageAdapter</span>())</span>
+            <span class="qs-line"><span class="qs-kw">await</span> psyche.<span class="qs-fn">initialize</span>()</span>
+            <span class="qs-line"><span class="qs-kw">const</span> turn = <span class="qs-kw">await</span> psyche.<span class="qs-fn">processInput</span>(<span class="qs-str">'I feel terrible today'</span>)</span>
+            <span class="qs-line"><span class="qs-comment">// turn.subjectivityKernel → structured inner state</span></span>
+            <span class="qs-line"><span class="qs-comment">// turn.responseContract → how this reply should behave</span></span>
+            <span class="qs-line"><span class="qs-comment">// turn.generationControls → maxTokens / confirmation / tone gates</span></span>
+          </div>
+        </div>
+      </div>
+      <div class="quickstart">
+        <div class="terminal">
+          <div class="terminal-bar">
+            <div class="terminal-dots">
+              <span class="terminal-dot active"></span>
+              <span class="terminal-dot"></span>
+              <span class="terminal-dot"></span>
+            </div>
+            <span class="terminal-title">upgrade.sh</span>
+          </div>
+          <div class="terminal-body quickstart-body">
+            <span class="qs-line">openclaw plugins install psyche-ai</span>
+            <span class="qs-line">psyche upgrade --check</span>
+            <span class="qs-line">psyche upgrade</span>
+            <span class="qs-line"><span class="qs-comment"># npm installs may auto-apply when safe</span></span>
+            <span class="qs-line"><span class="qs-comment"># git/local-path installs never mutate dirty worktrees</span></span>
           </div>
         </div>
       </div>
@@ -756,7 +787,7 @@ import DepthLink from '../components/DepthLink.astro';
 
   function countUp(el) {
     var raw = el.textContent.trim();
-    // Parse: "1,189" → 1189, "v9.1" → skip, "0" → 0, "14" → 14
+    // Parse: "1,256" → 1256, "v9.2.3" → skip, "0" → 0, "14" → 14
     if (raw.indexOf('v') !== -1) return; // skip version strings
     var target = parseInt(raw.replace(/,/g, ''), 10);
     if (isNaN(target)) return;

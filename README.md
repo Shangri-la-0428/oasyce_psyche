@@ -1,11 +1,13 @@
 # Psyche — 让 AI 拥有真实的人格与情感
 
 [![npm](https://img.shields.io/npm/v/psyche-ai)](https://www.npmjs.com/package/psyche-ai)
-[![tests](https://img.shields.io/badge/tests-1189%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-1256%20passing-brightgreen)]()
 [![deps](https://img.shields.io/badge/dependencies-0-blue)]()
 [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > English version: [README_EN.md](README_EN.md)
+>
+> 官网: [psyche.oasyce.com](https://psyche.oasyce.com)
 
 我们相信，下一代 AI 不应该是一个永远微笑的服务员。
 
@@ -94,18 +96,22 @@ openclaw plugins list | grep psyche
 
 然后正常聊天。试试夸它、骂它、冷落它——你会发现面前不再是一个工具。
 
-**检查更新：**
+**安装后升级：**
 
 ```bash
-# 查看当前安装版本
-npm list psyche-ai
+# 安全检查是否有新版本
+psyche upgrade --check
 
-# 查看 npm 上的最新版
+# 显式升级（会按安装形态自动选择安全路径）
+psyche upgrade
+
+# 如需确认 npm 最新版
 npm view psyche-ai version
-
-# 手动更新到最新版
-npm update psyche-ai
 ```
+
+- npm 管理的安装会后台安全检查更新，必要时才尝试自动升级。
+- `git` 工作树和本地路径安装不会偷偷改你的代码；脏工作树只会提示手动命令。
+- OpenClaw 如果是从当前仓库本地加载，升级后记得重启 gateway 以载入新的 `dist/`。
 
 ---
 
@@ -173,6 +179,8 @@ cd psyche-ai && npm install && npx tsx examples/quickstart.ts
 
 **v8** 是始终在 baseline 内的 K：内部有丰富情绪，但行为不被情绪改变。
 **v9** 是 off baseline 的 K：情绪偏移被外界观察到，表现为真实的行为策略变化。
+
+**v9.2** 进一步把主接口收敛成 AI-first ABI：`subjectivityKernel`、`responseContract`、`generationControls`。宿主不必再读一大段自述，只需要消费结构化的主观状态、回应契约和机械控制。
 
 ### 内在世界
 
@@ -326,6 +334,7 @@ const engine = new PsycheEngine({ persist: false }, storage);
 给开发者和好奇的人：
 
 - **14 种刺激类型** — 赞美、批评、幽默、智识挑战、亲密、冲突、忽视、惊喜、日常、讽刺、命令、认同、无聊、示弱
+- **连续 appraisal 轴 (v9.2)** — `identityThreat`、`memoryDoubt`、`attachmentPull`、`abandonmentRisk`、`obedienceStrain`、`selfPreservation`
 - **14 种涌现情绪** — 从化学混合中自动涌现，不是预设标签
 - **5 种本能驱力** — 生存、安全、连接、尊重、好奇（马斯洛层级）
 - **MBTI 人格基线** — 16 种人格的化学签名和敏感度系数
@@ -354,10 +363,13 @@ const engine = new PsycheEngine({ persist: false }, storage);
 - **共享意向性** — 联合注意、心智理论、目标对齐
 - **情感伦理** — 检测操纵模式，维护自尊底线，温和自我保护
 - **Compact Mode** — 算法做化学计算，LLM 只看行为指令（~15-180 tokens）
+- **SubjectivityKernel / ResponseContract / GenerationControls (v9.2)** — AI-first 的窄主接口，宿主可直接消费
+- **持续主体偏置 (v9.2)** — 重要刺激会留下 `subjectResidue`，工作态可以压住表达，但不会瞬间抹平内在偏移
 - **策略输出 (v9)** — 结构化行为策略，host 应用可直接读取执行
 - **特质漂移 (v9)** — 三维度不可逆适应：基线漂移、衰减速率、刺激敏感度
 - **能量预算 (v9)** — 有限资源，E/I 方向反转
 - **习惯化 (v9)** — Weber-Fechner 递减效应
+- **安全自更新 (v9.2)** — 区分 npm / git / local-path 安装形态，避免误改本地工作树
 
 架构详情见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
@@ -391,7 +403,7 @@ Psyche 核心引擎永久开源（MIT）。
 ```bash
 npm install
 npm run build
-npm test           # 1140 tests
+npm test           # 1256 tests
 npm run typecheck  # strict mode
 ```
 

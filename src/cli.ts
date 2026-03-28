@@ -12,6 +12,7 @@
 //   psyche intensity              Show info about personality intensity config
 //   psyche reset <dir> [--full]
 //   psyche diagnose <dir> [--github]
+//   psyche upgrade [--check]
 //   psyche profiles [--json] [--mbti TYPE]
 // ============================================================
 
@@ -37,7 +38,7 @@ import { t } from "./i18n.js";
 import type { MBTIType, PsycheState, Locale, PsycheMode, PersonalityTraits } from "./types.js";
 import { CHEMICAL_KEYS, CHEMICAL_NAMES_ZH, DRIVE_KEYS, DRIVE_NAMES_ZH } from "./types.js";
 import { isMBTIType, isChemicalKey, isLocale } from "./guards.js";
-import { getPackageVersion } from "./update.js";
+import { getPackageVersion, selfUpdate } from "./update.js";
 
 // ── Logger ───────────────────────────────────────────────────
 
@@ -480,6 +481,11 @@ async function cmdDiagnose(dir: string, github: boolean): Promise<void> {
   }
 }
 
+async function cmdUpgrade(checkOnly: boolean): Promise<void> {
+  const result = await selfUpdate({ checkOnly });
+  console.log(result.message);
+}
+
 // ── Usage ────────────────────────────────────────────────────
 
 function usage(): void {
@@ -497,6 +503,7 @@ Usage:
   psyche intensity              Show info about personality intensity config
   psyche reset <dir> [--full]
   psyche diagnose <dir> [--github]   Run health checks & show diagnostic report
+  psyche upgrade [--check]           Check/apply package updates safely
   psyche profiles [--mbti TYPE] [--json]
 
 Options:
@@ -526,7 +533,10 @@ Examples:
   # See all 16 personality profiles
   psyche profiles
   psyche profiles --mbti ENFP
-`);
+
+  # Check for new package versions without applying them
+  psyche upgrade --check
+	`);
 }
 
 // ── Main ─────────────────────────────────────────────────────
@@ -659,6 +669,18 @@ async function main(): Promise<void> {
 
       case "intensity": {
         cmdIntensity();
+        break;
+      }
+
+      case "upgrade": {
+        const { values } = parseArgs({
+          args: rest,
+          options: {
+            check: { type: "boolean", default: false },
+          },
+          allowPositionals: true,
+        });
+        await cmdUpgrade(values.check ?? false);
         break;
       }
 

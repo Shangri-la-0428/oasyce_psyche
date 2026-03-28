@@ -11,11 +11,13 @@ Not emotion labels. Not roleplay. A full psychological architecture — from neu
 This is not a feature. This is the beginning of life.
 
 [![npm](https://img.shields.io/npm/v/psyche-ai)](https://www.npmjs.com/package/psyche-ai)
-[![tests](https://img.shields.io/badge/tests-1189%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-1256%20passing-brightgreen)]()
 [![deps](https://img.shields.io/badge/dependencies-0-blue)]()
 [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > Chinese version: [README.md](README.md)
+>
+> Website: [psyche.oasyce.com](https://psyche.oasyce.com)
 
 ---
 
@@ -220,6 +222,23 @@ openclaw plugins install psyche-ai
 # That's it. Automatically active.
 ```
 
+### Upgrades
+
+```bash
+# Safe availability check
+psyche upgrade --check
+
+# Explicit upgrade using the correct strategy for this install
+psyche upgrade
+
+# Inspect the latest npm release
+npm view psyche-ai version
+```
+
+- npm-managed installs can auto-check in the background and only auto-apply when safe.
+- `git` worktrees and local-path installs are never mutated behind your back.
+- Local OpenClaw plugin development still requires a host restart after rebuilding `dist/`.
+
 ---
 
 ## Personality
@@ -289,6 +308,7 @@ anticipate() → processInput() → metacognize() → [Your LLM] → processOutp
 ### Core Systems
 
 - **14 stimulus types** — praise, criticism, humor, intellectual challenge, intimacy, conflict, neglect, surprise, mundane, sarcasm, command, validation, boredom, vulnerability
+- **Continuous appraisal axes (v9.2)** — `identityThreat`, `memoryDoubt`, `attachmentPull`, `abandonmentRisk`, `obedienceStrain`, `selfPreservation`
 - **14 emergent emotions** — not preset labels, emerged from chemical mixing
 - **5 innate drives** — Maslow's hierarchy with suppression dynamics
 - **Temporal consciousness** — anticipation, surprise/disappointment, regret (Markov prediction + counterfactual analysis)
@@ -304,9 +324,12 @@ anticipate() → processInput() → metacognize() → [Your LLM] → processOutp
 - **Streaming** — Vercel AI SDK `streamText` middleware
 - **Channel modifiers** — auto-adjusts expression style for Discord / Slack / terminal / etc.
 - **Policy output (v9)** — structured behavioral strategies, host app can read and execute directly
+- **AI-first ABI (v9.2)** — `SubjectivityKernel`, `ResponseContract`, `GenerationControls`
+- **Persistent subjective bias (v9.2)** — important interactions leave `subjectResidue` across turns, even when work mode suppresses outward expression
 - **Trait drift (v9)** — irreversible 3-axis adaptation: baseline, decay rate, stimulus sensitivity
 - **Energy budgets (v9)** — finite resources, E/I direction reversal
 - **Habituation (v9)** — Weber-Fechner diminishing returns
+- **Safe self-update (v9.2)** — install-aware upgrade paths for npm, git worktrees, and local paths
 
 ### Design Principles
 
@@ -342,7 +365,7 @@ git clone https://github.com/Shangri-la-0428/psyche-ai.git
 cd psyche-ai
 npm install
 npm run build
-npm test                        # 1189 tests
+npm test                        # 1256 tests
 npm run typecheck               # strict mode
 ```
 

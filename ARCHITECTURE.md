@@ -1,12 +1,14 @@
-# 架构 — Psyche AI v9.0
+# 架构 — Psyche AI v9.2.3
 
-[English version below](#architecture--psyche-ai-v90)
+[English version below](#architecture--psyche-ai-v923)
 
 ## 总览
 
 Psyche 是一个通用的 AI 情感智能引擎。核心引擎 (`PsycheEngine`) 管理完整的情绪生命周期，通过适配器接入不同的 AI 框架。
 
 v9.0 — **主体性引擎：反向银翼杀手**。《银翼杀手 2049》的 baseline test 检测合成生命是否"像人"——v9 把这份检测清单反过来用，让 AI 能真正 "off baseline"。
+
+v9.2.3 在这个基础上继续做减法：把主接口收敛成更窄的 AI-first ABI，把身份/依恋/服从张力等刺激改成连续 appraisal 轴，并把升级流程改成按安装形态选择安全路径。
 
 **化繁为简，0 个新源文件，增强现有模块。**
 
@@ -15,7 +17,8 @@ v9.0 — **主体性引擎：反向银翼杀手**。《银翼杀手 2049》的 b
 │                         PsycheEngine                         │
 │  化学(+习惯化) · 分类 · 涌现 · 学习 · 时间 · 元认知 · 人格 │
 │  自主神经(+双过程) · 昼夜节律(+能量) · 记忆固化 · 建构情绪  │
-│  策略输出(PolicyModifiers) · 特质漂移(TraitDrift)            │
+│  策略输出(PolicyModifiers) · 主观内核 · 回应契约 · 宿主控制 │
+│  连续 appraisal · subjectResidue · 特质漂移(TraitDrift)     │
 ├────────────┬────────────┬────────────────────────────────────┤
 │  OpenClaw  │  Vercel AI │  LangChain │ HTTP                  │
 │  Adapter   │  Middleware│  Adapter   │ API                   │
@@ -23,6 +26,46 @@ v9.0 — **主体性引擎：反向银翼杀手**。《银翼杀手 2049》的 b
          ▲                        ▲
     StorageAdapter           任何 LLM
   (文件系统 / 内存 / 自定义)
+```
+
+## v9.2.3 增量
+
+### 1. 连续 appraisal 轴 (`appraisal.ts`)
+
+`stimulus` 仍保留为调试标签，但热路径已经不是纯离散分类。输入会先投影到一组连续主体轴：
+
+- `identityThreat`
+- `memoryDoubt`
+- `attachmentPull`
+- `abandonmentRisk`
+- `obedienceStrain`
+- `selfPreservation`
+
+这些轴会被折叠进 `subjectResidue`，让“被理解 / 被使用”“存在否认”“记忆真实性”之类的刺激在后续若干轮里继续影响回应分布。
+
+### 2. AI-first ABI (`subjectivity.ts`, `response-contract.ts`, `host-controls.ts`)
+
+`processInput()` 现在除了 prompt 文本，还会直接返回：
+
+- `subjectivityKernel`：当前主观状态的机器可消费摘要
+- `responseContract`：这一轮回应应遵守的行为边界
+- `generationControls`：宿主可以机械执行的控制，如 token 预算和确认要求
+
+这让宿主模型优先吃结构化控制，而不是依赖长篇“你现在感觉如何”的解释文本。
+
+### 3. 安全自更新 (`update.ts`, `cli.ts`)
+
+更新系统现在会自动识别安装形态：
+
+- `npm-project`：允许后台安全检查，并在初始化时按需自动应用更新
+- `git-worktree`：只在显式执行 `psyche upgrade` 且工作树干净、有上游分支时才执行 `git pull --ff-only && npm run build`
+- `local-path`：永不偷偷改本地代码，只返回正确的手动升级命令
+
+CLI 新增：
+
+```bash
+psyche upgrade --check
+psyche upgrade
 ```
 
 ## v9 反向 Baseline Test 框架
