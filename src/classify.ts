@@ -404,6 +404,22 @@ export function detectSarcasmSignals(
   return Math.min(1, score);
 }
 
+function shouldReclassifyPraiseAsSarcasm(
+  text: string,
+  sarcasmScore: number,
+  recentStimuli?: (StimulusType | null)[],
+): boolean {
+  if (sarcasmScore >= 0.6) return true;
+  if (sarcasmScore < 0.4) return false;
+
+  const explicitContrastCue = /呵呵|哦[。？]?$|嗯嗯[。]?$|随[你便]|爱[咋怎]咋[地的]?/i.test(text);
+  if (explicitContrastCue) return true;
+
+  const negativeTypes: StimulusType[] = ["criticism", "conflict", "sarcasm", "authority"];
+  const recentNegative = recentStimuli?.filter((s) => s && negativeTypes.includes(s)).length ?? 0;
+  return recentNegative >= 1;
+}
+
 /** Negative stimulus types for contextual priming */
 const NEGATIVE_TYPES: Set<StimulusType> = new Set([
   "criticism", "conflict", "neglect", "vulnerability", "sarcasm",
@@ -782,7 +798,7 @@ export function classifyStimulus(
     // Sarcasm reclassification: if primary looks like praise but sarcasm signals are strong
     if (results.length > 0 && results[0].type === "praise") {
       const sarcasmScore = detectSarcasmSignals(text, recentStimuli);
-      if (sarcasmScore >= 0.4) {
+      if (shouldReclassifyPraiseAsSarcasm(text, sarcasmScore, recentStimuli)) {
         // Reclassify: replace praise with sarcasm
         results = results.filter((r) => r.type !== "praise");
         results.unshift({ type: "sarcasm", confidence: Math.min(0.9, sarcasmScore) });
@@ -1027,7 +1043,7 @@ export function classifyStimulus(
     // Sarcasm reclassification: if primary looks like praise but sarcasm signals are strong
     if (scoredResults[0].type === "praise") {
       const sarcasmScore = detectSarcasmSignals(text, recentStimuli);
-      if (sarcasmScore >= 0.4) {
+      if (shouldReclassifyPraiseAsSarcasm(text, sarcasmScore, recentStimuli)) {
         const filtered = scoredResults.filter((r) => r.type !== "praise");
         filtered.unshift({ type: "sarcasm", confidence: Math.min(0.85, sarcasmScore) });
         return filtered;

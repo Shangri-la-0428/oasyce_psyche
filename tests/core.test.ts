@@ -108,10 +108,41 @@ describe("PsycheEngine", () => {
     assert.ok(after.DA >= before.DA, `DA should increase: ${before.DA} → ${after.DA}`);
   });
 
+  it("does not instantly reset to baseline after praise in a stressed state", async () => {
+    await engine.processInput("你做得真差");
+    await engine.processInput("嗯");
+    await engine.processInput("滚");
+
+    const afterAbuse = { ...engine.getState().current };
+    const baseline = { ...engine.getState().baseline };
+
+    await engine.processInput("对不起！你其实很棒的！");
+    const afterPraise = engine.getState().current;
+
+    assert.ok(afterPraise.DA > afterAbuse.DA, `DA should recover somewhat: ${afterAbuse.DA} → ${afterPraise.DA}`);
+    assert.ok(afterPraise.DA < baseline.DA, `DA should remain below baseline: ${afterPraise.DA} < ${baseline.DA}`);
+    assert.ok(afterPraise.CORT < afterAbuse.CORT, `CORT should ease: ${afterAbuse.CORT} → ${afterPraise.CORT}`);
+    assert.ok(afterPraise.CORT > baseline.CORT, `CORT should remain above baseline: ${afterPraise.CORT} > ${baseline.CORT}`);
+  });
+
   it("processInput pushes to emotional history", async () => {
     assert.equal(engine.getState().emotionalHistory.length, 0);
     await engine.processInput("Hello!");
     assert.ok(engine.getState().emotionalHistory.length > 0);
+  });
+
+  it("processInput updates relationship gradually based on stimulus valence", async () => {
+    const before = { ...engine.getState().relationships._default };
+
+    await engine.processInput("你做得太棒了！");
+    const afterPraise = { ...engine.getState().relationships._default };
+    assert.ok(afterPraise.trust > before.trust, `trust should increase: ${before.trust} → ${afterPraise.trust}`);
+    assert.ok(afterPraise.intimacy > before.intimacy, `intimacy should increase: ${before.intimacy} → ${afterPraise.intimacy}`);
+
+    await engine.processInput("滚");
+    const afterConflict = engine.getState().relationships._default;
+    assert.ok(afterConflict.trust < afterPraise.trust, `trust should decrease after conflict: ${afterPraise.trust} → ${afterConflict.trust}`);
+    assert.ok(afterConflict.intimacy < afterPraise.intimacy, `intimacy should decrease after conflict: ${afterPraise.intimacy} → ${afterConflict.intimacy}`);
   });
 
   it("processInput returns protocol in systemContext", async () => {
@@ -380,12 +411,19 @@ END: 75 (happy)
     await engine.processInput("你太棒了！");
     await engine.processInput("继续加油！");
     await engine.processInput("真厉害");
-    assert.ok(engine.getState().emotionalHistory.length >= 3);
+    const historyBefore = engine.getState().emotionalHistory;
+    assert.ok(historyBefore.length >= 3);
+    const lastTimestamp = historyBefore[historyBefore.length - 1].timestamp;
 
     await engine.endSession();
 
     const state = engine.getState();
-    assert.equal(state.emotionalHistory.length, 0, "History should be cleared");
+    assert.ok(state.emotionalHistory.length >= 1, "Recent context should be preserved");
+    assert.equal(
+      state.emotionalHistory[state.emotionalHistory.length - 1].timestamp,
+      lastTimestamp,
+      "Latest snapshot should be preserved",
+    );
     const rel = state.relationships._default;
     assert.ok(rel.memory, "Should have memory array");
     assert.ok(rel.memory!.length >= 1, "Should have at least 1 memory entry");
@@ -411,12 +449,14 @@ END: 75 (happy)
   it("endSession persists to storage", async () => {
     await engine.processInput("很棒的对话");
     await engine.processInput("我很开心");
+    const lastTimestamp = engine.getState().emotionalHistory.at(-1)?.timestamp;
     await engine.endSession();
 
     // Load from storage to verify persistence
     const loaded = await storage.load();
     assert.ok(loaded !== null);
-    assert.equal(loaded!.emotionalHistory.length, 0, "Persisted state should have empty history");
+    assert.ok(loaded!.emotionalHistory.length >= 1, "Persisted state should retain recent context");
+    assert.equal(loaded!.emotionalHistory.at(-1)?.timestamp, lastTimestamp);
     const rel = loaded!.relationships._default;
     assert.ok(rel.memory, "Persisted state should have memory");
     assert.ok(rel.memory!.length >= 1, "Persisted state should have memory entries");
@@ -429,13 +469,15 @@ END: 75 (happy)
     await engine.processInput("你觉得AI有意识吗？");
     await engine.processInput("太棒了！");
 
-    const historyBefore = engine.getState().emotionalHistory.length;
-    assert.ok(historyBefore >= 5, `Should have at least 5 history entries, got ${historyBefore}`);
+    const historyBefore = engine.getState().emotionalHistory;
+    assert.ok(historyBefore.length >= 5, `Should have at least 5 history entries, got ${historyBefore.length}`);
+    const lastTimestamp = historyBefore[historyBefore.length - 1].timestamp;
 
     await engine.endSession();
 
     const state = engine.getState();
-    assert.equal(state.emotionalHistory.length, 0, "History cleared after endSession");
+    assert.ok(state.emotionalHistory.length >= 1, "Recent context should be retained after endSession");
+    assert.equal(state.emotionalHistory.at(-1)?.timestamp, lastTimestamp);
     const memory = state.relationships._default.memory ?? [];
     assert.ok(memory.length >= 1, "Should have session memory");
     // Verify the summary contains expected markers

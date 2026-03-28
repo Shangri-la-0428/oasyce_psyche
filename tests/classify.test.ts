@@ -444,6 +444,12 @@ describe("classifyStimulus — sarcasm reclassification", () => {
     assert.ok(result.length > 0);
     assert.equal(result[0].type, "praise", `expected praise, got ${result[0].type}`);
   });
+
+  it("keeps emphatic short praise as praise without negative context", () => {
+    const result = classifyStimulus("你太厉害了！做得太棒了！");
+    assert.ok(result.length > 0);
+    assert.equal(result[0].type, "praise", `expected praise, got ${result[0].type}`);
+  });
 });
 
 // ── Ambiguous word handling ─────────────────────────────────

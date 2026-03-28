@@ -531,11 +531,12 @@ describe("compressSession", () => {
     assert.ok(summary.includes("倾向["), `Should contain tendency, got: ${summary}`);
   });
 
-  it("clears emotionalHistory to empty array", () => {
+  it("preserves latest snapshot for cross-session continuity", () => {
     const history = makeHistory(3);
     const state = makeMinimalState({ emotionalHistory: history });
     const result = compressSession(state);
-    assert.equal(result.emotionalHistory.length, 0);
+    assert.equal(result.emotionalHistory.length, 1);
+    assert.equal(result.emotionalHistory[0].timestamp, history[history.length - 1].timestamp);
   });
 
   it("respects MAX_RELATIONSHIP_MEMORY limit", () => {

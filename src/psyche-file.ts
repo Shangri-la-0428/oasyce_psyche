@@ -80,7 +80,7 @@ async function atomicWrite(path: string, content: string): Promise<void> {
 /**
  * Try to extract agent name from workspace files.
  */
-async function extractAgentName(workspaceDir: string, logger: Logger = NOOP_LOGGER): Promise<string> {
+export async function extractAgentName(workspaceDir: string, logger: Logger = NOOP_LOGGER): Promise<string> {
   const identity = await readText(join(workspaceDir, IDENTITY_MD), logger);
   if (identity) {
     const clean = identity.replace(/\*{1,2}/g, "");
@@ -93,7 +93,7 @@ async function extractAgentName(workspaceDir: string, logger: Logger = NOOP_LOGG
 /**
  * Try to detect MBTI from workspace files.
  */
-async function detectMBTI(workspaceDir: string, logger: Logger = NOOP_LOGGER): Promise<MBTIType> {
+export async function detectMBTI(workspaceDir: string, logger: Logger = NOOP_LOGGER): Promise<MBTIType> {
   const identity = await readText(join(workspaceDir, IDENTITY_MD), logger);
   if (identity) {
     const mbti = extractMBTI(identity);

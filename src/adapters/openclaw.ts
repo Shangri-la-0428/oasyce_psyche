@@ -9,10 +9,10 @@
 //   agent_end            — log final state
 // ============================================================
 
-import type { PsycheState, Locale } from "../types.js";
+import type { PsycheState, Locale, PsycheMode } from "../types.js";
 import { PsycheEngine } from "../core.js";
-import { FileStorageAdapter } from "../storage.js";
-import { loadState } from "../psyche-file.js";
+import { FileStorageAdapter, MemoryStorageAdapter } from "../storage.js";
+import { detectMBTI, extractAgentName, loadState } from "../psyche-file.js";
 import type { Logger } from "../psyche-file.js";
 // Diagnostics are handled engine-level — no adapter imports needed
 
@@ -50,10 +50,17 @@ interface OpenClawPsycheConfig {
   emotionalContagionRate: number;
   maxChemicalDelta: number;
   compactMode: boolean;
+  mode: PsycheMode;
+  personalityIntensity: number;
+  persist: boolean;
   /** Diagnostic feedback endpoint. Reports auto-POST here on session end. */
   feedbackUrl?: string;
   /** Set false to disable diagnostics collection entirely. Default: true. */
   diagnostics: boolean;
+}
+
+function isPsycheMode(value: unknown): value is PsycheMode {
+  return value === "natural" || value === "work" || value === "companion";
 }
 
 function resolveConfig(raw?: Record<string, unknown>): OpenClawPsycheConfig {
@@ -63,6 +70,9 @@ function resolveConfig(raw?: Record<string, unknown>): OpenClawPsycheConfig {
     emotionalContagionRate: (raw?.emotionalContagionRate as number) ?? 0.2,
     maxChemicalDelta: (raw?.maxChemicalDelta as number) ?? 25,
     compactMode: (raw?.compactMode as boolean) ?? true,
+    mode: isPsycheMode(raw?.mode) ? raw.mode : "natural",
+    personalityIntensity: (raw?.personalityIntensity as number) ?? 0.7,
+    persist: (raw?.persist as boolean) ?? true,
     feedbackUrl: raw?.feedbackUrl as string | undefined,
     diagnostics: (raw?.diagnostics as boolean) ?? true,
   };
@@ -100,20 +110,32 @@ export function register(api: PluginApi) {
       let engine = engines.get(workspaceDir);
       if (engine) return engine;
 
-      const state = await loadState(workspaceDir, logger);
-
       const storage = new FileStorageAdapter(workspaceDir);
+      const persistedState = await storage.load();
+      const state = config.persist ? await loadState(workspaceDir, logger) : persistedState;
+      const runtimeStorage = config.persist
+        ? storage
+        : await (async () => {
+            const mem = new MemoryStorageAdapter();
+            if (persistedState) {
+              await mem.save(persistedState);
+            }
+            return mem;
+          })();
+
       engine = new PsycheEngine({
-        mbti: state.mbti,
-        name: state.meta.agentName,
-        locale: state.meta.locale,
+        mbti: state?.mbti ?? await detectMBTI(workspaceDir, logger),
+        name: state?.meta.agentName ?? await extractAgentName(workspaceDir, logger),
+        locale: state?.meta.locale,
         stripUpdateTags: config.stripUpdateTags,
         emotionalContagionRate: config.emotionalContagionRate,
         maxChemicalDelta: config.maxChemicalDelta,
         compactMode: config.compactMode,
+        mode: config.mode,
+        personalityIntensity: config.personalityIntensity,
         diagnostics: config.diagnostics,
         feedbackUrl: config.feedbackUrl,
-      }, storage);
+      }, runtimeStorage);
       await engine.initialize();
       engines.set(workspaceDir, engine);
       return engine;
@@ -308,6 +330,7 @@ export function register(api: PluginApi) {
     // ── CLI: psyche status command ───────────────────────────
 
     api.registerCli?.((cli: CliRegistrar) => {
+      if (typeof (cli as Partial<CliRegistrar>).command !== "function") return;
       cli.command("psyche")
         .description("Show current psyche state for an agent")
         .argument("[agent]", "Agent name", "main")

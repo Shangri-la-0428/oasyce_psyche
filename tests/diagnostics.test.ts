@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   runHealthCheck,
   DiagnosticCollector,
@@ -16,6 +17,10 @@ import {
   DEFAULT_METACOGNITIVE_STATE,
   DEFAULT_PERSONHOOD_STATE,
 } from "../src/types.js";
+
+const PACKAGE_VERSION = JSON.parse(
+  readFileSync(new URL("../../package.json", import.meta.url), "utf-8"),
+).version as string;
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -267,9 +272,9 @@ describe("generateReport", () => {
       meta: { agentName: "A", createdAt: "", totalInteractions: 20, locale: "zh" },
     });
     const metrics = makeMetrics({ inputCount: 10, classifiedCount: 0 });
-    const report = generateReport(state, metrics, "9.1.2");
+    const report = generateReport(state, metrics, PACKAGE_VERSION);
 
-    assert.equal(report.version, "9.1.2");
+    assert.equal(report.version, PACKAGE_VERSION);
     assert.equal(report.agent, "A");
     // Should have CHEM_FROZEN (from health check) + SESSION_NO_CLASSIFY (from session)
     const sessionIssue = report.issues.find(i => i.id === "SESSION_NO_CLASSIFY");
@@ -284,7 +289,7 @@ describe("generateReport", () => {
         { timestamp: "", phase: "processInput", message: "err2" },
       ],
     });
-    const report = generateReport(state, metrics, "9.1.2");
+    const report = generateReport(state, metrics, PACKAGE_VERSION);
     const errIssue = report.issues.find(i => i.id === "SESSION_ERRORS");
     assert.ok(errIssue);
     assert.equal(errIssue!.severity, "warning");
@@ -292,7 +297,7 @@ describe("generateReport", () => {
 
   it("includes state snapshot", () => {
     const state = makeState();
-    const report = generateReport(state, makeMetrics(), "9.1.2");
+    const report = generateReport(state, makeMetrics(), PACKAGE_VERSION);
     assert.equal(report.stateSnapshot.chemistry.DA, 50);
     assert.equal(report.stateSnapshot.agreementStreak, 0);
   });
@@ -303,7 +308,7 @@ describe("generateReport", () => {
 describe("formatReport", () => {
   it("produces readable text output", () => {
     const state = makeState();
-    const report = generateReport(state, makeMetrics(), "9.1.2");
+    const report = generateReport(state, makeMetrics(), PACKAGE_VERSION);
     const text = formatReport(report);
 
     assert.ok(text.includes("psyche-ai diagnostic report"));
@@ -314,7 +319,7 @@ describe("formatReport", () => {
 
   it("shows 'No issues' for healthy state", () => {
     const state = makeState({ meta: { agentName: "A", createdAt: "", totalInteractions: 3, locale: "zh" } });
-    const report = generateReport(state, makeMetrics(), "9.1.2");
+    const report = generateReport(state, makeMetrics(), PACKAGE_VERSION);
     const text = formatReport(report);
     assert.ok(text.includes("No issues detected"));
   });
@@ -328,7 +333,7 @@ describe("toGitHubIssueBody", () => {
       meta: { agentName: "A", createdAt: "", totalInteractions: 20, locale: "zh" },
     });
     const metrics = makeMetrics({ inputCount: 10, classifiedCount: 0 });
-    const report = generateReport(state, metrics, "9.1.2");
+    const report = generateReport(state, metrics, PACKAGE_VERSION);
     const md = toGitHubIssueBody(report);
 
     assert.ok(md.includes("## Auto-Diagnostic Report"));
@@ -341,7 +346,7 @@ describe("toGitHubIssueBody", () => {
 
   it("shows 'No issues detected' for healthy state", () => {
     const state = makeState({ meta: { agentName: "A", createdAt: "", totalInteractions: 3, locale: "zh" } });
-    const report = generateReport(state, makeMetrics(), "9.1.2");
+    const report = generateReport(state, makeMetrics(), PACKAGE_VERSION);
     const md = toGitHubIssueBody(report);
     assert.ok(md.includes("No issues detected"));
   });
@@ -352,12 +357,12 @@ describe("toGitHubIssueBody", () => {
 describe("formatLogEntry", () => {
   it("produces valid JSONL", () => {
     const state = makeState();
-    const report = generateReport(state, makeMetrics(), "9.1.2");
+    const report = generateReport(state, makeMetrics(), PACKAGE_VERSION);
     const line = formatLogEntry(report);
 
     const parsed = JSON.parse(line);
     assert.ok(parsed.t, "should have timestamp");
-    assert.equal(parsed.v, "9.1.2");
+    assert.equal(parsed.v, PACKAGE_VERSION);
     assert.equal(parsed.agent, "TestAgent");
     assert.equal(parsed.inputs, 10);
     assert.ok(Array.isArray(parsed.issues));
@@ -367,7 +372,7 @@ describe("formatLogEntry", () => {
     const state = makeState({
       current: { ...BASELINE, DA: 105 }, // will trigger CHEM_OOB critical
     });
-    const report = generateReport(state, makeMetrics(), "9.1.2");
+    const report = generateReport(state, makeMetrics(), PACKAGE_VERSION);
     const parsed = JSON.parse(formatLogEntry(report));
     const criticals = parsed.issues.filter((i: string) => i.startsWith("c:"));
     assert.ok(criticals.length > 0, "should have critical issues with 'c:' prefix");

@@ -15,16 +15,34 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 const PACKAGE_NAME = "psyche-ai";
+const FALLBACK_VERSION = "0.0.0";
 
-// Read version from package.json at module load so it stays in sync automatically
-let CURRENT_VERSION = "9.0.0"; // fallback
-try {
+async function resolvePackageVersion(): Promise<string> {
   const __dirname = dirname(fileURLToPath(import.meta.url));
-  const pkg = JSON.parse(await readFile(join(__dirname, "..", "package.json"), "utf-8"));
-  CURRENT_VERSION = pkg.version ?? CURRENT_VERSION;
-} catch {
-  // Silent — use fallback
+  const candidates = [
+    join(__dirname, "..", "package.json"),
+    join(__dirname, "..", "..", "package.json"),
+  ];
+
+  for (const path of candidates) {
+    try {
+      const pkg = JSON.parse(await readFile(path, "utf-8")) as { version?: string };
+      if (pkg.version) return pkg.version;
+    } catch {
+      // Try next candidate.
+    }
+  }
+
+  return process.env.npm_package_version ?? FALLBACK_VERSION;
 }
+
+let packageVersionPromise: Promise<string> | null = null;
+
+export function getPackageVersion(): Promise<string> {
+  packageVersionPromise ??= resolvePackageVersion();
+  return packageVersionPromise;
+}
+
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const CACHE_DIR = join(homedir(), ".psyche-ai");
 const CACHE_FILE = join(CACHE_DIR, "update-check.json");
@@ -105,13 +123,15 @@ async function tryAutoUpdate(latestVersion: string): Promise<boolean> {
  * - Never throws
  */
 export async function checkForUpdate(): Promise<void> {
+  const currentVersion = await getPackageVersion();
+
   // Rate limit: check at most once per hour
   const cache = await readCache();
   if (cache && Date.now() - cache.lastCheck < CHECK_INTERVAL_MS) {
     // Still within cooldown — but notify if we already know about a newer version
-    if (cache.latestVersion && compareSemver(CURRENT_VERSION, cache.latestVersion) < 0) {
+    if (cache.latestVersion && compareSemver(currentVersion, cache.latestVersion) < 0) {
       console.log(
-        `[psyche-ai] v${cache.latestVersion} available (current: v${CURRENT_VERSION}). Run: npm update ${PACKAGE_NAME}`,
+        `[psyche-ai] v${cache.latestVersion} available (current: v${currentVersion}). Run: npm update ${PACKAGE_NAME}`,
       );
     }
     return;
@@ -120,12 +140,12 @@ export async function checkForUpdate(): Promise<void> {
   const latest = await fetchLatestVersion();
   await writeCache({ lastCheck: Date.now(), latestVersion: latest });
 
-  if (!latest || compareSemver(CURRENT_VERSION, latest) >= 0) {
+  if (!latest || compareSemver(currentVersion, latest) >= 0) {
     return; // Up to date or couldn't check
   }
 
   // Newer version available — try auto-update
-  console.log(`[psyche-ai] New version v${latest} available (current: v${CURRENT_VERSION}), updating...`);
+  console.log(`[psyche-ai] New version v${latest} available (current: v${currentVersion}), updating...`);
   const updated = await tryAutoUpdate(latest);
 
   if (!updated) {

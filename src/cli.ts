@@ -37,6 +37,7 @@ import { t } from "./i18n.js";
 import type { MBTIType, PsycheState, Locale, PsycheMode, PersonalityTraits } from "./types.js";
 import { CHEMICAL_KEYS, CHEMICAL_NAMES_ZH, DRIVE_KEYS, DRIVE_NAMES_ZH } from "./types.js";
 import { isMBTIType, isChemicalKey, isLocale } from "./guards.js";
+import { getPackageVersion } from "./update.js";
 
 // ── Logger ───────────────────────────────────────────────────
 
@@ -455,7 +456,7 @@ async function cmdDiagnose(dir: string, github: boolean): Promise<void> {
     lastActivityAt: new Date().toISOString(),
   };
 
-  const report = generateReport(state, metrics, "9.1.2");
+  const report = generateReport(state, metrics, await getPackageVersion());
 
   if (github) {
     console.log(toGitHubIssueBody(report));

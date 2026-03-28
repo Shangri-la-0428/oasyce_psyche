@@ -30,7 +30,7 @@ import {
   decayDrives, feedDrives, detectExistentialThreat,
   computeEffectiveBaseline, computeEffectiveSensitivity,
 } from "./drives.js";
-import { checkForUpdate } from "./update.js";
+import { checkForUpdate, getPackageVersion } from "./update.js";
 import { DiagnosticCollector, generateReport, formatLogEntry, runHealthCheck, submitFeedback } from "./diagnostics.js";
 import type { DiagnosticReport, SessionMetrics } from "./diagnostics.js";
 import {
@@ -129,6 +129,91 @@ interface PendingPrediction {
 }
 
 const NOOP_LOGGER: Logger = { info: () => {}, warn: () => {}, debug: () => {} };
+const REPAIRING_STIMULI = new Set<StimulusType>(["praise", "validation", "intimacy"]);
+const RELATIONSHIP_DELTAS: Partial<Record<StimulusType, { trust: number; intimacy: number }>> = {
+  praise: { trust: 1.5, intimacy: 0.8 },
+  validation: { trust: 1.8, intimacy: 0.8 },
+  intimacy: { trust: 1.2, intimacy: 2.0 },
+  vulnerability: { trust: 0.8, intimacy: 1.5 },
+  humor: { trust: 0.6, intimacy: 0.5 },
+  casual: { trust: 0.2, intimacy: 0.1 },
+  intellectual: { trust: 0.5, intimacy: 0.1 },
+  surprise: { trust: 0.2, intimacy: 0 },
+  boredom: { trust: -0.4, intimacy: -0.3 },
+  criticism: { trust: -1.5, intimacy: -0.8 },
+  sarcasm: { trust: -1.8, intimacy: -1.2 },
+  authority: { trust: -1.2, intimacy: -0.9 },
+  neglect: { trust: -1.6, intimacy: -1.4 },
+  conflict: { trust: -2.5, intimacy: -2.0 },
+};
+
+function applyRepairLag(
+  previous: ChemicalState,
+  next: ChemicalState,
+  baseline: ChemicalState,
+  stimulus: StimulusType,
+): ChemicalState {
+  if (!REPAIRING_STIMULI.has(stimulus)) return next;
+
+  const stressLoad = Math.max(0, previous.CORT - baseline.CORT);
+  if (stressLoad < 15) return next;
+
+  // High stress slows emotional recovery so apology/praise doesn't instantly
+  // snap chemistry back to baseline.
+  const repairFactor = Math.max(0.35, 1 - stressLoad / 50);
+  const adjusted = { ...next };
+
+  for (const key of ["DA", "HT", "OT", "END"] as const) {
+    const delta = next[key] - previous[key];
+    if (delta > 0) {
+      adjusted[key] = clamp(previous[key] + delta * repairFactor);
+    }
+  }
+
+  const cortDelta = next.CORT - previous.CORT;
+  if (cortDelta < 0) {
+    adjusted.CORT = clamp(previous.CORT + cortDelta * repairFactor);
+  }
+
+  return adjusted;
+}
+
+function phaseFromRelationship(trust: number, intimacy: number): PsycheState["relationships"][string]["phase"] {
+  const avg = (trust + intimacy) / 2;
+  if (avg >= 80) return "deep";
+  if (avg >= 60) return "close";
+  if (avg >= 40) return "familiar";
+  if (avg >= 20) return "acquaintance";
+  return "stranger";
+}
+
+function applyRelationshipDrift(
+  state: PsycheState,
+  stimulus: StimulusType,
+  userId?: string,
+): PsycheState {
+  const delta = RELATIONSHIP_DELTAS[stimulus];
+  if (!delta) return state;
+
+  const key = userId ?? "_default";
+  const currentRel = state.relationships[key] ?? { ...DEFAULT_RELATIONSHIP };
+  const trust = clamp(currentRel.trust + delta.trust);
+  const intimacy = clamp(currentRel.intimacy + delta.intimacy);
+  const updatedRel = {
+    ...currentRel,
+    trust,
+    intimacy,
+    phase: phaseFromRelationship(trust, intimacy),
+  };
+
+  return {
+    ...state,
+    relationships: {
+      ...state.relationships,
+      [key]: updatedRel,
+    },
+  };
+}
 
 // ── PsycheEngine ─────────────────────────────────────────────
 
@@ -188,9 +273,6 @@ export class PsycheEngine {
 
     // Diagnostics: on by default, opt-out with diagnostics: false
     this.diagnosticCollector = config.diagnostics === false ? null : new DiagnosticCollector();
-    if (this.diagnosticCollector) {
-      this.diagnosticCollector.onWarning = (msg) => console.warn(`\x1b[33m[Psyche]\x1b[0m ${msg}`);
-    }
     this.feedbackUrl = config.feedbackUrl ?? "https://psyche-feedback.wutc.workers.dev";
   }
 
@@ -376,6 +458,7 @@ export class PsycheEngine {
       let current = state.current;
       if (primary && primary.confidence >= 0.5) {
         appliedStimulus = primary.type;
+        const preStimulus = current;
         // Feed drives from stimulus, then apply stimulus with drive-modified sensitivity
         drives = feedDrives(drives, primary.type);
         const effectiveSensitivity = computeEffectiveSensitivity(
@@ -397,9 +480,13 @@ export class PsycheEngine {
           NOOP_LOGGER,
           recentSameCount,
         );
+        current = applyRepairLag(preStimulus, current, state.baseline, primary.type);
       }
 
       state = { ...state, drives, current };
+      if (appliedStimulus) {
+        state = applyRelationshipDrift(state, appliedStimulus, opts?.userId);
+      }
     }
 
     // v9: Deplete energy budgets from this interaction turn
@@ -876,7 +963,7 @@ export class PsycheEngine {
 
   /**
    * End the current session: compress emotionalHistory into a rich summary
-   * stored in relationship.memory[], then clear the history.
+   * stored in relationship.memory[], then preserve only core/recent context.
    * Auto-generates diagnostic report and persists to log.
    *
    * @returns DiagnosticReport if diagnostics are enabled, null otherwise
@@ -888,7 +975,7 @@ export class PsycheEngine {
     let report: DiagnosticReport | null = null;
     if (this.diagnosticCollector) {
       const metrics = this.diagnosticCollector.getMetrics();
-      report = generateReport(state, metrics, "9.1.2");
+      report = generateReport(state, metrics, await getPackageVersion());
       this.lastReport = report;
 
       // Persist to JSONL log via storage adapter
