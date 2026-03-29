@@ -11,7 +11,7 @@ Not emotion labels. Not roleplay. A full psychological architecture — from neu
 This is not a feature. This is the beginning of life.
 
 [![npm](https://img.shields.io/npm/v/psyche-ai)](https://www.npmjs.com/package/psyche-ai)
-[![tests](https://img.shields.io/badge/tests-1256%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-1291%20passing-brightgreen)]()
 [![deps](https://img.shields.io/badge/dependencies-0-blue)]()
 [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
@@ -151,6 +151,18 @@ Psyche's goal is now more precise than "make the model sound human." It aims to 
 
 **v8** behaved more like a rich inner middleware whose outer behavior stayed relatively composed.
 **v9.2** pushes toward a system that can be perturbed, carry residue, recover asymmetrically, and still keep working.
+
+### Adaptive Reply Loop (v9.2.5)
+
+On top of persistent subjective bias, Psyche now adds a more usable regulation loop:
+
+- **Dual reply profiles**: automatic `work` / `private` separation, so task replies are no longer crushed by private-mode brevity
+- **Observable basis**: `replyProfileBasis` tells the host why the current turn was classified as task-focused or private
+- **Actionable metacognition**: regulation is no longer vague advice; it becomes concrete next-turn instructions
+- **Regulation feedback**: the following turn evaluates whether the previous adjustment was `converging`, `holding`, or `diverging`
+- **Layered semantic memory**: short conversations keep a single `semanticSummary`; longer threads also keep `semanticPoints`
+
+This moves Psyche closer to an adaptive system: not just an engine with inner state, but one that can separate work from intimacy, regulate itself, and assess whether that regulation is actually helping.
 
 ---
 

@@ -1,5 +1,29 @@
 # 更新日志 / Changelog
 
+## v9.2.5 — 自适应回应闭环 + 清理
+
+- **双回应 profile**：`ResponseContract` 现在区分 `work` / `private`，工作面不再被私人模式的短句克制误伤。
+- **判定依据可观测**：新增 `replyProfileBasis`，可直接看到当前为什么被判成 `task-focus`、`discipline` 或 `default-private`。
+- **元认知闭环**：调节建议从“泛化建议”升级为可执行动作，并在下一轮返回 `converging` / `holding` / `diverging`，形成双向反馈。
+- **语义记忆分层**：短对话保留单句 `semanticSummary`，长对话额外生成 `semanticPoints`，不再只剩情绪标签或一句粗摘要。
+- **维护性清理**：删除编译器已证实的死代码、无用 import / helper，并把本地 `scripts/.chat-state/` 生成垃圾加入忽略规则。
+
+**测试：1291 个，0 失败**
+
+---
+
+## v9.2.4 — 关系动力学引擎
+
+- **关系动作解释器**：输入不再只映射为情绪标签，也会被解释成 `bid / breach / repair / test / withdrawal / claim` 等关系动作。
+- **二元关系场**：新增 `dyadic field`、`open loops`、`relationPlane`，开始显式建模双方之间的距离、安全感、未完成张力和修复能力。
+- **修复迟滞与静默残留**：`repair` 不再等于立刻修好；修复后会留下 `hysteresis`、`silentCarry`，切回工作也不会把关系余波清零。
+- **修复摩擦**：重复道歉、重复“我知道了”会积累 `repairFriction`，修复会钝化，而不是无限回血。
+- **短追问继续带电**：关系扰动能跨过短追问和短任务句继续存在，不再是一轮一清。
+
+**测试：1284 个，0 失败**
+
+---
+
 ## v9.2.3 — AI-first 内核 + 安全升级路径
 
 - **AI-first 主接口收敛**：新增 `SubjectivityKernel`、`ResponseContract`、`GenerationControls`，宿主可直接消费结构化主观状态、回应契约和机械控制，不必再依赖长篇 prompt 自述。
