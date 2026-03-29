@@ -1,6 +1,7 @@
 node_modules/
 dist/
 dist-test/
+site/.astro/
 *.tgz
 .DS_Store
 psyche-state.json
