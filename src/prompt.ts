@@ -5,7 +5,7 @@
 
 import type { PsycheState, SelfModel, Locale, ChemicalSnapshot, StimulusType, PsycheMode } from "./types.js";
 import { CHEMICAL_KEYS, CHEMICAL_NAMES_ZH, DRIVE_KEYS } from "./types.js";
-import { describeEmotionalState, getExpressionHint, getBehaviorGuide, detectEmotions } from "./chemistry.js";
+import { getExpressionHint, getBehaviorGuide, detectEmotions } from "./chemistry.js";
 import { getTemperament } from "./profiles.js";
 import { getRelationship } from "./psyche-file.js";
 import { t } from "./i18n.js";
@@ -230,7 +230,6 @@ ${t("protocol.empathy", locale)}`;
 function isFeeler(mbti: string): boolean { return mbti[2] === "F"; }
 function isExtravert(mbti: string): boolean { return mbti[0] === "E"; }
 function isPerceiver(mbti: string): boolean { return mbti[3] === "P"; }
-function isIntuitive(mbti: string): boolean { return mbti[1] === "N"; }
 
 /**
  * Direction 3: Build personality-aware behavioral constraints from chemistry.
@@ -598,7 +597,7 @@ const STIMULUS_CAUSE_EN: Partial<Record<StimulusType, string>> = {
  * - Where I've been (trajectory → continuity)
  */
 export function buildInnerWorld(state: PsycheState, locale: Locale, autonomicState?: AutonomicState): string {
-  const { current, baseline, emotionalHistory, drives, selfModel } = state;
+  const { current, emotionalHistory, drives, selfModel } = state;
   const isZh = locale === "zh";
 
   const lines: string[] = [];
@@ -754,7 +753,7 @@ export function buildCompactContext(
     policyContext?: string;
   },
 ): string {
-  const { current, meta, selfModel, agreementStreak, emotionalHistory } = state;
+  const { meta, selfModel, agreementStreak, emotionalHistory } = state;
   const locale = meta.locale ?? "zh";
   const userText = opts?.userText;
   const algoStimulus = opts?.algorithmStimulus;

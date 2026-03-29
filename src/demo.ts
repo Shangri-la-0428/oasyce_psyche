@@ -158,7 +158,7 @@ function printLine(char = "─", width = 60): void {
 function printChemistry(
   prev: ChemicalState,
   curr: ChemicalState,
-  locale: string,
+  _locale: string,
 ): void {
   for (const key of CHEMICAL_KEYS) {
     const p = Math.round(prev[key]);
@@ -270,7 +270,6 @@ export async function runDemo(opts?: {
 
     // Emergent mood
     const mood = describeMood(currState.current, displayLocale);
-    const emotions = detectEmotions(currState.current);
     process.stdout.write(
       `\n  ${c(C.dim, "mood:")} ${c(C.bold, mood)}\n`,
     );

@@ -12,7 +12,6 @@
 // ============================================================
 
 import type { ChemicalState, StimulusType } from "./types.js";
-import { CHEMICAL_KEYS } from "./types.js";
 
 // ── Types ────────────────────────────────────────────────────
 

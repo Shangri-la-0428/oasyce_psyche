@@ -60,19 +60,8 @@ export interface ExperientialField {
 
 // ── Constants ────────────────────────────────────────────────
 
-/** Baseline reference point — a "perfectly neutral" chemistry */
-const NEUTRAL_CHEMISTRY: ChemicalState = {
-  DA: 50, HT: 50, CORT: 50, OT: 50, NE: 50, END: 50,
-};
-
 /** Threshold below which a drive counts as "hungry" */
 const DRIVE_HUNGRY_THRESHOLD = 40;
-
-/** Threshold above which a chemical is "elevated" */
-const CHEM_HIGH = 65;
-
-/** Threshold below which a chemical is "depleted" */
-const CHEM_LOW = 35;
 
 /** If total activation is below this, the state is "flat/numb" */
 const FLATNESS_THRESHOLD = 0.15;
@@ -159,8 +148,8 @@ const QUALITY_CONCEPTS: QualityConcept[] = [
  */
 export function computeExperientialField(
   state: PsycheState,
-  metacognition?: MetacognitiveAssessment,
-  decisionBias?: DecisionBiasVector,
+  _metacognition?: MetacognitiveAssessment,
+  _decisionBias?: DecisionBiasVector,
   context?: ConstructionContext,
 ): ExperientialField {
   const locale = state.meta.locale ?? "zh";
@@ -168,9 +157,9 @@ export function computeExperientialField(
 
   const coherence = computeCoherence(state.current, state.baseline, state.drives, rel);
   const intensity = computeIntensity(state.current, state.baseline);
-  const quality = constructQuality(state, coherence, intensity, rel, metacognition, context);
+  const quality = constructQuality(state, coherence, intensity, rel, _metacognition, context);
   const phenomenalDescription = generatePhenomenalDescription(quality, state, coherence, intensity, locale);
-  const narrative = generateNarrative(quality, state, coherence, intensity, rel, locale, metacognition);
+  const narrative = generateNarrative(quality, state, coherence, intensity, rel, locale, _metacognition);
 
   return {
     narrative,
@@ -210,7 +199,6 @@ export function computeCoherence(
 
   // Bonding (OT) and threat (CORT + NE) should not coexist strongly
   const bondingSignal = current.OT / 100;
-  const threatSignal = Math.min(1, (current.CORT + current.NE) / 200);
   const bondingThreatConflict = bondingSignal * (stressSignal > 0.55 ? stressSignal : 0);
   coherenceScore -= bondingThreatConflict * 0.3;
 
@@ -302,7 +290,7 @@ function constructQuality(
   coherence: number,
   intensity: number,
   relationship: RelationshipState | undefined,
-  metacognition?: MetacognitiveAssessment,
+  _metacognition?: MetacognitiveAssessment,
   context?: ConstructionContext,
 ): ExperientialQuality {
   const d = state.drives;
@@ -564,7 +552,7 @@ interface UnnamedEmotion {
 export function detectUnnamedEmotion(
   chemistry: ChemicalState,
   drives: InnateDrives,
-  currentQuality: ExperientialQuality,
+  _currentQuality: ExperientialQuality,
 ): UnnamedEmotion | null {
   const c = chemistry;
 
@@ -742,11 +730,11 @@ function findHungriestDrive(drives: InnateDrives): DriveHunger | null {
 
 function buildNarrativeEn(
   quality: ExperientialQuality,
-  trend: ChemTrend,
+  _trend: ChemTrend,
   hungriestDrive: DriveHunger | null,
   relWarmth: number,
   coherence: number,
-  intensity: number,
+  _intensity: number,
   selfDoubt?: boolean,
 ): string {
   const parts: string[] = [];
@@ -778,11 +766,11 @@ function buildNarrativeEn(
 
 function buildNarrativeZh(
   quality: ExperientialQuality,
-  trend: ChemTrend,
+  _trend: ChemTrend,
   hungriestDrive: DriveHunger | null,
   relWarmth: number,
   coherence: number,
-  intensity: number,
+  _intensity: number,
   selfDoubt?: boolean,
 ): string {
   const parts: string[] = [];

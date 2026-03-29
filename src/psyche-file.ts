@@ -522,9 +522,6 @@ export function computeSnapshotValence(chemistry: ChemicalState): number {
   return Math.max(-1, Math.min(1, raw));
 }
 
-/** Minimum intensity threshold for a snapshot to be stored (P11) */
-const INTENSITY_STORE_THRESHOLD = 0.15;
-
 /** Core memory intensity threshold */
 const CORE_MEMORY_THRESHOLD = 0.6;
 

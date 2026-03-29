@@ -18,7 +18,7 @@ import type {
 } from "./types.js";
 import {
   CHEMICAL_KEYS, DRIVE_KEYS,
-  MAX_LEARNED_VECTORS, MAX_PREDICTION_HISTORY, MAX_OUTCOME_HISTORY,
+  MAX_LEARNED_VECTORS, MAX_PREDICTION_HISTORY,
 } from "./types.js";
 import { STIMULUS_VECTORS, clamp } from "./chemistry.js";
 

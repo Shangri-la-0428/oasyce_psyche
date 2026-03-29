@@ -100,7 +100,7 @@ export function computeAutonomicState(
   chemistry: ChemicalState,
   drives: InnateDrives,
 ): AutonomicState {
-  const { CORT, NE, DA, HT, OT } = chemistry;
+  const { CORT, NE, DA } = chemistry;
   const { survival, safety, connection } = drives;
 
   // Count drives that are critically low (< 20)
@@ -192,7 +192,7 @@ export function computeProcessingDepth(
   baseline: ChemicalState,
   energyBudgets?: EnergyBudgets,
 ): { depth: number; skippedStages: string[] } {
-  const { DA, HT, CORT, OT, NE, END } = chemistry;
+  const { CORT } = chemistry;
 
   // Chemical deviation from baseline (0-1)
   let totalDeviation = 0;

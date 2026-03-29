@@ -31,7 +31,7 @@ import {
   computeEffectiveBaseline, computeEffectiveSensitivity,
 } from "./drives.js";
 import { checkForUpdate, getPackageVersion } from "./update.js";
-import { DiagnosticCollector, generateReport, formatLogEntry, runHealthCheck, submitFeedback } from "./diagnostics.js";
+import { DiagnosticCollector, generateReport, formatLogEntry, submitFeedback } from "./diagnostics.js";
 import type { DiagnosticReport, SessionMetrics } from "./diagnostics.js";
 import {
   evaluateOutcome, computeContextHash, updateLearnedVector,
@@ -40,11 +40,11 @@ import {
 import { assessMetacognition, updateMetacognitiveState } from "./metacognition.js";
 import { buildDecisionContext, computePolicyModifiers, buildPolicyContext } from "./decision-bias.js";
 import { computeExperientialField, type ConstructionContext } from "./experiential-field.js";
-import { computeGenerativeSelf, buildIdentityNarrative } from "./generative-self.js";
+import { computeGenerativeSelf } from "./generative-self.js";
 import { updateSharedIntentionality, buildSharedIntentionalityContext } from "./shared-intentionality.js";
 import { assessEthics, buildEthicalContext } from "./ethics.js";
 import { computeCircadianModulation, computeHomeostaticPressure, computeEnergyDepletion, computeEnergyRecovery } from "./circadian.js";
-import { computeAutonomicResult, type AutonomicResult } from "./autonomic.js";
+import { computeAutonomicResult } from "./autonomic.js";
 import {
   computePrimarySystems, computeSystemInteractions,
   gatePrimarySystemsByAutonomic, describeBehavioralTendencies,
@@ -998,7 +998,7 @@ export class PsycheEngine {
    */
   async processOutcome(
     nextUserStimulus: StimulusType | null,
-    opts?: { userId?: string },
+    _opts?: { userId?: string },
   ): Promise<ProcessOutcomeResult | null> {
     if (!this.pendingPrediction) return null;
 

@@ -30,7 +30,7 @@ import {
 } from "./psyche-file.js";
 import type { Logger } from "./psyche-file.js";
 import { describeEmotionalState, getExpressionHint, detectEmotions } from "./chemistry.js";
-import { runHealthCheck, generateReport, formatReport, toGitHubIssueBody, formatLogEntry } from "./diagnostics.js";
+import { generateReport, formatReport, toGitHubIssueBody } from "./diagnostics.js";
 import type { SessionMetrics } from "./diagnostics.js";
 import { getBaseline, getTemperament, getSensitivity, getDefaultSelfModel, traitsToBaseline } from "./profiles.js";
 import { buildDynamicContext, buildProtocolContext } from "./prompt.js";
@@ -104,7 +104,7 @@ function die(msg: string): never {
 
 // ── Commands ─────────────────────────────────────────────────
 
-async function cmdInit(dir: string, mbti?: string, name?: string, lang?: string, mode?: string, traits?: string, noPersist?: boolean): Promise<void> {
+async function cmdInit(dir: string, mbti?: string, name?: string, lang?: string, mode?: string, traits?: string, _noPersist?: boolean): Promise<void> {
   const absDir = resolve(dir);
 
   const opts: { mbti?: MBTIType; name?: string; locale?: Locale } = {};

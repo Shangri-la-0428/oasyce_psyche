@@ -206,7 +206,6 @@ export type MessageIntent =
 
 export function detectIntent(text: string): { intent: MessageIntent; confidence: number } {
   const t = text.trim();
-  const lower = t.toLowerCase();
 
   // Chinese request patterns (polite)
   if (/^(能不能|可以|可不可以|帮我|请|麻烦|劳驾)/.test(t) || /帮我/.test(t) || /一下[吧吗？?]?$/.test(t)) {

@@ -102,7 +102,7 @@ function formatChemicalWindow(
 
 function buildRegulationAction(
   key: keyof ChemicalState,
-  state: PsycheState,
+  _state: PsycheState,
   direction: "elevated" | "depleted",
 ): string {
   switch (key) {
@@ -275,8 +275,6 @@ export function computeEmotionalConfidence(
 
   // Compute chemistry profile similarity: are we in a similar emotional state
   // to when those outcomes happened? Weight recent outcomes more heavily.
-  const chemProfile = computeChemistryProfile(state.current);
-
   let weightedScoreSum = 0;
   let weightSum = 0;
 
@@ -306,23 +304,6 @@ export function computeEmotionalConfidence(
   const extremityPenalty = computeExtremityPenalty(state);
 
   return clamp01(blended - extremityPenalty);
-}
-
-/**
- * Compute a simple chemistry profile for similarity comparison.
- * Returns a categorization: each chemical as high/mid/low.
- */
-function computeChemistryProfile(
-  chemistry: ChemicalState,
-): Record<keyof ChemicalState, "high" | "mid" | "low"> {
-  const profile = {} as Record<keyof ChemicalState, "high" | "mid" | "low">;
-  for (const key of CHEMICAL_KEYS) {
-    const val = chemistry[key];
-    if (val >= 65) profile[key] = "high";
-    else if (val <= 35) profile[key] = "low";
-    else profile[key] = "mid";
-  }
-  return profile;
 }
 
 /**

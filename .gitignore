@@ -6,3 +6,4 @@ site/.astro/
 .DS_Store
 psyche-state.json
 psyche-state.json.tmp
+scripts/.chat-state/

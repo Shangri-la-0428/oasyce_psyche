@@ -12,7 +12,7 @@ import type {
   ChemicalState, StimulusType, DriveType, InnateDrives, Locale,
   TraitDriftState, ChemicalSnapshot, LearningState,
 } from "./types.js";
-import { DRIVE_KEYS, DRIVE_NAMES_ZH, CHEMICAL_KEYS, DEFAULT_TRAIT_DRIFT } from "./types.js";
+import { DRIVE_KEYS, CHEMICAL_KEYS } from "./types.js";
 
 // ── Drive Decay ─────────────────────────────────────────────
 // Satisfaction decreases over time — needs build up naturally.

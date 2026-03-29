@@ -17,9 +17,8 @@
 
 import type {
   PsycheState, ChemicalState, StimulusType, StimulusVector,
-  DriveType, Locale, ChemicalSnapshot, SelfModel,
-  LearningState, LearnedVectorAdjustment, OutcomeScore,
-  AttachmentData,
+  DriveType, Locale, ChemicalSnapshot,
+  LearningState, LearnedVectorAdjustment,
 } from "./types.js";
 import { CHEMICAL_KEYS, DRIVE_KEYS } from "./types.js";
 import { STIMULUS_VECTORS, clamp } from "./chemistry.js";
@@ -315,7 +314,6 @@ export function buildIdentityNarrative(
   locale: Locale = "en",
 ): string {
   const isZh = locale === "zh";
-  const mbti = state.mbti;
   const parts: string[] = [];
 
   // ── Sentence 1: Core personality from MBTI + chemical signature ──
@@ -607,7 +605,6 @@ function describeCoreTraits(state: PsycheState, isZh: boolean): string {
   const isIntro = mbti[0] === "I";
   const isIntuitive = mbti[1] === "N";
   const isFeeling = mbti[2] === "F";
-  const isPerceiving = mbti[3] === "P";
 
   // Build trait fragments based on MBTI + chemical state
   const fragments: string[] = [];

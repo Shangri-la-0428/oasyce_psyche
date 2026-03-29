@@ -45,13 +45,6 @@ interface StreamChunk {
 
 // ── Tag stripping ────────────────────────────────────────────
 
-const PSYCHE_TAG_RE = /<psyche_update>[\s\S]*?<\/psyche_update>/g;
-const MULTI_NEWLINE_RE = /\n{3,}/g;
-
-function stripPsycheTags(text: string): string {
-  return text.replace(PSYCHE_TAG_RE, "").replace(MULTI_NEWLINE_RE, "\n\n").trim();
-}
-
 // ── Middleware ────────────────────────────────────────────────
 
 export interface PsycheMiddlewareOptions {
@@ -88,7 +81,7 @@ export interface PsycheMiddlewareOptions {
  * for await (const chunk of stream.textStream) { process.stdout.write(chunk); }
  * ```
  */
-export function psycheMiddleware(engine: PsycheEngine, opts?: PsycheMiddlewareOptions) {
+export function psycheMiddleware(engine: PsycheEngine, _opts?: PsycheMiddlewareOptions) {
   return {
     transformParams: async ({ params }: { type: string; params: CallParams }) => {
       const userText = extractLastUserText(params.prompt ?? []);
@@ -125,8 +118,6 @@ export function psycheMiddleware(engine: PsycheEngine, opts?: PsycheMiddlewareOp
 
       // Buffer text chunks, detect <psyche_update> at end, strip from output
       let fullText = "";
-      let tagDetected = false;
-
       async function* transformStream(): AsyncIterable<StreamChunk> {
         // Buffering strategy:
         // Stream text chunks through normally UNTIL we see '<psyche_update>'.
@@ -151,7 +142,6 @@ export function psycheMiddleware(engine: PsycheEngine, opts?: PsycheMiddlewareOp
                 }
                 bufferStart = tagStart;
                 buffer = fullText.substring(tagStart);
-                tagDetected = true;
               } else {
                 // Check if we might be in a partial tag (< at end)
                 const partialIdx = fullText.lastIndexOf("<");

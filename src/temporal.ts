@@ -15,7 +15,7 @@ import type {
   PsycheState, RelationshipState,
 } from "./types.js";
 import { CHEMICAL_KEYS } from "./types.js";
-import { STIMULUS_VECTORS, clamp } from "./chemistry.js";
+import { STIMULUS_VECTORS } from "./chemistry.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -198,7 +198,7 @@ function buildPhasePrior(
  */
 export function generateAnticipation(
   predictions: StimulusPrediction[],
-  currentChemistry: ChemicalState,
+  _currentChemistry: ChemicalState,
 ): AnticipationState {
   const anticipation: Record<string, number> = {};
   for (const key of CHEMICAL_KEYS) {
@@ -310,7 +310,7 @@ export function computeRegret(
   preInteractionState: PsycheState,
   postInteractionState: PsycheState,
   outcomeScore: number,
-  appliedStimulus: StimulusType | null,
+  _appliedStimulus: StimulusType | null,
 ): RegretEntry | null {
   // Only generate regret for bad outcomes
   if (outcomeScore >= -0.2) {

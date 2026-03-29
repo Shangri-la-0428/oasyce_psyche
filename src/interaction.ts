@@ -10,7 +10,7 @@
 import type { PsycheEngine, ProcessInputResult, ProcessOutputResult } from "./core.js";
 import type { ChemicalState, StimulusType } from "./types.js";
 import { CHEMICAL_KEYS } from "./types.js";
-import { applyContagion, detectEmotions, describeEmotionalState, clamp } from "./chemistry.js";
+import { applyContagion, detectEmotions } from "./chemistry.js";
 import { classifyStimulus } from "./classify.js";
 
 // ── Types ────────────────────────────────────────────────────
@@ -198,9 +198,6 @@ export class PsycheInteraction {
     const stateB = engineB.getState();
 
     // Detect dominant emotions from each engine's chemistry
-    const emotionsA = detectEmotions(stateA.current);
-    const emotionsB = detectEmotions(stateB.current);
-
     // Classify dominant emotion into a stimulus type for contagion
     const stimA = this.dominantEmotionAsStimulus(stateA.current);
     const stimB = this.dominantEmotionAsStimulus(stateB.current);

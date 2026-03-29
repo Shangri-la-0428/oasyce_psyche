@@ -6,7 +6,7 @@
 // decision-making. Pure math/heuristic, zero dependencies, no LLM.
 // ============================================================
 
-import type { PsycheState, ChemicalState, InnateDrives, PolicyModifiers, Locale } from "./types.js";
+import type { PsycheState, InnateDrives, PolicyModifiers, Locale } from "./types.js";
 
 // ── Types ────────────────────────────────────────────────────
 

@@ -9,7 +9,7 @@
 //   agent_end            — log final state
 // ============================================================
 
-import type { PsycheState, Locale, PsycheMode } from "../types.js";
+import type { PsycheMode } from "../types.js";
 import { PsycheEngine } from "../core.js";
 import type { ProcessInputResult } from "../core.js";
 import { FileStorageAdapter, MemoryStorageAdapter } from "../storage.js";

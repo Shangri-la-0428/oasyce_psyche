@@ -338,7 +338,7 @@ function detectGaslighting(
  * of that bond through boundary-pushing behavior, this is exploitative.
  */
 function detectEmotionalExploitation(
-  state: PsycheState,
+  _state: PsycheState,
   history: ChemicalSnapshot[],
   attachment: AttachmentData | null,
 ): EthicalConcern | null {
