@@ -136,6 +136,7 @@ describe("PsycheEngine", () => {
   it("uses work reply profile for dense task requests without collapsing to private brevity", async () => {
     const result = await engine.processInput("请按应用日志、网关、数据库三层给我一份登录接口 500 的排查思路，并说明每层先看什么。");
     assert.equal(result.responseContract?.replyProfile, "work");
+    assert.equal(result.responseContract?.replyProfileBasis, "task-focus+discipline");
     assert.ok((result.responseContract?.maxChars ?? 0) >= 80, `got ${result.responseContract?.maxChars}`);
     assert.ok((result.generationControls?.maxTokens ?? 0) >= 160, `got ${result.generationControls?.maxTokens}`);
   });

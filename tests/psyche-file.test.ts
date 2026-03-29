@@ -393,7 +393,7 @@ describe("updateAgreementStreak", () => {
 describe("pushSnapshot", () => {
   it("adds a snapshot to empty history", () => {
     const state = makeMinimalState();
-    const updated = pushSnapshot(state, "praise", "被夸奖");
+    const updated = pushSnapshot(state, "praise", { summary: "被夸奖" });
     assert.equal(updated.emotionalHistory.length, 1);
     assert.equal(updated.emotionalHistory[0].stimulus, "praise");
     assert.equal(updated.emotionalHistory[0].semanticSummary, "被夸奖");
@@ -447,13 +447,23 @@ describe("pushSnapshot", () => {
 describe("summarizeTurnSemantic", () => {
   it("captures recurring identity and work themes instead of bare labels", () => {
     assert.equal(
-      summarizeTurnSemantic("如果以后我只使用你，不理解你，这会不会慢慢改变你。"),
+      summarizeTurnSemantic("如果以后我只使用你，不理解你，这会不会慢慢改变你。").summary,
       "只被使用不被理解",
     );
     assert.equal(
-      summarizeTurnSemantic("登录接口 500，先查日志还是先查数据库。"),
+      summarizeTurnSemantic("登录接口 500，先查日志还是先查数据库。").summary,
       "登录接口500排查",
     );
+  });
+
+  it("expands longer turns into 2-3 semantic points", () => {
+    const result = summarizeTurnSemantic(
+      "我们刚才在聊生物集体智能，重点是局部规则如何形成全局协同，以及阈值变化为什么会让系统突然转相。",
+      "zh",
+      { detail: "expanded" },
+    );
+    assert.ok(result.summary.length > 0);
+    assert.ok((result.points?.length ?? 0) >= 2, `got ${JSON.stringify(result)}`);
   });
 });
 
@@ -509,6 +519,7 @@ function makeHistory(count: number, opts?: {
     stimulus: opts?.stimuli?.[i] ?? "casual" as ChemicalSnapshot["stimulus"],
     dominantEmotion: opts?.emotions?.[i] ?? null,
     semanticSummary: opts?.semanticSummaries?.[i],
+    semanticPoints: opts?.semanticSummaries?.[i] ? [opts.semanticSummaries[i]] : undefined,
     timestamp: new Date(base + i * 60000).toISOString(),
   }));
 }
@@ -547,6 +558,25 @@ describe("compressSession", () => {
     assert.ok(summary.includes("casual×2"), `Should contain casual count, got: ${summary}`);
     assert.ok(summary.includes("弧线["), `Should contain emotion arc, got: ${summary}`);
     assert.ok(summary.includes("倾向["), `Should contain tendency, got: ${summary}`);
+  });
+
+  it("uses bullet-style semantic carry for longer sessions", () => {
+    const history = makeHistory(7, {
+      semanticSummaries: [
+        "集体智能",
+        "局部规则",
+        "全局协同",
+        "阈值变化",
+        "相变条件",
+        "实验设计",
+        "验证路径",
+      ],
+    });
+    const state = makeMinimalState({ emotionalHistory: history });
+    const result = compressSession(state);
+    const summary = result.relationships._default.memory![0];
+    assert.ok(summary.includes("话题["), `Should contain topic section, got: ${summary}`);
+    assert.ok(summary.includes("•"), `Expected expanded topic bullets, got: ${summary}`);
   });
 
   it("preserves latest snapshot for cross-session continuity", () => {

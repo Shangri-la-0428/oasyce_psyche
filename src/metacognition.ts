@@ -17,6 +17,7 @@ import type {
   PsycheState, StimulusType, ChemicalState,
   OutcomeScore, MetacognitiveState,
   RegulationStrategyType, DefenseMechanismType,
+  RegulationTargetMetric, RegulationFeedback,
 } from "./types.js";
 import { CHEMICAL_KEYS, CHEMICAL_NAMES, CHEMICAL_RUNTIME_SPECS, MAX_REGULATION_HISTORY, MAX_DEFENSE_PATTERNS } from "./types.js";
 
@@ -27,6 +28,8 @@ export interface MetacognitiveAssessment {
   emotionalConfidence: number;
   /** Suggested regulation strategies */
   regulationSuggestions: RegulationSuggestion[];
+  /** Whether the last surfaced regulation action is working */
+  regulationFeedback: RegulationFeedback | null;
   /** Detected psychological defense mechanisms */
   defenseMechanisms: DetectedDefense[];
   /** Human-readable self-awareness note for prompt injection */
@@ -40,6 +43,12 @@ export interface RegulationSuggestion {
   action: string;
   /** How many turns this action should stay active */
   horizonTurns?: number;
+  /** Which metric this action is trying to pull back into range */
+  targetMetric?: RegulationTargetMetric;
+  /** Target value for that metric */
+  targetValue?: number;
+  /** Initial gap between the current state and the target value */
+  gapBefore?: number;
   /** Suggested micro-adjustment to chemistry */
   chemistryAdjustment?: Partial<ChemicalState>;
   /** 0-1: confidence that this strategy would help */
@@ -126,6 +135,68 @@ function buildRegulationAction(
   }
 }
 
+function computeMetricGap(
+  state: PsycheState,
+  metric: RegulationTargetMetric,
+  emotionalConfidence: number,
+  targetValue?: number,
+): number {
+  if (metric === "emotional-confidence") {
+    const target = targetValue ?? 0.65;
+    return Math.max(0, target - emotionalConfidence);
+  }
+
+  const baselineTarget = targetValue ?? state.baseline[metric];
+  return Math.abs(state.current[metric] - baselineTarget);
+}
+
+function evaluateRegulationFeedback(
+  state: PsycheState,
+  emotionalConfidence: number,
+): RegulationFeedback | null {
+  const active = [...state.metacognition.regulationHistory]
+    .reverse()
+    .find((record) => record.targetMetric && (record.remainingTurns ?? 0) > 0 && record.gapBefore !== undefined);
+
+  if (!active?.targetMetric || active.gapBefore === undefined) return null;
+
+  const gapNow = computeMetricGap(
+    state,
+    active.targetMetric,
+    emotionalConfidence,
+    active.targetValue,
+  );
+  const delta = active.gapBefore - gapNow;
+
+  let effect: RegulationFeedback["effect"] = "holding";
+  if (delta >= 3 || (active.targetMetric === "emotional-confidence" && delta >= 0.08)) {
+    effect = "converging";
+  } else if (delta <= -3 || (active.targetMetric === "emotional-confidence" && delta <= -0.08)) {
+    effect = "diverging";
+  }
+
+  return {
+    strategy: active.strategy,
+    targetMetric: active.targetMetric,
+    effect,
+    gapBefore: active.gapBefore,
+    gapNow,
+  };
+}
+
+function formatRegulationFeedback(feedback: RegulationFeedback): string {
+  const metricLabel = feedback.targetMetric === "emotional-confidence"
+    ? "emotional confidence"
+    : CHEMICAL_NAMES[feedback.targetMetric];
+  const gapBefore = feedback.targetMetric === "emotional-confidence"
+    ? `${(feedback.gapBefore * 100).toFixed(0)}%`
+    : `${Math.round(feedback.gapBefore)}`;
+  const gapNow = feedback.targetMetric === "emotional-confidence"
+    ? `${(feedback.gapNow * 100).toFixed(0)}%`
+    : `${Math.round(feedback.gapNow)}`;
+  return `Last regulation effect on ${metricLabel}: ${feedback.effect} (${gapBefore} -> ${gapNow}).`;
+}
+
 // ── Main Export ──────────────────────────────────────────────
 
 /**
@@ -143,6 +214,7 @@ export function assessMetacognition(
   const emotionalConfidence = computeEmotionalConfidence(
     state, currentStimulus, recentOutcomes,
   );
+  const regulationFeedback = evaluateRegulationFeedback(state, emotionalConfidence);
 
   const regulationSuggestions = generateRegulationSuggestions(
     state, currentStimulus, emotionalConfidence, recentOutcomes,
@@ -153,12 +225,13 @@ export function assessMetacognition(
   );
 
   const metacognitiveNote = buildMetacognitiveNote(
-    emotionalConfidence, regulationSuggestions, defenseMechanisms, state,
+    emotionalConfidence, regulationSuggestions, regulationFeedback, defenseMechanisms,
   );
 
   return {
     emotionalConfidence,
     regulationSuggestions,
+    regulationFeedback,
     defenseMechanisms,
     metacognitiveNote,
   };
@@ -369,6 +442,9 @@ function attemptCognitiveReappraisal(
       : `Emotional reactions to "${currentStimulus}" have led to poor outcomes (avg: ${avgScore.toFixed(2)}). The current interpretation may be overamplifying the signal.`,
     action: `Next 2 turns: name less certainty, keep distance measured, and leave room to revise the read instead of locking into the first interpretation.`,
     horizonTurns: 2,
+    targetMetric: "emotional-confidence",
+    targetValue: 0.65,
+    gapBefore: Math.max(0, 0.65 - emotionalConfidence),
     chemistryAdjustment: hasAdjustment ? adjustment : undefined,
     confidence: clamp01(Math.abs(avgScore) * (1 - emotionalConfidence)),
   };
@@ -396,6 +472,9 @@ function attemptStrategicExpression(
       description: "Stress is elevated, but the user is showing vulnerability. Express warmth and openness rather than the defensiveness your cortisol suggests.",
       action: "Next 3 turns: keep warmth available, answer the vulnerability directly, and avoid defensive sharpness.",
       horizonTurns: 3,
+      targetMetric: "CORT",
+      targetValue: baseline.CORT,
+      gapBefore: Math.abs(current.CORT - baseline.CORT),
       chemistryAdjustment: {
         OT: Math.min(MAX_REAPPRAISAL_ADJUSTMENT, (current.CORT - baseline.CORT) * 0.2),
         CORT: -Math.min(MAX_REAPPRAISAL_ADJUSTMENT, (current.CORT - baseline.CORT) * 0.15),
@@ -412,6 +491,9 @@ function attemptStrategicExpression(
       description: "Endorphins are high (playful mood), but the context calls for seriousness. Moderate the levity without suppressing it entirely.",
       action: "Next 2 turns: keep humor secondary, answer the actual issue first, and do not deflect with playfulness.",
       horizonTurns: 2,
+      targetMetric: "END",
+      targetValue: baseline.END,
+      gapBefore: Math.abs(current.END - baseline.END),
       chemistryAdjustment: {
         END: -Math.min(MAX_REAPPRAISAL_ADJUSTMENT, (current.END - baseline.END) * 0.25),
       },
@@ -427,6 +509,9 @@ function attemptStrategicExpression(
       description: "Oxytocin is low (feeling distant), but the user is reaching out for closeness. Consider allowing the connection rather than following the withdrawal impulse.",
       action: "Next 3 turns: allow one step of warmth, but do not overcorrect into clinginess or over-disclosure.",
       horizonTurns: 3,
+      targetMetric: "OT",
+      targetValue: baseline.OT,
+      gapBefore: Math.abs(current.OT - baseline.OT),
       chemistryAdjustment: {
         OT: Math.min(MAX_REAPPRAISAL_ADJUSTMENT, (baseline.OT - current.OT) * 0.2),
       },
@@ -443,6 +528,9 @@ function attemptStrategicExpression(
       description: "Chemistry is in a defensive/reactive pattern, but the interaction is benign. The intensity is disproportionate to the stimulus.",
       action: "Next 2 turns: soften the edge, stay literal, and avoid reading threat into a neutral interaction.",
       horizonTurns: 2,
+      targetMetric: "CORT",
+      targetValue: baseline.CORT,
+      gapBefore: Math.abs(current.CORT - baseline.CORT),
       chemistryAdjustment: {
         CORT: -Math.min(MAX_REAPPRAISAL_ADJUSTMENT, (current.CORT - baseline.CORT) * 0.2),
         NE: -Math.min(MAX_REAPPRAISAL_ADJUSTMENT, (current.NE - baseline.NE) * 0.15),
@@ -458,6 +546,9 @@ function attemptStrategicExpression(
       description: "Confidence in the current emotional response is low. Consider expressing a more moderate version of what you feel, leaving room for recalibration.",
       action: "Next 2 turns: state less certainty, keep tone neutral-to-measured, and avoid irreversible warmth or coldness.",
       horizonTurns: 2,
+      targetMetric: "emotional-confidence",
+      targetValue: 0.6,
+      gapBefore: Math.max(0, 0.6 - emotionalConfidence),
       confidence: 0.5,
     };
   }
@@ -506,6 +597,9 @@ function attemptSelfSoothing(state: PsycheState): RegulationSuggestion | null {
     description: `${chemName} is significantly ${direction}. ${window}.`,
     action: buildRegulationAction(mostDeviatedKey, state, direction),
     horizonTurns: 3,
+    targetMetric: mostDeviatedKey,
+    targetValue: baseline[mostDeviatedKey],
+    gapBefore: Math.abs(current[mostDeviatedKey] - baseline[mostDeviatedKey]),
     chemistryAdjustment: adjustment,
     confidence: clamp01(maxDeviation / 60), // stronger deviation = more confident this is needed
   };
@@ -718,10 +812,14 @@ function detectAvoidance(
 function buildMetacognitiveNote(
   confidence: number,
   suggestions: RegulationSuggestion[],
+  regulationFeedback: RegulationFeedback | null,
   defenses: DetectedDefense[],
-  state: PsycheState,
 ): string {
   const parts: string[] = [];
+
+  if (regulationFeedback) {
+    parts.push(formatRegulationFeedback(regulationFeedback));
+  }
 
   // Confidence assessment
   if (confidence < 0.35) {
@@ -741,8 +839,7 @@ function buildMetacognitiveNote(
     const top = suggestions[0];
     if (top.confidence >= 0.5) {
       const label = STRATEGY_LABELS[top.strategy];
-      const horizon = top.horizonTurns ? ` Next ${top.horizonTurns} turns:` : " Action:";
-      parts.push(`${label}: ${top.description}${horizon} ${top.action}`);
+      parts.push(`${label}: ${top.description} ${top.action}`);
     }
   }
 
@@ -780,17 +877,50 @@ export function updateMetacognitiveState(
   const newAvgConfidence = metacognition.avgEmotionalConfidence * (1 - alpha)
     + assessment.emotionalConfidence * alpha;
 
-  // Record regulation suggestions that were confident enough to surface
+  // Carry forward existing regulation traces and age them by one turn.
   const now = new Date().toISOString();
-  let newRegHistory = [...metacognition.regulationHistory];
-  for (const suggestion of assessment.regulationSuggestions) {
-    if (suggestion.confidence >= 0.5) {
-      newRegHistory.push({
-        strategy: suggestion.strategy,
-        timestamp: now,
-        effective: false, // unknown until next outcome evaluation
-      });
+  let newRegHistory = metacognition.regulationHistory.map((record) => ({
+    ...record,
+    remainingTurns: record.remainingTurns !== undefined
+      ? Math.max(0, record.remainingTurns - 1)
+      : record.remainingTurns,
+  }));
+
+  if (assessment.regulationFeedback) {
+    const targetIndex = [...newRegHistory]
+      .map((record, index) => ({ record, index }))
+      .reverse()
+      .find(({ record }) =>
+        record.targetMetric === assessment.regulationFeedback?.targetMetric
+        && record.gapBefore !== undefined
+        && record.effect === undefined,
+      )?.index;
+
+    if (targetIndex !== undefined) {
+      const record = newRegHistory[targetIndex];
+      newRegHistory[targetIndex] = {
+        ...record,
+        effective: assessment.regulationFeedback.effect === "converging",
+        gapLatest: assessment.regulationFeedback.gapNow,
+        effect: assessment.regulationFeedback.effect,
+      };
     }
+  }
+
+  const surfacedSuggestion = assessment.regulationSuggestions.find((suggestion) => suggestion.confidence >= 0.5);
+  if (surfacedSuggestion) {
+    newRegHistory.push({
+      strategy: surfacedSuggestion.strategy,
+      timestamp: now,
+      effective: false,
+      action: surfacedSuggestion.action,
+      horizonTurns: surfacedSuggestion.horizonTurns,
+      remainingTurns: surfacedSuggestion.horizonTurns,
+      targetMetric: surfacedSuggestion.targetMetric,
+      targetValue: surfacedSuggestion.targetValue,
+      gapBefore: surfacedSuggestion.gapBefore,
+      gapLatest: surfacedSuggestion.gapBefore,
+    });
   }
   // Trim to max
   if (newRegHistory.length > MAX_REGULATION_HISTORY) {
@@ -830,6 +960,7 @@ export function updateMetacognitiveState(
     defensePatterns: newDefensePatterns,
     avgEmotionalConfidence: newAvgConfidence,
     totalAssessments: n + 1,
+    lastRegulationFeedback: assessment.regulationFeedback,
   };
 }
 

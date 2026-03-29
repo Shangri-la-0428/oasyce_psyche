@@ -37,7 +37,7 @@ import {
   evaluateOutcome, computeContextHash, updateLearnedVector,
   predictChemistry, recordPrediction,
 } from "./learning.js";
-import { assessMetacognition } from "./metacognition.js";
+import { assessMetacognition, updateMetacognitiveState } from "./metacognition.js";
 import { buildDecisionContext, computePolicyModifiers, buildPolicyContext } from "./decision-bias.js";
 import { computeExperientialField, type ConstructionContext } from "./experiential-field.js";
 import { computeGenerativeSelf, buildIdentityNarrative } from "./generative-self.js";
@@ -632,13 +632,23 @@ export class PsycheEngine {
           };
         }
       }
+
+      state = {
+        ...state,
+        metacognition: updateMetacognitiveState(state.metacognition, metacognitiveAssessment),
+      };
     }
 
     // Push snapshot to emotional history
+    const semanticSummary = text
+      ? summarizeTurnSemantic(text, locale, {
+          detail: state.meta.totalInteractions + 1 > 5 ? "expanded" : "brief",
+        })
+      : undefined;
     state = pushSnapshot(
       state,
       appliedStimulus,
-      text ? summarizeTurnSemantic(text, locale) : undefined,
+      semanticSummary,
     );
 
     // Increment interaction count

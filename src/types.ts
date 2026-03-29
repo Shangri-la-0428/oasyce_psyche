@@ -203,6 +203,7 @@ export interface ChemicalSnapshot {
   dominantEmotion: string | null;
   timestamp: string;
   semanticSummary?: string;
+  semanticPoints?: string[];
   // P11: Emotional memory consolidation — optional for backward compatibility
   intensity?: number;             // 0-1, chemical deviation from baseline
   valence?: number;               // -1 to 1, overall emotional valence
@@ -311,11 +312,33 @@ export type RegulationStrategyType = "reappraisal" | "strategic-expression" | "s
 /** Defense mechanism type */
 export type DefenseMechanismType = "rationalization" | "projection" | "sublimation" | "avoidance";
 
+/** Which internal metric a regulation action is trying to pull back toward target */
+export type RegulationTargetMetric = keyof ChemicalState | "emotional-confidence";
+
+/** Whether the last regulation action is helping */
+export type RegulationFeedbackEffect = "converging" | "holding" | "diverging";
+
+export interface RegulationFeedback {
+  strategy: RegulationStrategyType;
+  targetMetric: RegulationTargetMetric;
+  effect: RegulationFeedbackEffect;
+  gapBefore: number;
+  gapNow: number;
+}
+
 /** Record of a past regulation attempt */
 export interface RegulationRecord {
   strategy: RegulationStrategyType;
   timestamp: string;
   effective: boolean;
+  action?: string;
+  horizonTurns?: number;
+  remainingTurns?: number;
+  targetMetric?: RegulationTargetMetric;
+  targetValue?: number;
+  gapBefore?: number;
+  gapLatest?: number;
+  effect?: RegulationFeedbackEffect;
 }
 
 /** Tracked defense pattern frequency */
@@ -332,6 +355,7 @@ export interface MetacognitiveState {
   /** Running average of emotional confidence across assessments */
   avgEmotionalConfidence: number;
   totalAssessments: number;
+  lastRegulationFeedback?: RegulationFeedback | null;
 }
 
 /** Default empty metacognitive state */
@@ -340,6 +364,7 @@ export const DEFAULT_METACOGNITIVE_STATE: MetacognitiveState = {
   defensePatterns: [],
   avgEmotionalConfidence: 0.5,
   totalAssessments: 0,
+  lastRegulationFeedback: null,
 };
 
 // ── Personhood Types (v6) ────────────────────────────────────
@@ -699,6 +724,8 @@ export interface SubjectivityKernel {
 export interface ResponseContract {
   /** Which conversational surface this turn belongs to */
   replyProfile: "work" | "private";
+  /** Why the current turn was classified into that conversational surface */
+  replyProfileBasis: "task-focus" | "discipline" | "task-focus+discipline" | "default-private";
   /** Maximum suggested sentence count */
   maxSentences: number;
   /** Maximum suggested character count, when a concrete cap is available */

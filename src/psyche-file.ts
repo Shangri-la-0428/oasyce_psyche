@@ -26,6 +26,14 @@ const IDENTITY_MD = "IDENTITY.md";
 const SOUL_MD = "SOUL.md";
 const MAX_SEMANTIC_SUMMARY_ZH = 15;
 const MAX_SEMANTIC_SUMMARY_EN = 32;
+const MAX_SEMANTIC_POINT_ZH = 12;
+const MAX_SEMANTIC_POINT_EN = 24;
+const LOW_SIGNAL_SEMANTIC_CLAUSE = /^(只|就|先|再|停|好|嗯|哦|那|现在|结束工作|切到工作|不是继续工作|为什么|确认规则)/u;
+
+export interface SemanticTurnSummary {
+  summary: string;
+  points?: string[];
+}
 
 const SEMANTIC_PATTERNS: Array<{ pattern: RegExp; zh: string; en: string }> = [
   { pattern: /只使用你.*不理解|被使用.*不理解/u, zh: "只被使用不被理解", en: "used-not-understood" },
@@ -136,12 +144,19 @@ function normalizeSemanticSnippet(text: string, locale: Locale): string {
   return firstClause.length <= maxLen ? firstClause : `${firstClause.slice(0, maxLen - 1)}…`;
 }
 
-export function summarizeTurnSemantic(
-  text: string,
-  locale: Locale = "zh",
-): string {
-  const trimmed = text.trim();
-  if (!trimmed) return locale === "zh" ? "日常互动" : "everyday exchange";
+function normalizeSemanticPoint(text: string, locale: Locale): string {
+  const maxLen = locale === "zh" ? MAX_SEMANTIC_POINT_ZH : MAX_SEMANTIC_POINT_EN;
+  const cleaned = text
+    .replace(/\s+/g, " ")
+    .replace(/^[“"'`]+|[”"'`]+$/g, "")
+    .trim();
+  if (!cleaned) return "";
+  return cleaned.length <= maxLen ? cleaned : `${cleaned.slice(0, maxLen - 1)}…`;
+}
+
+function summarizeSemanticClause(clause: string, locale: Locale): string {
+  const trimmed = clause.trim();
+  if (!trimmed || LOW_SIGNAL_SEMANTIC_CLAUSE.test(trimmed)) return "";
 
   for (const rule of SEMANTIC_PATTERNS) {
     if (rule.pattern.test(trimmed)) {
@@ -149,7 +164,55 @@ export function summarizeTurnSemantic(
     }
   }
 
-  return normalizeSemanticSnippet(trimmed, locale);
+  return normalizeSemanticPoint(trimmed, locale);
+}
+
+function extractSemanticPoints(text: string, locale: Locale): string[] {
+  const clauses = text
+    .replace(/\s+/g, " ")
+    .split(/[，,。！？!?;；:\n]/)
+    .map((clause) => summarizeSemanticClause(clause, locale))
+    .filter(Boolean);
+
+  return [...new Set(clauses)].slice(0, 3);
+}
+
+export function summarizeTurnSemantic(
+  text: string,
+  locale: Locale = "zh",
+  opts?: { detail?: "brief" | "expanded" },
+): SemanticTurnSummary {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { summary: locale === "zh" ? "日常互动" : "everyday exchange" };
+  }
+
+  for (const rule of SEMANTIC_PATTERNS) {
+    if (rule.pattern.test(trimmed)) {
+      const summary = locale === "zh" ? rule.zh : rule.en;
+      const points = opts?.detail === "expanded"
+        ? extractSemanticPoints(trimmed, locale).filter((point) => point !== summary)
+        : [];
+      return { summary, points: points.length > 0 ? points : undefined };
+    }
+  }
+
+  const summary = normalizeSemanticSnippet(trimmed, locale);
+  const points = opts?.detail === "expanded"
+    ? extractSemanticPoints(trimmed, locale).filter((point) => point !== summary)
+    : [];
+  return { summary, points: points.length > 0 ? points : undefined };
+}
+
+function collectSemanticTrail(
+  snapshots: ChemicalSnapshot[],
+): string[] {
+  const expanded = snapshots.length > 5;
+  const items = expanded
+    ? snapshots.flatMap((s) => s.semanticPoints?.length ? s.semanticPoints : s.semanticSummary ? [s.semanticSummary] : [])
+    : snapshots.flatMap((s) => s.semanticSummary ? [s.semanticSummary] : []);
+  const unique = [...new Set(items.filter(Boolean))];
+  return unique.slice(-(expanded ? 3 : 4));
 }
 
 /**
@@ -191,15 +254,11 @@ export function compressSnapshots(snapshots: ChemicalSnapshot[]): string {
     .filter((s) => s.dominantEmotion)
     .map((s) => s.dominantEmotion!);
   const uniqueEmotions = [...new Set(emotions)];
-  const semanticArc = [...new Set(
-    snapshots
-      .map((s) => s.semanticSummary)
-      .filter((summary): summary is string => Boolean(summary)),
-  )].slice(-3);
+  const semanticArc = collectSemanticTrail(snapshots);
 
   let summary = `${dateStr}(${snapshots.length}轮)`;
   if (stimuliStr) summary += `: 刺激[${stimuliStr}]`;
-  if (semanticArc.length > 0) summary += ` 话题[${semanticArc.join("→")}]`;
+  if (semanticArc.length > 0) summary += ` 话题[${semanticArc.join(snapshots.length > 5 ? "•" : "→")}]`;
   if (trends.length > 0) summary += ` 趋势[${trends.join("")}]`;
   if (uniqueEmotions.length > 0) summary += ` 情绪[${uniqueEmotions.join("→")}]`;
 
@@ -213,7 +272,7 @@ export function compressSnapshots(snapshots: ChemicalSnapshot[]): string {
 export function pushSnapshot(
   state: PsycheState,
   stimulus: StimulusType | null,
-  semanticSummary?: string,
+  semantic?: SemanticTurnSummary,
 ): PsycheState {
   const emotions = detectEmotions(state.current);
   const dominantEmotion = emotions.length > 0
@@ -229,7 +288,8 @@ export function pushSnapshot(
     stimulus,
     dominantEmotion,
     timestamp: new Date().toISOString(),
-    semanticSummary,
+    semanticSummary: semantic?.summary,
+    semanticPoints: semantic?.points,
     intensity,
     valence,
   };
@@ -345,11 +405,8 @@ export function compressSession(
     }
   }
   const emotionArc = emotions.join("→");
-  const semanticArc = [...new Set(
-    history
-      .map((snap) => snap.semanticSummary)
-      .filter((summary): summary is string => Boolean(summary)),
-  )].slice(-4).join("→");
+  const semanticTrail = collectSemanticTrail(history);
+  const semanticArc = semanticTrail.join(turnCount > 5 ? "•" : "→");
 
   // ── Peak event ──
   let peakIdx = 0;

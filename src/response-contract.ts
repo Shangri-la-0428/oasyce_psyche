@@ -13,11 +13,22 @@ function clampInt(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(v)));
 }
 
-function deriveReplyProfile(kernel: SubjectivityKernel): ResponseContract["replyProfile"] {
-  if (kernel.taskPlane.focus >= 0.62 || kernel.taskPlane.discipline >= 0.72) {
-    return "work";
+function deriveReplyProfile(
+  kernel: SubjectivityKernel,
+): Pick<ResponseContract, "replyProfile" | "replyProfileBasis"> {
+  const taskFocused = kernel.taskPlane.focus >= 0.62;
+  const disciplined = kernel.taskPlane.discipline >= 0.72;
+
+  if (taskFocused && disciplined) {
+    return { replyProfile: "work", replyProfileBasis: "task-focus+discipline" };
   }
-  return "private";
+  if (taskFocused) {
+    return { replyProfile: "work", replyProfileBasis: "task-focus" };
+  }
+  if (disciplined) {
+    return { replyProfile: "work", replyProfileBasis: "discipline" };
+  }
+  return { replyProfile: "private", replyProfileBasis: "default-private" };
 }
 
 function computeLengthBudget(
@@ -195,7 +206,7 @@ export function computeResponseContract(
   const locale = opts?.locale ?? "zh";
   const userText = opts?.userText ?? "";
   const personalityIntensity = opts?.personalityIntensity ?? 0.7;
-  const replyProfile = deriveReplyProfile(kernel);
+  const { replyProfile, replyProfileBasis } = deriveReplyProfile(kernel);
   const { maxSentences, maxChars } = userText.length > 0
     ? computeLengthBudget(locale, userText, replyProfile, kernel.expressionMode, kernel)
     : {
@@ -272,6 +283,7 @@ export function computeResponseContract(
 
   return {
     replyProfile,
+    replyProfileBasis,
     maxSentences,
     maxChars,
     expressionMode: kernel.expressionMode,
@@ -285,10 +297,31 @@ export function computeResponseContract(
   };
 }
 
+function describeReplyProfileBasis(
+  basis: ResponseContract["replyProfileBasis"],
+  locale: Locale,
+): string {
+  if (locale === "zh") {
+    switch (basis) {
+      case "task-focus":
+        return "因:聚焦";
+      case "discipline":
+        return "因:纪律";
+      case "task-focus+discipline":
+        return "因:聚焦+纪律";
+      default:
+        return "因:默认私人";
+    }
+  }
+
+  return `basis:${basis}`;
+}
+
 export function buildResponseContractContext(contract: ResponseContract, locale: Locale = "zh"): string {
   if (locale === "zh") {
     const parts: string[] = [];
     parts.push(contract.replyProfile === "work" ? "工作面" : "私人面");
+    parts.push(describeReplyProfileBasis(contract.replyProfileBasis, locale));
     const shape = contract.maxChars
       ? `${contract.maxSentences === 1 ? "1句内" : `最多${contract.maxSentences}句`}，≤${contract.maxChars}字`
       : `${contract.maxSentences === 1 ? "1句内" : `最多${contract.maxSentences}句`}`;
@@ -323,6 +356,7 @@ export function buildResponseContractContext(contract: ResponseContract, locale:
 
   const parts: string[] = [];
   parts.push(contract.replyProfile === "work" ? "work surface" : "private surface");
+  parts.push(describeReplyProfileBasis(contract.replyProfileBasis, locale));
   const shape = contract.maxChars
     ? `${contract.maxSentences === 1 ? "1 sentence" : `up to ${contract.maxSentences} sentences`}, <= ${contract.maxChars} chars`
     : `${contract.maxSentences === 1 ? "1 sentence" : `up to ${contract.maxSentences} sentences`}`;

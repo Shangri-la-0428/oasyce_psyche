@@ -71,6 +71,7 @@ describe("assessMetacognition", () => {
     const result = assessMetacognition(state, "casual", []);
     assert.ok(typeof result.emotionalConfidence === "number");
     assert.ok(Array.isArray(result.regulationSuggestions));
+    assert.equal(result.regulationFeedback, null);
     assert.ok(Array.isArray(result.defenseMechanisms));
     assert.ok(typeof result.metacognitiveNote === "string");
     assert.ok(result.metacognitiveNote.length > 0);
@@ -511,6 +512,35 @@ describe("updateMetacognitiveState", () => {
       "should record regulation suggestions",
     );
     assert.equal(updated.regulationHistory[0].effective, false, "effective should default to false");
+    assert.ok(updated.regulationHistory[0].remainingTurns !== undefined);
+  });
+
+  it("evaluates the previous regulation attempt as converging when the gap narrows", () => {
+    const priorMeta: MetacognitiveState = {
+      ...DEFAULT_METACOGNITIVE_STATE,
+      regulationHistory: [{
+        strategy: "self-soothing",
+        timestamp: new Date().toISOString(),
+        effective: false,
+        targetMetric: "CORT",
+        targetValue: 35,
+        gapBefore: 30,
+        gapLatest: 30,
+        remainingTurns: 2,
+      }],
+    };
+    const state = makeState({
+      current: makeChemistry({ CORT: 52 }),
+      metacognition: priorMeta,
+    });
+
+    const assessment = assessMetacognition(state, "casual", []);
+    assert.equal(assessment.regulationFeedback?.effect, "converging");
+
+    const updated = updateMetacognitiveState(priorMeta, assessment);
+    assert.equal(updated.lastRegulationFeedback?.effect, "converging");
+    assert.equal(updated.regulationHistory[0].effect, "converging");
+    assert.equal(updated.regulationHistory[0].effective, true);
   });
 
   it("tracks defense patterns with strength >= 0.3", () => {
