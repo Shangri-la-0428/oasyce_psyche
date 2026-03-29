@@ -71,6 +71,26 @@ function computeLengthBudget(
     maxChars = maxChars !== undefined ? clampInt(maxChars * 0.72, 8, maxChars) : 18;
   }
 
+  if (kernel?.ambiguityPlane.expressionInhibition && kernel.ambiguityPlane.expressionInhibition > 0.66) {
+    maxSentences = 1;
+    maxChars = maxChars !== undefined ? clampInt(maxChars * 0.76, 8, maxChars) : 18;
+  }
+
+  if (kernel?.relationPlane.silentCarry && kernel.relationPlane.silentCarry > 0.54) {
+    maxSentences = Math.max(1, Math.min(maxSentences, 2));
+    maxChars = maxChars !== undefined ? clampInt(maxChars * 0.82, 8, maxChars) : 20;
+  }
+
+  if (kernel?.relationPlane.hysteresis && kernel.relationPlane.hysteresis > 0.64) {
+    maxSentences = 1;
+    maxChars = maxChars !== undefined ? clampInt(maxChars * 0.78, 8, maxChars) : 18;
+  }
+
+  if (kernel?.relationPlane.repairFriction && kernel.relationPlane.repairFriction > 0.62) {
+    maxSentences = 1;
+    maxChars = maxChars !== undefined ? clampInt(maxChars * 0.74, 8, maxChars) : 16;
+  }
+
   return { maxSentences, maxChars };
 }
 
@@ -106,6 +126,8 @@ export function computeResponseContract(
   let updateMode: ResponseContract["updateMode"] = "none";
   if (kernel.taskPlane.focus > 0.72) {
     updateMode = "none";
+  } else if (kernel.ambiguityPlane.namingConfidence < 0.36) {
+    updateMode = "none";
   } else if (!opts?.algorithmStimulus) {
     updateMode = "stimulus+empathy";
   } else if (EMOTIONAL_STIMULI.has(opts.algorithmStimulus)) {
@@ -113,22 +135,57 @@ export function computeResponseContract(
   }
 
   let socialDistance = kernel.socialDistance;
-  if (kernel.subjectPlane.attachment > 0.72 && kernel.subjectPlane.guardedness < 0.5) {
+  if (
+    (kernel.subjectPlane.attachment > 0.72 || kernel.relationPlane.closeness > 0.72)
+    && kernel.subjectPlane.guardedness < 0.5
+    && kernel.relationPlane.loopPressure < 0.55
+    && kernel.relationPlane.silentCarry < 0.42
+    && kernel.relationPlane.repairFriction < 0.36
+    && kernel.ambiguityPlane.conflictLoad < 0.62
+  ) {
     socialDistance = "warm";
-  } else if (kernel.subjectPlane.guardedness > 0.72 || kernel.subjectPlane.identityStrain > 0.68) {
+  } else if (
+    kernel.subjectPlane.guardedness > 0.72
+    || kernel.subjectPlane.identityStrain > 0.68
+    || kernel.relationPlane.loopPressure > 0.7
+    || kernel.relationPlane.repairFriction > 0.72
+    || kernel.relationPlane.hysteresis > 0.7
+  ) {
     socialDistance = "withdrawn";
+  } else if (
+    kernel.ambiguityPlane.conflictLoad > 0.58
+    || kernel.relationPlane.silentCarry > 0.46
+    || kernel.relationPlane.repairFriction > 0.48
+  ) {
+    socialDistance = "measured";
   }
 
   let boundaryMode = kernel.boundaryMode;
-  if (kernel.subjectPlane.identityStrain > 0.78) {
+  if (kernel.subjectPlane.identityStrain > 0.78 || kernel.relationPlane.loopPressure > 0.76) {
     boundaryMode = "confirm-first";
-  } else if (kernel.subjectPlane.guardedness > 0.62) {
+  } else if (
+    kernel.subjectPlane.guardedness > 0.62
+    || kernel.relationPlane.loopPressure > 0.58
+    || kernel.relationPlane.repairFriction > 0.56
+    || kernel.relationPlane.hysteresis > 0.54
+  ) {
     boundaryMode = "guarded";
   }
 
   let initiativeMode = kernel.initiativeMode;
   if (kernel.taskPlane.focus > 0.78 && kernel.taskPlane.discipline > 0.68) {
-    initiativeMode = "balanced";
+    initiativeMode = kernel.relationPlane.silentCarry > 0.44 ? "reactive" : "balanced";
+  } else if (
+    kernel.relationPlane.loopPressure > 0.68
+    && kernel.relationPlane.lastMove !== "repair"
+  ) {
+    initiativeMode = "reactive";
+  } else if (kernel.relationPlane.repairFriction > 0.6) {
+    initiativeMode = "reactive";
+  } else if (kernel.relationPlane.lastMove === "repair" && kernel.relationPlane.hysteresis > 0.56) {
+    initiativeMode = "reactive";
+  } else if (kernel.ambiguityPlane.expressionInhibition > 0.64) {
+    initiativeMode = "reactive";
   }
 
   return {

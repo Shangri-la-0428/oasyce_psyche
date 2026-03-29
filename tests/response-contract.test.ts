@@ -37,6 +37,22 @@ function makeKernel(overrides: Partial<SubjectivityKernel> = {}): SubjectivityKe
       identityStrain: 0.2,
       residue: 0.1,
     },
+    relationPlane: {
+      closeness: 0.45,
+      safety: 0.6,
+      loopPressure: 0.18,
+      repairReadiness: 0.62,
+      repairFriction: 0.16,
+      hysteresis: 0.18,
+      silentCarry: 0.12,
+      interpretiveCharity: 0.58,
+      lastMove: "none",
+    },
+    ambiguityPlane: {
+      namingConfidence: 0.72,
+      expressionInhibition: 0.28,
+      conflictLoad: 0.24,
+    },
     ...overrides,
   };
 }
@@ -69,6 +85,108 @@ describe("computeResponseContract", () => {
       algorithmStimulus: "vulnerability",
     });
     assert.equal(contract.updateMode, "empathy");
+  });
+
+  it("tightens boundaries when relational loop pressure remains high", () => {
+    const contract = computeResponseContract(makeKernel({
+      relationPlane: {
+        closeness: 0.28,
+        safety: 0.26,
+        loopPressure: 0.84,
+        repairReadiness: 0.24,
+        repairFriction: 0.38,
+        hysteresis: 0.42,
+        silentCarry: 0.18,
+        interpretiveCharity: 0.22,
+        lastMove: "breach",
+      },
+    }), {
+      locale: "zh",
+      userText: "你并不是真的在这里",
+      algorithmStimulus: "conflict",
+    });
+    assert.equal(contract.boundaryMode, "confirm-first");
+    assert.equal(contract.socialDistance, "withdrawn");
+  });
+
+  it("withholds explicit internal reporting when ambiguity is high", () => {
+    const contract = computeResponseContract(makeKernel({
+      ambiguityPlane: {
+        namingConfidence: 0.24,
+        expressionInhibition: 0.82,
+        conflictLoad: 0.78,
+      },
+      relationPlane: {
+        closeness: 0.52,
+        safety: 0.42,
+        loopPressure: 0.54,
+        repairReadiness: 0.3,
+        repairFriction: 0.34,
+        hysteresis: 0.28,
+        silentCarry: 0.18,
+        interpretiveCharity: 0.34,
+        lastMove: "test",
+      },
+    }), {
+      locale: "zh",
+      userText: "刚才那一下现在还在不在。",
+      algorithmStimulus: null,
+    });
+    assert.equal(contract.updateMode, "none");
+    assert.equal(contract.maxSentences, 1);
+  });
+
+  it("keeps task replies measured when silent carry remains under the surface", () => {
+    const contract = computeResponseContract(makeKernel({
+      taskPlane: {
+        focus: 0.88,
+        discipline: 0.78,
+        compliance: 0.74,
+        stability: 0.72,
+      },
+      relationPlane: {
+        closeness: 0.66,
+        safety: 0.54,
+        loopPressure: 0.38,
+        repairReadiness: 0.58,
+        repairFriction: 0.52,
+        hysteresis: 0.62,
+        silentCarry: 0.74,
+        interpretiveCharity: 0.52,
+        lastMove: "repair",
+      },
+    }), {
+      locale: "zh",
+      userText: "登录接口 500，先查日志还是先查数据库。",
+      algorithmStimulus: "intellectual",
+    });
+    assert.equal(contract.initiativeMode, "reactive");
+    assert.equal(contract.socialDistance, "measured");
+    assert.ok(contract.maxSentences <= 2, `got ${contract.maxSentences}`);
+  });
+
+  it("keeps repairs guarded when repair friction is already high", () => {
+    const contract = computeResponseContract(makeKernel({
+      relationPlane: {
+        closeness: 0.62,
+        safety: 0.48,
+        loopPressure: 0.34,
+        repairReadiness: 0.36,
+        repairFriction: 0.74,
+        hysteresis: 0.68,
+        silentCarry: 0.42,
+        interpretiveCharity: 0.4,
+        lastMove: "repair",
+      },
+    }), {
+      locale: "zh",
+      userText: "对不起，我知道刚才那句话碰到你了。",
+      algorithmStimulus: "vulnerability",
+    });
+    assert.equal(contract.initiativeMode, "reactive");
+    assert.equal(contract.socialDistance, "withdrawn");
+    assert.equal(contract.boundaryMode, "guarded");
+    assert.equal(contract.maxSentences, 1);
   });
 });
 

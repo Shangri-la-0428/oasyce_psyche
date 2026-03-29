@@ -29,7 +29,8 @@ export type {
   RegulationStrategyType, DefenseMechanismType,
   PersonhoodState, PersistedCausalInsight, GrowthDirection,
   PersonalityTraits, PsycheMode, PolicyModifiers, SubjectivityKernel, ResponseContract, GenerationControls,
-  AppraisalAxes, SubjectResidue, TaskPlaneState, SubjectPlaneState,
+  AppraisalAxes, SubjectResidue, TaskPlaneState, SubjectPlaneState, RelationPlaneState,
+  AmbiguityPlaneState, RelationMoveType, RelationMove, OpenLoopType, OpenLoopState, PendingRelationSignalState, DyadicFieldState,
   TraitDriftState, EnergyBudgets,
   ClassifierProvider, ClassifierContext, ClassificationResult,
 } from "./types.js";
@@ -38,7 +39,7 @@ export {
   DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE,
   DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE,
   DEFAULT_ATTACHMENT, DRIVE_KEYS, DRIVE_NAMES_ZH,
-  DEFAULT_TRAIT_DRIFT, DEFAULT_ENERGY_BUDGETS, DEFAULT_APPRAISAL_AXES, DEFAULT_SUBJECT_RESIDUE,
+  DEFAULT_TRAIT_DRIFT, DEFAULT_ENERGY_BUDGETS, DEFAULT_APPRAISAL_AXES, DEFAULT_SUBJECT_RESIDUE, DEFAULT_DYADIC_FIELD,
 } from "./types.js";
 
 // Self-recognition
@@ -100,6 +101,7 @@ export { computeSubjectivityKernel, buildSubjectivityContext } from "./subjectiv
 export { computeResponseContract, buildResponseContractContext } from "./response-contract.js";
 export { deriveGenerationControls } from "./host-controls.js";
 export { computeAppraisalAxes, mergeAppraisalResidue, getResidueIntensity } from "./appraisal.js";
+export { computeRelationMove, evolveDyadicField, evolvePendingRelationSignals, getLoopPressure } from "./relation-dynamics.js";
 
 // Experiential field (P6 + P8 Barrett construction)
 export { computeExperientialField, computeCoherence, detectUnnamedEmotion, computeAffectCore } from "./experiential-field.js";

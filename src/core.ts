@@ -13,7 +13,7 @@
 // ============================================================
 
 import type { PsycheState, StimulusType, Locale, MBTIType, ChemicalState, OutcomeScore, PsycheMode, PersonalityTraits, PolicyModifiers, ClassifierProvider, SubjectivityKernel, ResponseContract, GenerationControls } from "./types.js";
-import { DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE, DEFAULT_ENERGY_BUDGETS, DEFAULT_TRAIT_DRIFT, DEFAULT_SUBJECT_RESIDUE } from "./types.js";
+import { DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE, DEFAULT_ENERGY_BUDGETS, DEFAULT_TRAIT_DRIFT, DEFAULT_SUBJECT_RESIDUE, DEFAULT_DYADIC_FIELD } from "./types.js";
 import type { StorageAdapter } from "./storage.js";
 import { MemoryStorageAdapter } from "./storage.js";
 import { applyDecay, applyStimulus, applyContagion, clamp, describeEmotionalState } from "./chemistry.js";
@@ -53,6 +53,7 @@ import { computeSubjectivityKernel, buildSubjectivityContext } from "./subjectiv
 import { computeResponseContract, buildResponseContractContext } from "./response-contract.js";
 import { deriveGenerationControls } from "./host-controls.js";
 import { computeAppraisalAxes, mergeAppraisalResidue } from "./appraisal.js";
+import { computeRelationMove, evolveDyadicField, evolvePendingRelationSignals } from "./relation-dynamics.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -326,6 +327,18 @@ export class PsycheEngine {
           "\x1b[36m[Psyche]\x1b[0m 已从 v8 升级到 v9 — 新增：真实人格漂移、能量预算、习惯化、行为策略输出。详见 https://github.com/Shangri-la-0428/psyche-ai",
         );
       }
+      if (!loaded.dyadicFields) {
+        loaded.dyadicFields = {
+          _default: {
+            ...DEFAULT_DYADIC_FIELD,
+            openLoops: [],
+            updatedAt: new Date().toISOString(),
+          },
+        };
+      }
+      if (!loaded.pendingRelationSignals) {
+        loaded.pendingRelationSignals = { _default: [] };
+      }
       this.state = loaded;
     } else {
       this.state = this.createDefaultState();
@@ -513,6 +526,40 @@ export class PsycheEngine {
       subjectResidue: {
         axes: mergeAppraisalResidue(state.subjectResidue?.axes, appraisalAxes, this.cfg.mode),
         updatedAt: now.toISOString(),
+      },
+    };
+    const dyadKey = opts?.userId ?? "_default";
+    const relationMove = computeRelationMove(text, {
+      appraisal: appraisalAxes,
+      stimulus: appliedStimulus,
+      mode: this.cfg.mode,
+      field: state.dyadicFields?.[dyadKey],
+      relationship: state.relationships[dyadKey] ?? state.relationships._default,
+    });
+    const delayedRelation = evolvePendingRelationSignals(
+      state.pendingRelationSignals?.[dyadKey],
+      relationMove,
+      appraisalAxes,
+      { mode: this.cfg.mode },
+    );
+    state = {
+      ...state,
+      dyadicFields: {
+        ...(state.dyadicFields ?? {}),
+        [dyadKey]: evolveDyadicField(
+          state.dyadicFields?.[dyadKey],
+          relationMove,
+          appraisalAxes,
+          {
+            mode: this.cfg.mode,
+            now: now.toISOString(),
+            delayedPressure: delayedRelation.delayedPressure,
+          },
+        ),
+      },
+      pendingRelationSignals: {
+        ...(state.pendingRelationSignals ?? {}),
+        [dyadKey]: delayedRelation.signals,
       },
     };
 
@@ -730,7 +777,7 @@ export class PsycheEngine {
 
     // v9: Compute structured policy modifiers
     const policyModifiers = computePolicyModifiers(state);
-    const subjectivityKernel = computeSubjectivityKernel(state, policyModifiers, appraisalAxes);
+    const subjectivityKernel = computeSubjectivityKernel(state, policyModifiers, appraisalAxes, opts?.userId);
     const subjectivityCtx = buildSubjectivityContext(subjectivityKernel, locale);
     const responseContract = computeResponseContract(subjectivityKernel, {
       locale,
@@ -1126,6 +1173,14 @@ export class PsycheEngine {
         axes: { ...DEFAULT_SUBJECT_RESIDUE.axes },
         updatedAt: now,
       },
+      dyadicFields: {
+        _default: {
+          ...DEFAULT_DYADIC_FIELD,
+          openLoops: [],
+          updatedAt: now,
+        },
+      },
+      pendingRelationSignals: { _default: [] },
       meta: {
         agentName: name,
         createdAt: now,
@@ -1159,6 +1214,14 @@ export class PsycheEngine {
         axes: { ...DEFAULT_SUBJECT_RESIDUE.axes },
         updatedAt: new Date().toISOString(),
       },
+      dyadicFields: {
+        _default: {
+          ...DEFAULT_DYADIC_FIELD,
+          openLoops: [],
+          updatedAt: new Date().toISOString(),
+        },
+      },
+      pendingRelationSignals: { _default: [] },
       relationships: opts?.preserveRelationships !== false
         ? state.relationships
         : { _default: { ...DEFAULT_RELATIONSHIP } },

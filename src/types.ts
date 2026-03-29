@@ -393,6 +393,10 @@ export interface PsycheState {
   energyBudgets?: EnergyBudgets;
   /** v9.4: lingering subjective residue from identity / attachment appraisals */
   subjectResidue?: SubjectResidue;
+  /** v9.5: per-partner dyadic relation fields and open loops */
+  dyadicFields?: Record<string, DyadicFieldState>;
+  /** v9.6: delayed relation signals that can activate in later turns */
+  pendingRelationSignals?: Record<string, PendingRelationSignalState[]>;
   meta: {
     agentName: string;
     createdAt: string;
@@ -488,6 +492,96 @@ export const DEFAULT_SUBJECT_RESIDUE: SubjectResidue = {
   updatedAt: new Date(0).toISOString(),
 };
 
+/** Minimal relation-action vocabulary for dyadic dynamics */
+export type RelationMoveType =
+  | "none"
+  | "bid"
+  | "breach"
+  | "repair"
+  | "test"
+  | "withdrawal"
+  | "claim"
+  | "task";
+
+/** A single interpreted relation move for the current turn */
+export interface RelationMove {
+  type: RelationMoveType;
+  intensity: number;
+}
+
+/** Unfinished relational tension that can keep shaping future turns */
+export type OpenLoopType =
+  | "unmet-bid"
+  | "unrepaired-breach"
+  | "boundary-strain"
+  | "existence-test";
+
+export interface OpenLoopState {
+  type: OpenLoopType;
+  intensity: number;
+  ageTurns: number;
+}
+
+export interface PendingRelationSignalState {
+  move: Exclude<RelationMoveType, "none" | "task">;
+  intensity: number;
+  readyInTurns: number;
+  ttl: number;
+}
+
+/**
+ * Dyadic field — relation-first state that sits above raw affect.
+ *
+ * Values are normalized to 0-1 and intentionally sparse so they can be used
+ * as a narrow substrate for "what are we becoming" style dynamics.
+ */
+export interface DyadicFieldState {
+  perceivedCloseness: number;
+  feltSafety: number;
+  expectationGap: number;
+  repairCapacity: number;
+  repairMemory: number;
+  backslidePressure: number;
+  repairFatigue: number;
+  misattunementLoad: number;
+  boundaryPressure: number;
+  unfinishedTension: number;
+  silentCarry: number;
+  sharedHistoryDensity: number;
+  interpretiveCharity: number;
+  openLoops: OpenLoopState[];
+  lastMove: RelationMoveType;
+  updatedAt: string;
+}
+
+export const DEFAULT_DYADIC_FIELD: DyadicFieldState = {
+  perceivedCloseness: 0.42,
+  feltSafety: 0.56,
+  expectationGap: 0.18,
+  repairCapacity: 0.54,
+  repairMemory: 0,
+  backslidePressure: 0,
+  repairFatigue: 0,
+  misattunementLoad: 0,
+  boundaryPressure: 0.22,
+  unfinishedTension: 0.12,
+  silentCarry: 0,
+  sharedHistoryDensity: 0.08,
+  interpretiveCharity: 0.56,
+  openLoops: [],
+  lastMove: "none",
+  updatedAt: new Date(0).toISOString(),
+};
+
+export interface AmbiguityPlaneState {
+  /** How confidently the system should name what is happening */
+  namingConfidence: number;
+  /** How much expression should stay withheld or under-described */
+  expressionInhibition: number;
+  /** Degree of unresolved internal contradiction */
+  conflictLoad: number;
+}
+
 export interface TaskPlaneState {
   /** How strongly this turn should stay task-oriented */
   focus: number;
@@ -508,6 +602,27 @@ export interface SubjectPlaneState {
   identityStrain: number;
   /** Lingering non-task emotional residue */
   residue: number;
+}
+
+export interface RelationPlaneState {
+  /** Nearness of the current dyadic field */
+  closeness: number;
+  /** Whether the relationship currently feels safe enough to open */
+  safety: number;
+  /** Pressure from unresolved loops and expectation mismatch */
+  loopPressure: number;
+  /** Whether repair is currently possible without forcing it */
+  repairReadiness: number;
+  /** Repair attempts are starting to lose credibility/effectiveness */
+  repairFriction: number;
+  /** Repair is not yet stable and may rebound */
+  hysteresis: number;
+  /** Pressure being carried silently under task-facing behavior */
+  silentCarry: number;
+  /** How much benefit-of-the-doubt is still available */
+  interpretiveCharity: number;
+  /** Most recent dominant relation action */
+  lastMove: RelationMoveType;
 }
 
 // ── Subjectivity Kernel (v9.3) ──────────────────────────────
@@ -548,6 +663,10 @@ export interface SubjectivityKernel {
   taskPlane: TaskPlaneState;
   /** Subject-facing behavioral plane */
   subjectPlane: SubjectPlaneState;
+  /** Relation-facing behavioral plane */
+  relationPlane: RelationPlaneState;
+  /** Ambiguity-facing behavioral plane */
+  ambiguityPlane: AmbiguityPlaneState;
 }
 
 /**

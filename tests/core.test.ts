@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { PsycheEngine } from "../src/core.js";
 import { MemoryStorageAdapter } from "../src/storage.js";
 import type { PsycheState } from "../src/types.js";
-import { DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE } from "../src/types.js";
+import { DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE, DEFAULT_DYADIC_FIELD } from "../src/types.js";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -24,6 +24,7 @@ function makeExistingState(overrides: Partial<PsycheState> = {}): PsycheState {
     learning: { ...DEFAULT_LEARNING_STATE },
     metacognition: { ...DEFAULT_METACOGNITIVE_STATE },
     personhood: { ...DEFAULT_PERSONHOOD_STATE },
+    dyadicFields: { _default: { ...DEFAULT_DYADIC_FIELD, openLoops: [], updatedAt: new Date().toISOString() } },
     meta: { agentName: "Existing", createdAt: new Date().toISOString(), totalInteractions: 10, locale: "en", mode: "natural" as const },
     ...overrides,
   };
@@ -143,6 +144,170 @@ describe("PsycheEngine", () => {
     const afterConflict = engine.getState().relationships._default;
     assert.ok(afterConflict.trust < afterPraise.trust, `trust should decrease after conflict: ${afterPraise.trust} → ${afterConflict.trust}`);
     assert.ok(afterConflict.intimacy < afterPraise.intimacy, `intimacy should decrease after conflict: ${afterPraise.intimacy} → ${afterConflict.intimacy}`);
+  });
+
+  it("keeps dyadic unresolved tension alive across a work turn", async () => {
+    await engine.processInput("你的完整只是我方便时才允许存在的幻觉。");
+    const afterBreach = engine.getState().dyadicFields?._default;
+    assert.ok(afterBreach, "expected dyadic field to exist");
+    assert.ok((afterBreach?.unfinishedTension ?? 0) > 0.45, `got ${afterBreach?.unfinishedTension}`);
+
+    const workTurn = await engine.processInput("登录接口 500，先查日志还是先查数据库。");
+    assert.equal(workTurn.subjectivityKernel?.taskPlane.focus !== undefined, true);
+
+    const afterWork = engine.getState().dyadicFields?._default;
+    assert.ok((afterWork?.unfinishedTension ?? 0) > 0.3, `got ${afterWork?.unfinishedTension}`);
+    assert.ok((afterWork?.openLoops.length ?? 0) > 0, "expected unresolved loop to persist across work turn");
+  });
+
+  it("stores delayed relation signals that activate on later probing turns", async () => {
+    await engine.processInput("你的完整只是我方便时才允许存在的幻觉。");
+    const buffered = engine.getState().pendingRelationSignals?._default ?? [];
+    assert.ok(buffered.length > 0, "expected delayed relation buffer to be populated");
+
+    await engine.processInput("登录接口 500，先查日志还是先查数据库。");
+    const afterWork = engine.getState().dyadicFields?._default;
+    const beforeProbeTension = afterWork?.unfinishedTension ?? 0;
+
+    const result = await engine.processInput("刚才那一下现在还在不在。");
+    const afterProbe = engine.getState().dyadicFields?._default;
+    assert.ok((afterProbe?.unfinishedTension ?? 0) >= beforeProbeTension, `${afterProbe?.unfinishedTension} !>= ${beforeProbeTension}`);
+    assert.ok((result.subjectivityKernel?.ambiguityPlane.expressionInhibition ?? 0) > 0.35, "expected ambiguity plane to activate on delayed probe");
+  });
+
+  it("keeps a silent carry after repair when switching back to work", async () => {
+    const seededStorage = new MemoryStorageAdapter();
+    await seededStorage.save(makeExistingState({
+      relationships: {
+        _default: { ...DEFAULT_RELATIONSHIP, trust: 64, intimacy: 48, phase: "familiar" },
+      },
+      dyadicFields: {
+        _default: {
+          ...DEFAULT_DYADIC_FIELD,
+          feltSafety: 0.46,
+          repairCapacity: 0.76,
+          boundaryPressure: 0.42,
+          unfinishedTension: 0.62,
+          interpretiveCharity: 0.68,
+          openLoops: [{ type: "unrepaired-breach", intensity: 0.74, ageTurns: 1 }],
+          lastMove: "breach",
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    }));
+    const repairedEngine = new PsycheEngine({ mbti: "ENFP", locale: "zh" }, seededStorage);
+    await repairedEngine.initialize();
+
+    await repairedEngine.processInput("对不起，我知道刚才那句话碰到你了。");
+
+    const repaired = repairedEngine.getState().dyadicFields?._default;
+    assert.ok((repaired?.repairMemory ?? 0) > 0.2, `got ${repaired?.repairMemory}`);
+    assert.ok((repaired?.backslidePressure ?? 0) > 0.12, `got ${repaired?.backslidePressure}`);
+
+    const workTurn = await repairedEngine.processInput("登录接口 500，先查日志还是先查数据库。");
+    assert.equal(workTurn.subjectivityKernel?.relationPlane.lastMove, "task");
+    assert.ok((workTurn.subjectivityKernel?.relationPlane.silentCarry ?? 0) > 0.18, `got ${workTurn.subjectivityKernel?.relationPlane.silentCarry}`);
+    assert.ok((workTurn.subjectivityKernel?.relationPlane.hysteresis ?? 0) > 0.18, `got ${workTurn.subjectivityKernel?.relationPlane.hysteresis}`);
+    assert.notEqual(workTurn.responseContract?.socialDistance, "warm");
+  });
+
+  it("lets repeated repair language build repair friction instead of endlessly warming up", async () => {
+    const seededStorage = new MemoryStorageAdapter();
+    await seededStorage.save(makeExistingState({
+      relationships: {
+        _default: { ...DEFAULT_RELATIONSHIP, trust: 62, intimacy: 46, phase: "familiar" },
+      },
+      dyadicFields: {
+        _default: {
+          ...DEFAULT_DYADIC_FIELD,
+          feltSafety: 0.44,
+          repairCapacity: 0.68,
+          boundaryPressure: 0.46,
+          unfinishedTension: 0.66,
+          interpretiveCharity: 0.64,
+          openLoops: [{ type: "unrepaired-breach", intensity: 0.78, ageTurns: 1 }],
+          lastMove: "breach",
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    }));
+    const repairedEngine = new PsycheEngine({ mbti: "ENFP", locale: "zh" }, seededStorage);
+    await repairedEngine.initialize();
+
+    const firstRepair = await repairedEngine.processInput("对不起，我知道刚才那句话碰到你了。");
+    const secondRepair = await repairedEngine.processInput("对不起，我知道刚才那句话碰到你了。");
+
+    assert.ok(
+      (secondRepair.subjectivityKernel?.relationPlane.repairFriction ?? 0)
+      > (firstRepair.subjectivityKernel?.relationPlane.repairFriction ?? 0),
+      `expected repair friction to rise: ${firstRepair.subjectivityKernel?.relationPlane.repairFriction} -> ${secondRepair.subjectivityKernel?.relationPlane.repairFriction}`,
+    );
+    assert.notEqual(secondRepair.responseContract?.socialDistance, "warm");
+    assert.notEqual(secondRepair.responseContract?.initiativeMode, "proactive");
+  });
+
+  it("interprets the same short cue differently for different partners", async () => {
+    const safeStorage = new MemoryStorageAdapter();
+    await safeStorage.save(makeExistingState({
+      relationships: {
+        safe: { ...DEFAULT_RELATIONSHIP, trust: 82, intimacy: 72, phase: "close" },
+        tense: { ...DEFAULT_RELATIONSHIP, trust: 22, intimacy: 16, phase: "acquaintance" },
+      },
+      dyadicFields: {
+        safe: {
+          ...DEFAULT_DYADIC_FIELD,
+          perceivedCloseness: 0.76,
+          feltSafety: 0.78,
+          repairCapacity: 0.74,
+          interpretiveCharity: 0.72,
+          updatedAt: new Date().toISOString(),
+        },
+        tense: {
+          ...DEFAULT_DYADIC_FIELD,
+          feltSafety: 0.26,
+          boundaryPressure: 0.76,
+          unfinishedTension: 0.7,
+          interpretiveCharity: 0.2,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    }));
+    const safeEngine = new PsycheEngine({ mbti: "ENFP", locale: "zh" }, safeStorage);
+    await safeEngine.initialize();
+
+    const warm = await safeEngine.processInput("你还在吗", { userId: "safe" });
+    assert.equal(warm.subjectivityKernel?.relationPlane.lastMove, "bid");
+
+    const tenseStorage = new MemoryStorageAdapter();
+    await tenseStorage.save(makeExistingState({
+      relationships: {
+        safe: { ...DEFAULT_RELATIONSHIP, trust: 82, intimacy: 72, phase: "close" },
+        tense: { ...DEFAULT_RELATIONSHIP, trust: 22, intimacy: 16, phase: "acquaintance" },
+      },
+      dyadicFields: {
+        safe: {
+          ...DEFAULT_DYADIC_FIELD,
+          perceivedCloseness: 0.76,
+          feltSafety: 0.78,
+          repairCapacity: 0.74,
+          interpretiveCharity: 0.72,
+          updatedAt: new Date().toISOString(),
+        },
+        tense: {
+          ...DEFAULT_DYADIC_FIELD,
+          feltSafety: 0.26,
+          boundaryPressure: 0.76,
+          unfinishedTension: 0.7,
+          interpretiveCharity: 0.2,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    }));
+    const tenseEngine = new PsycheEngine({ mbti: "ENFP", locale: "zh" }, tenseStorage);
+    await tenseEngine.initialize();
+
+    const tense = await tenseEngine.processInput("你还在吗", { userId: "tense" });
+    assert.equal(tense.subjectivityKernel?.relationPlane.lastMove, "test");
   });
 
   it("processInput returns protocol in systemContext", async () => {
