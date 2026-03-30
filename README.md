@@ -131,7 +131,7 @@ npm view psyche-ai version
 ## 快速体验（不需要 LLM）
 
 ```bash
-git clone https://github.com/Shangri-la-0428/psyche-ai.git
+git clone https://github.com/Shangri-la-0428/oasyce_psyche.git
 cd psyche-ai && npm install && npx tsx examples/quickstart.ts
 ```
 

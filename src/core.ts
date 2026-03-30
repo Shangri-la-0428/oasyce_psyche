@@ -321,7 +321,7 @@ export class PsycheEngine {
       if (loaded.version < 9) {
         loaded.version = 9;
         console.log(
-          "\x1b[36m[Psyche]\x1b[0m 已从 v8 升级到 v9 — 新增：真实人格漂移、能量预算、习惯化、行为策略输出。详见 https://github.com/Shangri-la-0428/psyche-ai",
+          "\x1b[36m[Psyche]\x1b[0m 已从 v8 升级到 v9 — 新增：真实人格漂移、能量预算、习惯化、行为策略输出。详见 https://github.com/Shangri-la-0428/oasyce_psyche",
         );
       }
       if (!loaded.dyadicFields) {
