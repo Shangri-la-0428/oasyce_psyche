@@ -10,6 +10,15 @@
 
 ---
 
+## v9.2.11 — Compact Context Unification
+
+- **行为约束统一**：compact prompt 将底线、镜像、反谄媚和互惠整合为单一 `[行为]` 区块，减少重复指令并保持人格边界一致。
+- **内在状态重构**：新增 `deriveBehavioralBias()`，优先输出“行为倾向”而非情绪叙述，提升提示词可执行性。
+- **写回提示压缩**：新增 `buildWritebackHint()`，仅在算法不确定或新关系高情绪场景下注入 `<psyche_update>` 提示，降低 token 噪音。
+- **测试同步更新**：调整 first-meet 与 compact context 相关断言，匹配新的统一约束结构。
+
+---
+
 ## v9.2.10 — Observability Side-Channel
 
 - **可观测性侧边信道**：`processInput()` 现在会可选返回 `observability`，但仍严格把它放在 `replyEnvelope` 之外，不让观测和控制混成第二套主接口。
