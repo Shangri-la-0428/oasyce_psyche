@@ -11,6 +11,7 @@ function makeExistingState(overrides: Partial<PsycheState> = {}): PsycheState {
   return {
     version: 6,
     mbti: "INTJ",
+    sensitivity: 1.0,
     baseline: { DA: 45, HT: 70, CORT: 40, OT: 30, NE: 60, END: 35 },
     current: { DA: 80, HT: 50, CORT: 60, OT: 30, NE: 60, END: 35 },
     updatedAt: new Date().toISOString(),
@@ -38,7 +39,7 @@ describe("PsycheEngine", () => {
 
   beforeEach(async () => {
     storage = new MemoryStorageAdapter();
-    engine = new PsycheEngine({ mbti: "ENFP", name: "TestBot", locale: "zh", compactMode: false }, storage);
+    engine = new PsycheEngine({ mbti: "ENFP", name: "TestBot", locale: "zh" }, storage);
     await engine.initialize();
   });
 
@@ -46,8 +47,9 @@ describe("PsycheEngine", () => {
 
   it("initializes with default state when storage is empty", () => {
     const state = engine.getState();
-    assert.equal(state.version, 9);
-    assert.equal(state.mbti, "ENFP");
+    assert.equal(state.version, 10);
+    // v10: mbti is no longer stored on new states
+    assert.equal(state.mbti, undefined);
     assert.equal(state.meta.agentName, "TestBot");
     assert.equal(state.meta.locale, "zh");
   });
@@ -79,14 +81,16 @@ describe("PsycheEngine", () => {
   it("saves default state to storage on initialize", async () => {
     const stored = await storage.load();
     assert.ok(stored !== null);
-    assert.equal(stored!.mbti, "ENFP");
+    // v10: mbti no longer stored on new states; baseline derived from preset
+    assert.equal(stored!.mbti, undefined);
+    assert.ok(stored!.sensitivity > 0);
   });
 
   // ── processInput ────────────────────────────────────────
 
   it("processInput classifies praise stimulus", async () => {
     const result = await engine.processInput("你做得太棒了！");
-    assert.ok(result.systemContext.length > 0);
+    assert.equal(result.systemContext, "");
     assert.ok(result.dynamicContext.length > 0);
     assert.equal(result.stimulus, "praise");
   });
@@ -162,7 +166,7 @@ describe("PsycheEngine", () => {
     assert.equal(result.observability?.causalChain.parentTurnRef, null);
     assert.ok(Array.isArray(result.observability?.traceMapping.localTraceRefs));
     assert.equal(result.observability?.outputAttribution.canonicalSurface, "reply-envelope");
-    assert.equal(result.observability?.outputAttribution.promptRenderer, "dynamic");
+    assert.equal(result.observability?.outputAttribution.promptRenderer, "compact");
     assert.ok(result.observability?.outputAttribution.renderInputs.includes("subjectivity"));
     assert.ok(result.observability?.outputAttribution.renderInputs.includes("response-contract"));
     assert.ok(result.observability?.outputAttribution.runtimeHooks.includes("reply-envelope"));
@@ -346,14 +350,14 @@ describe("PsycheEngine", () => {
     assert.equal(tense.subjectivityKernel?.relationPlane.lastMove, "test");
   });
 
-  it("processInput returns protocol in systemContext", async () => {
+  it("processInput returns empty systemContext (compact mode always on)", async () => {
     const result = await engine.processInput("hi");
-    assert.ok(result.systemContext.includes("Psyche"));
+    assert.equal(result.systemContext, "");
   });
 
-  it("processInput returns chemistry in dynamicContext", async () => {
+  it("processInput returns compact context in dynamicContext", async () => {
     const result = await engine.processInput("hi");
-    assert.ok(result.dynamicContext.includes("多巴胺") || result.dynamicContext.includes("Dopamine"));
+    assert.ok(result.dynamicContext.includes("TestBot") || result.dynamicContext.includes("情绪感知") || result.dynamicContext.includes("情绪自然"));
   });
 
   // ── processOutput ───────────────────────────────────────
@@ -466,16 +470,18 @@ END: 75 (happy)
 
   // ── Config defaults ─────────────────────────────────────
 
-  it("defaults to INFJ when no MBTI specified", async () => {
+  it("defaults to INFJ baseline when no MBTI specified", async () => {
     const s = new MemoryStorageAdapter();
     const e = new PsycheEngine({}, s);
     await e.initialize();
-    assert.equal(e.getState().mbti, "INFJ");
+    // v10: mbti not stored, but baseline should match INFJ profile
+    assert.equal(e.getState().mbti, undefined);
+    assert.equal(e.getState().baseline.DA, 50); // INFJ baseline DA
   });
 
   it("defaults to zh locale", async () => {
     const s = new MemoryStorageAdapter();
-    const e = new PsycheEngine({ compactMode: false }, s);
+    const e = new PsycheEngine({}, s);
     await e.initialize();
     assert.equal(e.getState().meta.locale, "zh");
   });
@@ -827,18 +833,9 @@ END: 75 (happy)
     assert.equal(result.systemContext, "");
   });
 
-  it("compactMode=false returns full protocol", async () => {
-    const s = new MemoryStorageAdapter();
-    const e = new PsycheEngine({ mbti: "ENFP", compactMode: false }, s);
-    await e.initialize();
-    const result = await e.processInput("hello");
-    assert.ok(result.systemContext.includes("Psyche"));
-    assert.ok(result.dynamicContext.includes("多巴胺") || result.dynamicContext.includes("Dopamine"));
-  });
-
   it("classifies 滚 as conflict", async () => {
     const s = new MemoryStorageAdapter();
-    const e = new PsycheEngine({ mbti: "ENFP", compactMode: false }, s);
+    const e = new PsycheEngine({ mbti: "ENFP" }, s);
     await e.initialize();
     const result = await e.processInput("滚");
     assert.equal(result.stimulus, "conflict");
@@ -846,7 +843,7 @@ END: 75 (happy)
 
   it("classifies 我今天好难过 as vulnerability", async () => {
     const s = new MemoryStorageAdapter();
-    const e = new PsycheEngine({ mbti: "ENFP", compactMode: false }, s);
+    const e = new PsycheEngine({ mbti: "ENFP" }, s);
     await e.initialize();
     const result = await e.processInput("我今天好难过，感觉什么都做不好");
     assert.equal(result.stimulus, "vulnerability");
@@ -854,7 +851,7 @@ END: 75 (happy)
 
   it("processOutput applies sparse writeback signals without extra prompt text", async () => {
     const s = new MemoryStorageAdapter();
-    const e = new PsycheEngine({ mbti: "ENFP", compactMode: false }, s);
+    const e = new PsycheEngine({ mbti: "ENFP" }, s);
     await e.initialize();
     const before = e.getState();
     const result = await e.processOutput("好的。", {
@@ -1170,8 +1167,8 @@ describe("PsycheEngine — traits-based initialization", () => {
     }, s);
     await e.initialize();
     const state = e.getState();
-    // Should use INFJ as default mbti label but traits-based baseline
-    assert.equal(state.mbti, "INFJ");
+    // v10: mbti not stored; traits-based baseline used directly
+    assert.equal(state.mbti, undefined);
     assert.ok(state.baseline.DA > 0, "Should have valid baseline DA");
     assert.ok(state.current.DA > 0, "Should have valid current DA");
   });

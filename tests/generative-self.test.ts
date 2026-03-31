@@ -22,6 +22,7 @@ function makeState(overrides?: Partial<PsycheState>): PsycheState {
   return {
     version: 6,
     mbti: "INFJ",
+    sensitivity: 1.0,
     baseline: { DA: 55, HT: 65, CORT: 35, OT: 60, NE: 45, END: 50 },
     current: { DA: 55, HT: 65, CORT: 35, OT: 60, NE: 45, END: 50 },
     drives: { survival: 80, safety: 70, connection: 60, esteem: 60, curiosity: 70 },
@@ -243,7 +244,8 @@ describe("buildIdentityNarrative", () => {
   });
 
   it("incorporates MBTI personality traits", () => {
-    const state = makeState({ mbti: "ENTP", meta: { agentName: "test", createdAt: new Date().toISOString(), totalInteractions: 10, locale: "en" } });
+    const state = makeState({ mbti: "ENTP",
+    sensitivity: 1.0, meta: { agentName: "test", createdAt: new Date().toISOString(), totalInteractions: 10, locale: "en" } });
     const model = computeGenerativeSelf(state);
     const narrative = buildIdentityNarrative(state, model.causalInsights, model.growthArc, "en");
     // ENTP is extraverted -> narrative should mention interaction/energy/exchange

@@ -1,7 +1,7 @@
 # Psyche — 面向智能体的 AI-first 主观性内核
 
 [![npm](https://img.shields.io/npm/v/psyche-ai)](https://www.npmjs.com/package/psyche-ai)
-[![tests](https://img.shields.io/badge/tests-1308%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-1316%20passing-brightgreen)]()
 [![deps](https://img.shields.io/badge/dependencies-0-blue)]()
 [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
@@ -185,10 +185,16 @@ npx psyche-mcp --demo
 ## 30 秒安装
 
 ```bash
+npm install psyche-ai
+```
+
+或者通过 OpenClaw 插件安装：
+
+```bash
 openclaw plugins install psyche-ai
 ```
 
-没了。装完自动生效。
+验证：
 
 ```bash
 openclaw plugins list | grep psyche
@@ -562,7 +568,7 @@ Psyche 核心引擎永久开源（MIT）。
 ```bash
 npm install
 npm run build
-npm test           # 1308 tests
+npm test           # 1316 tests
 npm run typecheck  # strict mode
 ```
 

@@ -1,7 +1,11 @@
 // ============================================================
 // psyche-ai — Universal AI Emotional Intelligence Plugin
 //
-// Main entry point: re-exports core, storage, types.
+// Public API surface (~20 essential exports).
+// Internal computation functions remain accessible via direct
+// module imports (e.g. "psyche-ai/src/learning.js") for tests
+// and advanced use, but are NOT part of the public contract.
+//
 // Framework adapters available via subpath imports:
 //   psyche-ai/openclaw   — OpenClaw plugin
 //   psyche-ai/vercel-ai  — Vercel AI SDK middleware
@@ -9,189 +13,191 @@
 //   psyche-ai/http       — HTTP server for Python/Go/etc.
 // ============================================================
 
-// Core
+// ── Core engine ─────────────────────────────────────────────
 export { PsycheEngine } from "./core.js";
 export type { PsycheEngineConfig, ProcessInputResult, ProcessOutputResult, ProcessOutcomeResult } from "./core.js";
 
-// Storage
+// ── Storage ─────────────────────────────────────────────────
 export { FileStorageAdapter, MemoryStorageAdapter } from "./storage.js";
 export type { StorageAdapter } from "./storage.js";
 
-// Types
+// ── Types (public contract) ─────────────────────────────────
 export type {
-  PsycheState, MBTIType, Locale, StimulusType,
-  ChemicalState, ChemicalSnapshot, SelfModel, RelationshipState,
-  EmpathyEntry, EmotionPattern, DriveType, InnateDrives,
-  LearningState, LearnedVectorAdjustment, PredictionRecord,
-  OutcomeScore, OutcomeSignals,
-  AttachmentStyle, AttachmentData,
-  MetacognitiveState, RegulationRecord, DefensePatternRecord,
-  RegulationStrategyType, DefenseMechanismType,
-  PersonhoodState, PersistedCausalInsight, GrowthDirection,
-  PersonalityTraits, PsycheMode, PolicyModifiers, SubjectivityKernel, ResponseContract, GenerationControls,
-  TurnControlPlane, TurnControlDriver, ControlBoundaryObservation, StateLayerKind, StateLayerObservation,
-  PromptRenderInputName, RuntimeHookName, OutputAttributionObservation, StateReconciliationObservation,
-  DecisionEvidenceObservation, DecisionCandidateName, DecisionCandidateObservation, DecisionRationaleObservation,
-  CausalChainObservation, ExternalTraceMappingObservation, TurnObservability,
-  AppraisalAxes, SubjectResidue, TaskPlaneState, SubjectPlaneState, RelationPlaneState,
-  AmbiguityPlaneState, RelationMoveType, RelationMove, OpenLoopType, OpenLoopState, PendingRelationSignalState, DyadicFieldState,
-  SessionBridgeState, ThrongletsExportSubject, ThrongletsExportPrimitive, ThrongletsExportBase, RelationMilestoneExport,
-  OpenLoopAnchorExport, WritebackCalibrationExport, ContinuityAnchorExport, ThrongletsExport, ThrongletsExportState,
-  ExternalContinuityEvent, ExternalContinuityEnvelope, ThrongletsTraceTaxonomy, ThrongletsExternalContinuityRecord,
-  ThrongletsTracePayload, ThrongletsTraceSerializationOptions,
-  WritebackSignalType, WritebackSignalWeightMap, PendingWritebackCalibration, WritebackCalibrationFeedback, WritebackCalibrationMetric,
-  TraitDriftState, EnergyBudgets,
-  ClassifierProvider, ClassifierContext, ClassificationResult,
-} from "./types.js";
-export {
-  CHEMICAL_KEYS, CHEMICAL_NAMES, CHEMICAL_NAMES_ZH,
-  DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE,
-  DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE,
-  DEFAULT_ATTACHMENT, DRIVE_KEYS, DRIVE_NAMES_ZH,
-  DEFAULT_TRAIT_DRIFT, DEFAULT_ENERGY_BUDGETS, DEFAULT_APPRAISAL_AXES, DEFAULT_SUBJECT_RESIDUE, DEFAULT_DYADIC_FIELD,
+  PsycheState, ChemicalState, Locale, PsycheMode, StimulusType, MBTIType,
+  WritebackSignalType,
+  DelegateCapability, CapabilityGrant, RevocationCondition, DelegateAuthorization,
 } from "./types.js";
 
-// Self-recognition
-export { computeSelfReflection, computeEmotionalTendency, buildSelfReflectionContext } from "./self-recognition.js";
-export type { SelfReflection } from "./self-recognition.js";
+// ── Prompt context builders ─────────────────────────────────
+export { buildProtocolContext, buildCompactContext } from "./prompt.js";
+/** @deprecated Use buildCompactContext instead. Kept for backward compat. */
+export { buildDynamicContext } from "./prompt.js";
+export { isNearBaseline, getNearBaselineThreshold, deriveBehavioralBias, computeUserInvestment } from "./prompt.js";
 
-// Multi-agent interaction
-export { PsycheInteraction } from "./interaction.js";
-export type { ExchangeResult, ContagionResult, RelationshipSummary, InteractionPhase } from "./interaction.js";
+// ── Profile helpers ─────────────────────────────────────────
+export { getBaseline, getSensitivity, getDefaultSelfModel, getTemperament, traitsToBaseline, mbtiToTraits } from "./profiles.js";
+export { createCustomProfile, PRESET_PROFILES } from "./custom-profile.js";
 
-// Channels
-export { getChannelProfile, buildChannelModifier, createCustomChannel } from "./channels.js";
-export type { ChannelType, ChannelProfile } from "./channels.js";
+// ── Diagnostics ─────────────────────────────────────────────
+export { computeLayerHealthSummary } from "./diagnostics.js";
+export type { LayerHealthSummary, LayerHealthDetail, LayerStatus, DiagnosticLayer } from "./diagnostics.js";
 
-// Custom profiles — beyond MBTI presets
-export { createCustomProfile, validateProfileConfig, PRESET_PROFILES } from "./custom-profile.js";
-export type { CustomProfileConfig, ResolvedProfile } from "./custom-profile.js";
 
-// Emotional learning (P3)
-export {
-  evaluateOutcome, getLearnedVector, updateLearnedVector,
-  computeContextHash, predictChemistry, computePredictionError,
-  recordPrediction, getAveragePredictionError,
-} from "./learning.js";
-
-// Context-aware classification (P3)
-export { classifyStimulusWithContext, extractContextFeatures, stimulusWarmth } from "./context-classifier.js";
-export type { ContextFeatures, ContextualClassification } from "./context-classifier.js";
-
-// Temporal consciousness (P4)
-export {
-  predictNextStimulus, generateAnticipation, computeSurpriseEffect, computeRegret,
-} from "./temporal.js";
-export type { StimulusPrediction, AnticipationState, RegretEntry } from "./temporal.js";
-
-// Attachment dynamics (P4)
-export {
-  updateAttachment, computeSeparationEffect, computeReunionEffect,
-} from "./attachment.js";
-export type { SeparationEffect } from "./attachment.js";
-
-// Metacognition (P5)
-export {
-  assessMetacognition, computeEmotionalConfidence,
-  generateRegulationSuggestions, detectDefenseMechanisms,
-} from "./metacognition.js";
-export type { MetacognitiveAssessment, RegulationSuggestion, DetectedDefense } from "./metacognition.js";
-
-// Decision bias (P5) + PolicyModifiers (v9)
-export {
-  computeDecisionBias, computeAttentionWeights,
-  computeExploreExploit, buildDecisionContext,
-  computePolicyModifiers, buildPolicyContext,
-} from "./decision-bias.js";
-export type { DecisionBiasVector, AttentionWeights } from "./decision-bias.js";
-
-// Subjectivity kernel (v9.3)
-export { computeSubjectivityKernel, buildSubjectivityContext } from "./subjectivity.js";
-export { computeResponseContract, buildResponseContractContext } from "./response-contract.js";
-export { deriveGenerationControls } from "./host-controls.js";
-export { deriveReplyEnvelope } from "./reply-envelope.js";
-export type { ReplyEnvelope } from "./reply-envelope.js";
-export { buildTurnObservability } from "./observability.js";
-export { computeAppraisalAxes, mergeAppraisalResidue, getResidueIntensity } from "./appraisal.js";
-export {
-  computeRelationMove, evolveDyadicField, evolvePendingRelationSignals, getLoopPressure,
-  applySessionBridge, applyWritebackSignals, createWritebackCalibrations, evaluateWritebackCalibrations,
-} from "./relation-dynamics.js";
-export {
-  EXTERNAL_CONTINUITY_SIGNAL_KINDS,
-  EXTERNAL_CONTINUITY_TRACE_KINDS,
-  buildExternalContinuityEnvelope,
-} from "./external-continuity.js";
-export { deriveThrongletsExports } from "./thronglets-export.js";
-export {
-  taxonomyForThrongletsExport,
-  serializeThrongletsExportAsTrace,
-  serializeExternalContinuityForThronglets,
-} from "./thronglets-runtime.js";
-export { runRuntimeProbe } from "./runtime-probe.js";
-export type { RuntimeProbeResult } from "./runtime-probe.js";
-
-// Experiential field (P6 + P8 Barrett construction)
-export { computeExperientialField, computeCoherence, detectUnnamedEmotion, computeAffectCore } from "./experiential-field.js";
-export type { ExperientialField, ExperientialQuality, ConstructionContext } from "./experiential-field.js";
-
-// Generative self (P6)
-export { computeGenerativeSelf, predictSelfReaction, detectInternalConflicts, buildIdentityNarrative } from "./generative-self.js";
-export type { GenerativeSelfModel, CausalInsight, SelfPrediction, GrowthArc, InternalConflict } from "./generative-self.js";
-
-// Shared intentionality (P6)
-export { updateSharedIntentionality, estimateOtherMood, buildSharedIntentionalityContext } from "./shared-intentionality.js";
-export type { SharedIntentionalityState, TheoryOfMindModel, JointAttentionTopic, GoalAlignment } from "./shared-intentionality.js";
-
-// Emotional ethics (P6)
-export {
-  assessEthics, detectIntermittentReinforcement, detectDependencyRisk,
-  buildEthicalContext,
-} from "./ethics.js";
-export type { EthicalAssessment, EthicalConcern, SelfProtectionAction } from "./ethics.js";
-
-// Autonomic nervous system (P7)
-export { computeAutonomicResult, computeAutonomicState, computeProcessingDepth, gateEmotions, getTransitionTime, describeAutonomicState } from "./autonomic.js";
-export type { AutonomicState, AutonomicResult, AutonomicTransition } from "./autonomic.js";
-
-// Circadian rhythms (P12)
-export { computeCircadianModulation, computeHomeostaticPressure, getCircadianPhase, computeEnergyDepletion, computeEnergyRecovery } from "./circadian.js";
-export type { CircadianPhase } from "./circadian.js";
-
-// Primary emotional systems — Panksepp (P9)
-export {
-  computePrimarySystems, computeSystemInteractions,
-  gatePrimarySystemsByAutonomic, getDominantSystems,
-  describeBehavioralTendencies, PRIMARY_SYSTEM_NAMES,
-} from "./primary-systems.js";
-export type {
-  PrimarySystemName, PrimarySystemLevels, BehavioralTendency, DominantSystem,
-} from "./primary-systems.js";
-
-// Utilities — for custom adapter / advanced use
-// Trait drift (v9)
-export { updateTraitDrift } from "./drives.js";
-
-// Utilities — for custom adapter / advanced use
-export { classifyStimulus, getPrimaryStimulus, scoreSentiment, scoreEmoji, BuiltInClassifier, analyzeParticles, detectIntent, buildLLMClassifierPrompt, parseLLMClassification } from "./classify.js";
-export type { StimulusClassification, ParticleSignal, MessageIntent } from "./classify.js";
-export { buildProtocolContext, buildDynamicContext, buildCompactContext, isNearBaseline, getNearBaselineThreshold } from "./prompt.js";
-export { describeEmotionalState, getExpressionHint, getBehaviorGuide, detectEmotions } from "./chemistry.js";
-export { getBaseline, getTemperament, getSensitivity, getDefaultSelfModel, traitsToBaseline, mbtiToTraits } from "./profiles.js";
-export {
-  migrateToLatest, compressSession, parsePsycheUpdate,
-  computeSnapshotIntensity, computeSnapshotValence,
-  consolidateHistory, retrieveRelatedMemories,
-} from "./psyche-file.js";
-export type { PsycheUpdateResult } from "./psyche-file.js";
-
-// ── Diagnostics ──────────────────────────────────────────────
-export {
-  runHealthCheck, DiagnosticCollector, computeLayerHealthSummary,
-  generateReport, formatReport, toGitHubIssueBody, formatLogEntry,
-  submitFeedback,
-} from "./diagnostics.js";
-export type {
-  DiagnosticIssue, DiagnosticReport, SessionMetrics, Severity,
-  DiagnosticLayer, LayerStatus, LayerHealthDetail, LayerHealthSummary,
-} from "./diagnostics.js";
+// ============================================================
+// INTENTIONALLY REMOVED FROM PUBLIC API (v9.3)
+//
+// The following were previously exported but are internal
+// implementation details. They remain importable via direct
+// module paths for tests and advanced integrations:
+//
+// types.js (constants & defaults):
+//   CHEMICAL_KEYS, CHEMICAL_NAMES, CHEMICAL_NAMES_ZH, DRIVE_KEYS,
+//   DRIVE_NAMES_ZH, DEFAULT_RELATIONSHIP, DEFAULT_DRIVES,
+//   DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE,
+//   DEFAULT_PERSONHOOD_STATE, DEFAULT_ATTACHMENT,
+//   DEFAULT_TRAIT_DRIFT, DEFAULT_ENERGY_BUDGETS,
+//   DEFAULT_APPRAISAL_AXES, DEFAULT_SUBJECT_RESIDUE,
+//   DEFAULT_DYADIC_FIELD
+//
+// types.js (internal type aliases):
+//   ChemicalSnapshot, SelfModel, RelationshipState, EmpathyEntry,
+//   EmotionPattern, DriveType, InnateDrives, LearningState,
+//   LearnedVectorAdjustment, PredictionRecord, OutcomeScore,
+//   OutcomeSignals, AttachmentStyle, AttachmentData,
+//   MetacognitiveState, RegulationRecord, DefensePatternRecord,
+//   RegulationStrategyType, DefenseMechanismType, PersonhoodState,
+//   PersistedCausalInsight, GrowthDirection, PersonalityTraits,
+//   PolicyModifiers, SubjectivityKernel, ResponseContract,
+//   GenerationControls, TurnControlPlane, TurnControlDriver,
+//   ControlBoundaryObservation, StateLayerKind,
+//   StateLayerObservation, PromptRenderInputName, RuntimeHookName,
+//   OutputAttributionObservation, StateReconciliationObservation,
+//   DecisionEvidenceObservation, DecisionCandidateName,
+//   DecisionCandidateObservation, DecisionRationaleObservation,
+//   CausalChainObservation, ExternalTraceMappingObservation,
+//   TurnObservability, AppraisalAxes, SubjectResidue,
+//   TaskPlaneState, SubjectPlaneState, RelationPlaneState,
+//   AmbiguityPlaneState, RelationMoveType, RelationMove,
+//   OpenLoopType, OpenLoopState, PendingRelationSignalState,
+//   DyadicFieldState, SessionBridgeState,
+//   ThrongletsExport* types, ExternalContinuity* types,
+//   WritebackSignalWeightMap, PendingWritebackCalibration,
+//   WritebackCalibrationFeedback, WritebackCalibrationMetric,
+//   TraitDriftState, EnergyBudgets, ClassifierProvider,
+//   ClassifierContext, ClassificationResult
+//
+// self-recognition.js:
+//   computeSelfReflection, computeEmotionalTendency,
+//   buildSelfReflectionContext, SelfReflection
+//
+// interaction.js:
+//   PsycheInteraction, ExchangeResult, ContagionResult,
+//   RelationshipSummary, InteractionPhase
+//
+// channels.js:
+//   getChannelProfile, buildChannelModifier, createCustomChannel,
+//   ChannelType, ChannelProfile
+//
+// custom-profile.js:
+//   validateProfileConfig, CustomProfileConfig, ResolvedProfile
+//
+// learning.js:
+//   evaluateOutcome, getLearnedVector, updateLearnedVector,
+//   computeContextHash, predictChemistry, computePredictionError,
+//   recordPrediction, getAveragePredictionError
+//
+// context-classifier.js:
+//   classifyStimulusWithContext, extractContextFeatures,
+//   stimulusWarmth, ContextFeatures, ContextualClassification
+//
+// temporal.js:
+//   predictNextStimulus, generateAnticipation,
+//   computeSurpriseEffect, computeRegret, StimulusPrediction,
+//   AnticipationState, RegretEntry
+//
+// attachment.js:
+//   updateAttachment, computeSeparationEffect,
+//   computeReunionEffect, SeparationEffect
+//
+// metacognition.js:
+//   assessMetacognition, computeEmotionalConfidence,
+//   generateRegulationSuggestions, detectDefenseMechanisms,
+//   MetacognitiveAssessment, RegulationSuggestion, DetectedDefense
+//
+// decision-bias.js:
+//   computeDecisionBias, computeAttentionWeights,
+//   computeExploreExploit, buildDecisionContext,
+//   computePolicyModifiers, buildPolicyContext,
+//   DecisionBiasVector, AttentionWeights
+//
+// subjectivity.js, response-contract.js, host-controls.js,
+// reply-envelope.js, observability.js, appraisal.js,
+// relation-dynamics.js, external-continuity.js,
+// thronglets-export.js, thronglets-runtime.js,
+// runtime-probe.js:
+//   All functions & types (orchestrated by PsycheEngine)
+//
+// experiential-field.js:
+//   computeExperientialField, computeCoherence,
+//   detectUnnamedEmotion, computeAffectCore, ExperientialField,
+//   ExperientialQuality, ConstructionContext
+//
+// generative-self.js:
+//   computeGenerativeSelf, predictSelfReaction,
+//   detectInternalConflicts, buildIdentityNarrative,
+//   GenerativeSelfModel, CausalInsight, SelfPrediction,
+//   GrowthArc, InternalConflict
+//
+// shared-intentionality.js:
+//   updateSharedIntentionality, estimateOtherMood,
+//   buildSharedIntentionalityContext, SharedIntentionalityState,
+//   TheoryOfMindModel, JointAttentionTopic, GoalAlignment
+//
+// ethics.js:
+//   assessEthics, detectIntermittentReinforcement,
+//   detectDependencyRisk, buildEthicalContext,
+//   EthicalAssessment, EthicalConcern, SelfProtectionAction
+//
+// autonomic.js:
+//   computeAutonomicResult, computeAutonomicState,
+//   computeProcessingDepth, gateEmotions, getTransitionTime,
+//   describeAutonomicState, AutonomicState, AutonomicResult,
+//   AutonomicTransition
+//
+// circadian.js:
+//   computeCircadianModulation, computeHomeostaticPressure,
+//   getCircadianPhase, computeEnergyDepletion,
+//   computeEnergyRecovery, CircadianPhase
+//
+// primary-systems.js:
+//   computePrimarySystems, computeSystemInteractions,
+//   gatePrimarySystemsByAutonomic, getDominantSystems,
+//   describeBehavioralTendencies, PRIMARY_SYSTEM_NAMES,
+//   PrimarySystemName, PrimarySystemLevels,
+//   BehavioralTendency, DominantSystem
+//
+// classify.js:
+//   classifyStimulus, getPrimaryStimulus, scoreSentiment,
+//   scoreEmoji, BuiltInClassifier, analyzeParticles, detectIntent,
+//   buildLLMClassifierPrompt, parseLLMClassification,
+//   StimulusClassification, ParticleSignal, MessageIntent
+//
+// chemistry.js:
+//   describeEmotionalState, getExpressionHint,
+//   getBehaviorGuide, detectEmotions
+//
+// drives.js:
+//   updateTraitDrift
+//
+// psyche-file.js:
+//   migrateToLatest, compressSession, parsePsycheUpdate,
+//   computeSnapshotIntensity, computeSnapshotValence,
+//   consolidateHistory, retrieveRelatedMemories,
+//   PsycheUpdateResult
+//
+// diagnostics.js (remaining):
+//   runHealthCheck, DiagnosticCollector, generateReport,
+//   formatReport, toGitHubIssueBody, formatLogEntry,
+//   submitFeedback, DiagnosticIssue, DiagnosticReport,
+//   SessionMetrics, Severity
+// ============================================================

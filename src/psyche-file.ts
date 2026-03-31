@@ -647,7 +647,18 @@ export async function loadState(
       return migrateToLatest(parsed, fallbackName);
     }
 
-    return parsed as unknown as PsycheState;
+    // Migrate states that have mbti but no sensitivity (pre-v10)
+    const state = parsed as unknown as PsycheState;
+    if (state.mbti && state.sensitivity === undefined) {
+      state.sensitivity = getSensitivity(state.mbti);
+      logger.info(`Migrated sensitivity from mbti=${state.mbti}: ${state.sensitivity}`);
+    }
+    // Ensure sensitivity has a default even for very old states
+    if (state.sensitivity === undefined) {
+      state.sensitivity = 1.0;
+    }
+
+    return state;
   }
 
   return initializeState(workspaceDir, undefined, logger);
@@ -715,12 +726,13 @@ export async function initializeState(
   const locale = opts?.locale ?? "zh";
   const baseline = getBaseline(mbti);
   const selfModel = getDefaultSelfModel(mbti);
+  const sensitivity = getSensitivity(mbti);
   const now = new Date().toISOString();
 
   const state: PsycheState = {
-    version: 6,
-    mbti,
+    version: 10,
     baseline,
+    sensitivity,
     current: { ...baseline },
     drives: { ...DEFAULT_DRIVES },
     updatedAt: now,
@@ -1035,10 +1047,10 @@ export function updateAgreementStreak(state: PsycheState, llmOutput: string): Ps
  * Generate the static PSYCHE.md reference file.
  */
 export async function generatePsycheMd(workspaceDir: string, state: PsycheState): Promise<void> {
-  const { mbti, baseline, selfModel, meta } = state;
+  const { baseline, selfModel, meta } = state;
   const locale = meta.locale ?? "zh";
-  const temperament = getTemperament(mbti);
-  const sensitivity = getSensitivity(mbti);
+  const temperament = state.mbti ? getTemperament(state.mbti) : "";
+  const sensitivity = state.sensitivity ?? 1.0;
 
   const baselineLines = CHEMICAL_KEYS.map(
     (k) => `- ${CHEMICAL_NAMES_ZH[k]}: ${baseline[k]}`,
@@ -1048,7 +1060,7 @@ export async function generatePsycheMd(workspaceDir: string, state: PsycheState)
 
 ${t("md.intro", locale)}
 
-## ${t("md.baseline_title", locale)} (MBTI: ${mbti})
+## ${t("md.baseline_title", locale)}
 
 ${temperament}
 

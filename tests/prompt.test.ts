@@ -8,6 +8,7 @@ function makeState(overrides: Partial<PsycheState> = {}): PsycheState {
   return {
     version: 6,
     mbti: "ENFP",
+    sensitivity: 1.0,
     baseline: { DA: 75, HT: 55, CORT: 30, OT: 60, NE: 65, END: 70 },
     current: { DA: 75, HT: 55, CORT: 30, OT: 60, NE: 65, END: 70 },
     updatedAt: new Date().toISOString(),
@@ -71,10 +72,9 @@ describe("buildProtocolContext", () => {
 // ── buildDynamicContext ──────────────────────────────────────
 
 describe("buildDynamicContext", () => {
-  it("includes agent name and MBTI", () => {
+  it("includes agent name", () => {
     const ctx = buildDynamicContext(makeState());
     assert.ok(ctx.includes("TestBot"));
-    assert.ok(ctx.includes("ENFP"));
   });
 
   it("includes chemistry readout", () => {
@@ -181,10 +181,16 @@ describe("buildDynamicContext", () => {
 
   it("generates different constraints for Thinker vs Feeler", () => {
     const highCort = { DA: 50, HT: 50, CORT: 70, OT: 50, NE: 50, END: 50 };
-    // ENFP (Feeler)
-    const feelerCtx = buildDynamicContext(makeState({ current: highCort }));
-    // INTJ (Thinker)
-    const thinkerCtx = buildDynamicContext(makeState({ current: highCort, mbti: "INTJ" }));
+    // Warm baseline (Feeler: OT >= 50)
+    const feelerCtx = buildDynamicContext(makeState({
+      current: highCort,
+      baseline: { DA: 75, HT: 55, CORT: 30, OT: 60, NE: 65, END: 70 },
+    }));
+    // Cold baseline (Thinker: OT < 50)
+    const thinkerCtx = buildDynamicContext(makeState({
+      current: highCort,
+      baseline: { DA: 45, HT: 70, CORT: 40, OT: 30, NE: 60, END: 35 },
+    }));
     // They should have different constraint texts
     assert.notEqual(feelerCtx, thinkerCtx);
   });
@@ -339,6 +345,7 @@ describe("buildInnerWorld", () => {
   it("shows calm for truly neutral chemistry", () => {
     const state = makeState({
       mbti: "ISTJ",
+    sensitivity: 1.0,
       baseline: { DA: 40, HT: 75, CORT: 35, OT: 35, NE: 40, END: 35 },
       current: { DA: 40, HT: 75, CORT: 35, OT: 35, NE: 40, END: 35 },
     });

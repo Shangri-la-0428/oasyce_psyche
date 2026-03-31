@@ -75,7 +75,7 @@ export interface DiagnosticReport {
   version: string;
   timestamp: string;
   agent: string;
-  mbti: string;
+  mbti?: string;
   issues: DiagnosticIssue[];
   /** Issues grouped by stack layer — same issues as `issues`, partitioned */
   layeredIssues: Record<DiagnosticLayer, DiagnosticIssue[]>;
@@ -677,7 +677,7 @@ export function generateReport(
     version: packageVersion,
     timestamp: new Date().toISOString(),
     agent: state.meta.agentName,
-    mbti: state.mbti,
+    mbti: state.mbti ?? undefined,
     issues,
     layeredIssues,
     layerHealth,
@@ -720,7 +720,7 @@ export function formatReport(report: DiagnosticReport): string {
   const lines: string[] = [];
 
   lines.push(`psyche-ai diagnostic report v${report.version}`);
-  lines.push(`agent: ${report.agent} (${report.mbti}) | ${report.timestamp}`);
+  lines.push(`agent: ${report.agent}${report.mbti ? ` (${report.mbti})` : ""} | ${report.timestamp}`);
   lines.push("─".repeat(60));
 
   // Layer health overview — the first thing to read
@@ -817,7 +817,7 @@ export function toGitHubIssueBody(report: DiagnosticReport): string {
   lines.push("## Auto-Diagnostic Report");
   lines.push("");
   lines.push(`- **psyche-ai**: v${report.version}`);
-  lines.push(`- **Agent**: ${report.agent} (${report.mbti})`);
+  lines.push(`- **Agent**: ${report.agent}${report.mbti ? ` (${report.mbti})` : ""}`);
   lines.push(`- **Generated**: ${report.timestamp}`);
   lines.push("");
 
@@ -926,7 +926,8 @@ export async function submitFeedback(
   const payload = {
     version: report.version,
     timestamp: report.timestamp,
-    mbti: report.mbti,
+    agent: report.agent,
+    mbti: report.mbti ?? "N/A",
     issues: actionable.map(i => ({
       id: i.id,
       severity: i.severity,

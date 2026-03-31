@@ -287,7 +287,8 @@ describe("createPsycheServer (HTTP)", () => {
     assert.equal(status, 200);
     assert.ok(data.current);
     assert.ok(data.baseline);
-    assert.equal(data.mbti, "ENFP");
+    // v10: mbti not stored on new states
+    assert.ok(data.baseline, "baseline should be present");
   });
 
   it("GET /protocol returns protocol text", async () => {

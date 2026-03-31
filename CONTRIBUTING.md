@@ -136,7 +136,7 @@ src/profiles.ts    — MBTI 人格
 
 ## PR 准则
 
-- 所有 PR 必须通过 `npm test`（1308+ 测试）和 `npx tsc --noEmit --strict`
+- 所有 PR 必须通过 `npm test`（1316+ 测试）和 `npx tsc --noEmit --strict`
 - 新功能必须包含测试
 - 保持零依赖策略：不引入运行时依赖
 - 用户可见的字符串应通过 `src/i18n.ts`
@@ -281,7 +281,7 @@ Profiles live in `src/profiles.ts`. Each has:
 
 ## PR Guidelines
 
-- All PRs must pass `npm test` (1308+ tests) and `npx tsc --noEmit --strict`
+- All PRs must pass `npm test` (1316+ tests) and `npx tsc --noEmit --strict`
 - Include tests for new features
 - Keep the zero-dependency policy: no runtime dependencies
 - Strings that users will see should go through `src/i18n.ts`

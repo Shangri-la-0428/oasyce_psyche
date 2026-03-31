@@ -133,6 +133,8 @@ const output = await engine.processOutput(llmResponse);
 - `process_input`
 - `process_output`
 - `get_state`
+- `set_mode`
+- `get_status_summary`
 - `end_session`
 
 ## Install
@@ -141,6 +143,23 @@ const output = await engine.processOutput(llmResponse);
 npm install psyche-ai
 npx psyche-mcp
 ```
+
+## Adapter Sub-paths
+
+- `psyche-ai` — core engine (PsycheEngine, MemoryStorageAdapter)
+- `psyche-ai/mcp` — MCP stdio server
+- `psyche-ai/vercel-ai` — Vercel AI SDK middleware
+- `psyche-ai/langchain` — LangChain adapter
+- `psyche-ai/openclaw` — OpenClaw plugin adapter
+- `psyche-ai/http` — HTTP REST API server
+
+## Demo
+
+```bash
+npx psyche-mcp --demo
+```
+
+Runs a 6-round scenario showing how continuous criticism collapses serotonin and trust, while later validation triggers endorphin repair. Add `--zh` for Chinese, `--mbti INTJ` for a specific personality.
 
 ## Runtime Proof
 

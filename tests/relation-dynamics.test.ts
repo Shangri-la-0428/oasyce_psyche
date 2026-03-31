@@ -24,6 +24,7 @@ function makeState(overrides: Partial<PsycheState> = {}): PsycheState {
   return {
     version: 9,
     mbti: "ENFP",
+    sensitivity: 1.0,
     baseline: { DA: 75, HT: 70, CORT: 35, OT: 65, NE: 70, END: 70 },
     current: { DA: 75, HT: 70, CORT: 35, OT: 65, NE: 70, END: 70 },
     updatedAt: new Date().toISOString(),

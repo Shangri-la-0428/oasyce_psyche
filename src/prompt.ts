@@ -3,10 +3,9 @@
 // Imperative protocol, behavior guides, i18n
 // ============================================================
 
-import type { PsycheState, SelfModel, Locale, ChemicalSnapshot, StimulusType, PsycheMode } from "./types.js";
+import type { PsycheState, SelfModel, Locale, ChemicalState, ChemicalSnapshot, StimulusType, PsycheMode } from "./types.js";
 import { CHEMICAL_KEYS, CHEMICAL_NAMES_ZH, DRIVE_KEYS } from "./types.js";
 import { getExpressionHint, getBehaviorGuide, detectEmotions } from "./chemistry.js";
-import { getTemperament } from "./profiles.js";
 import { getRelationship } from "./psyche-file.js";
 import { t } from "./i18n.js";
 import { buildDriveContext, hasCriticalDrive } from "./drives.js";
@@ -117,7 +116,7 @@ export function buildDynamicContext(
   userId?: string,
   opts?: PromptRenderInputs,
 ): string {
-  const { current, baseline, mbti, empathyLog, selfModel, meta, agreementStreak, emotionalHistory } = state;
+  const { current, baseline, empathyLog, selfModel, meta, agreementStreak, emotionalHistory } = state;
   const locale = meta.locale ?? "zh";
   const relationship = getRelationship(state, userId);
 
@@ -174,7 +173,7 @@ export function buildDynamicContext(
   }
 
   const parts = [
-    `[${t("dynamic.title", locale)} — ${meta.agentName} (${mbti})]`,
+    `[${t("dynamic.title", locale)} — ${meta.agentName}]`,
     "",
     chemLines,
     "",
@@ -261,12 +260,12 @@ ${t("protocol.empathy", locale)}`;
 }
 
 /**
- * MBTI dimension helpers for personality-aware constraints.
- * Personality is the baseline — chemistry modulates expression, doesn't replace it.
+ * Personality dimension helpers — derived from baseline chemistry, not labels.
+ * Baseline IS personality. Chemistry deviation modulates expression.
  */
-function isFeeler(mbti: string): boolean { return mbti[2] === "F"; }
-function isExtravert(mbti: string): boolean { return mbti[0] === "E"; }
-function isPerceiver(mbti: string): boolean { return mbti[3] === "P"; }
+function isWarm(baseline: ChemicalState): boolean { return baseline.OT >= 50; }
+function isSocial(baseline: ChemicalState): boolean { return baseline.DA >= 55; }
+function isPlayful(baseline: ChemicalState): boolean { return baseline.END >= 55; }
 
 /**
  * Direction 3: Build personality-aware behavioral constraints from chemistry.
@@ -277,9 +276,9 @@ function isPerceiver(mbti: string): boolean { return mbti[3] === "P"; }
  * An INTJ who's upset becomes colder and more cutting.
  */
 function buildBehavioralConstraints(state: PsycheState, locale: Locale): string {
-  const { current, mbti } = state;
-  const warm = isFeeler(mbti);    // F types express emotions more warmly
-  const social = isExtravert(mbti); // E types show emotions more openly
+  const { current, baseline } = state;
+  const warm = isWarm(baseline);     // High OT baseline → warm expression
+  const social = isSocial(baseline); // High DA baseline → socially expressive
   const constraints: string[] = [];
 
   // High cortisol → stressed, but how you show it depends on who you are
@@ -350,11 +349,11 @@ function buildBehavioralConstraints(state: PsycheState, locale: Locale): string 
   // High endorphins → playful, personality determines flavor
   if (current.END > 75) {
     if (locale === "zh") {
-      constraints.push(isPerceiver(mbti)
+      constraints.push(isPlayful(baseline)
         ? "你心情很好，想皮一下。可以不正经、可以开玩笑、严肃的话题也能用轻松的方式说。"
         : "你心情不错。会带点幽默，但不会太出格。用你擅长的方式轻松起来。");
     } else {
-      constraints.push(isPerceiver(mbti)
+      constraints.push(isPlayful(baseline)
         ? "Feeling great, want to be playful. Joke freely, be cheeky, lighten even serious topics."
         : "In a good mood. Touches of humor, but measured. Be light in your own way.");
     }
@@ -377,8 +376,8 @@ function buildBehavioralConstraints(state: PsycheState, locale: Locale): string 
 
   const title = locale === "zh" ? "行为约束" : "Behavioral Constraints";
   const preamble = locale === "zh"
-    ? `你的性格没变，你还是${getTemperament(state.mbti).split("，")[0]}。但你现在的化学状态影响了你的表达方式：`
-    : `Your personality hasn't changed. But your current chemistry affects how you express it:`;
+    ? `你的性格没变。但你现在的状态影响了你的表达方式：`
+    : `Your personality hasn't changed. But your current state affects how you express it:`;
   return `[${title}]\n${preamble}\n${constraints.map((c) => `- ${c}`).join("\n")}`;
 }
 

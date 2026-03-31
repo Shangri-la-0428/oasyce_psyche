@@ -31,6 +31,7 @@ function makeState(overrides: Partial<PsycheState> = {}): PsycheState {
   return {
     version: 8,
     mbti: "INFJ",
+    sensitivity: 1.0,
     baseline,
     current: makeChem(),
     drives: { ...DEFAULT_DRIVES },

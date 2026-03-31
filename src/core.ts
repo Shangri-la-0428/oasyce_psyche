@@ -18,7 +18,7 @@ import type { StorageAdapter } from "./storage.js";
 import { MemoryStorageAdapter } from "./storage.js";
 import { applyDecay, applyStimulus, applyContagion, clamp, describeEmotionalState } from "./chemistry.js";
 import { classifyStimulus, BuiltInClassifier, buildLLMClassifierPrompt, parseLLMClassification } from "./classify.js";
-import { buildDynamicContext, buildProtocolContext, buildCompactContext } from "./prompt.js";
+import { buildCompactContext, buildProtocolContext } from "./prompt.js";
 import type { PromptRenderInputs } from "./prompt.js";
 import { getSensitivity, getBaseline, getDefaultSelfModel, traitsToBaseline } from "./profiles.js";
 import { isStimulusType } from "./guards.js";
@@ -56,7 +56,7 @@ export interface PsycheEngineConfig {
   stripUpdateTags?: boolean;
   emotionalContagionRate?: number;
   maxChemicalDelta?: number;
-  /** Compact mode: algorithms handle chemistry, LLM only sees behavioral output. Default: true */
+  /** @deprecated Compact mode is always on since v10. This option is ignored. */
   compactMode?: boolean;
   /** Operating mode: "natural" (default), "work" (minimal emotions), "companion" (full emotions) */
   mode?: PsycheMode;
@@ -483,7 +483,7 @@ export class PsycheEngine {
     }
 
     // v9: Energy budget recovery during absence + depletion per turn
-    const isExtravert = this.cfg.mbti.startsWith("E");
+    const isExtravert = state.baseline.DA >= 55;
     const currentBudgets = state.energyBudgets ?? { ...DEFAULT_ENERGY_BUDGETS };
     let energyBudgets = minutesElapsed >= 5
       ? computeEnergyRecovery(currentBudgets, minutesElapsed, isExtravert)
@@ -529,7 +529,7 @@ export class PsycheEngine {
         // Feed drives from stimulus, then apply stimulus with drive-modified sensitivity
         drives = feedDrives(drives, primary.type);
         const effectiveSensitivity = computeEffectiveSensitivity(
-          getSensitivity(state.mbti), drives, primary.type, state.traitDrift,
+          (state.sensitivity ?? 1.0), drives, primary.type, state.traitDrift,
         );
         // v9.2: Confidence modulates intensity — a 0.95 life-or-death dilemma
         // hits ~1.7x harder than a 0.55 mild disagreement.
@@ -641,7 +641,7 @@ export class PsycheEngine {
     if (appliedStimulus) {
       const ctxHash = computeContextHash(state, opts?.userId);
       const effectiveSensitivity = computeEffectiveSensitivity(
-        getSensitivity(state.mbti), state.drives, appliedStimulus, state.traitDrift,
+        (state.sensitivity ?? 1.0), state.drives, appliedStimulus, state.traitDrift,
       );
       const predicted = predictChemistry(
         preInteractionState.current,
@@ -728,31 +728,11 @@ export class PsycheEngine {
       externalContinuityEvents: throngletsExports,
     });
 
-    if (this.cfg.compactMode) {
-      const externalContinuity = buildExternalContinuityEnvelope(throngletsExports);
-      return {
-        systemContext: "",
-        dynamicContext: buildCompactContext(state, opts?.userId, promptRenderInputs),
-        stimulus: appliedStimulus,
-        stimulusConfidence: this.lastStimulusAssessment?.confidence,
-        replyEnvelope,
-        policyModifiers: derivedReplyEnvelope.policyModifiers,
-        subjectivityKernel: replyEnvelope.subjectivityKernel,
-        responseContract: replyEnvelope.responseContract,
-        generationControls: replyEnvelope.generationControls,
-        sessionBridge,
-        writebackFeedback,
-        externalContinuity,
-        throngletsExports,
-        observability,
-        policyContext: derivedReplyEnvelope.policyContext,
-      };
-    }
-
+    // v10: compact mode is always on. Legacy buildDynamicContext removed from engine path.
     const externalContinuity = buildExternalContinuityEnvelope(throngletsExports);
     return {
-      systemContext: this.getProtocol(locale),
-      dynamicContext: buildDynamicContext(state, opts?.userId, promptRenderInputs),
+      systemContext: "",
+      dynamicContext: buildCompactContext(state, opts?.userId, promptRenderInputs),
       stimulus: appliedStimulus,
       stimulusConfidence: this.lastStimulusAssessment?.confidence,
       replyEnvelope,
@@ -810,7 +790,7 @@ export class PsycheEngine {
             state.current,
             selfPrimary.type,
             selfFeedbackRate,
-            getSensitivity(state.mbti),
+            (state.sensitivity ?? 1.0),
           ),
         };
         stateChanged = true;
@@ -860,7 +840,7 @@ export class PsycheEngine {
             drives: feedDrives(state.drives, parseResult.llmStimulus),
           };
           const effectiveSensitivity = computeEffectiveSensitivity(
-            getSensitivity(state.mbti), state.drives, parseResult.llmStimulus, state.traitDrift,
+            (state.sensitivity ?? 1.0), state.drives, parseResult.llmStimulus, state.traitDrift,
           );
           state = {
             ...state,
@@ -1097,15 +1077,16 @@ export class PsycheEngine {
 
   private createDefaultState(): PsycheState {
     const { mbti, name, locale } = this.cfg;
-    // Use Big Five traits if provided, otherwise use MBTI baseline
+    // Use Big Five traits if provided, otherwise use preset baseline
     const baseline = this.traits ? traitsToBaseline(this.traits).baseline : getBaseline(mbti);
+    const sensitivity = this.traits ? 1.0 : getSensitivity(mbti);
     const selfModel = getDefaultSelfModel(mbti);
     const now = new Date().toISOString();
 
     return {
-      version: 9,
-      mbti,
+      version: 10,
       baseline,
+      sensitivity,
       current: { ...baseline },
       drives: { ...DEFAULT_DRIVES },
       updatedAt: now,
@@ -1151,7 +1132,7 @@ export class PsycheEngine {
    */
   async resetState(opts?: { preserveRelationships?: boolean }): Promise<void> {
     let state = this.ensureInitialized();
-    const baseline = this.traits ? traitsToBaseline(this.traits).baseline : getBaseline(state.mbti);
+    const baseline = this.traits ? traitsToBaseline(this.traits).baseline : { ...state.baseline };
 
     state = {
       ...state,
