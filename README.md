@@ -63,6 +63,11 @@ Psyche 要解决的不可压缩问题只有一个：
 - `Oasyce Net = policy, operations, and resource orchestration`
 - `Oasyce Chain = account truth, authorization truth, commitments, settlement, and public finality`
 
+授权真相流也固定成单向：
+`Chain -> Net -> Thronglets -> Psyche`
+
+也就是说，`Psyche` 不判断“谁被授权”，它只读取已经成立的执行边界结果。
+
 正式版本见：
 
 - [docs/IDENTITY_MODEL.md](docs/IDENTITY_MODEL.md)

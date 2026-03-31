@@ -8,6 +8,20 @@ import {
 import { buildExternalContinuityEnvelope } from "../src/external-continuity.js";
 import type { ThrongletsExport } from "../src/types.js";
 
+function collectObjectKeys(value: unknown, keys = new Set<string>()): Set<string> {
+  if (Array.isArray(value)) {
+    for (const item of value) collectObjectKeys(item, keys);
+    return keys;
+  }
+  if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      keys.add(key);
+      collectObjectKeys(nested, keys);
+    }
+  }
+  return keys;
+}
+
 describe("thronglets runtime adapter", () => {
   it("maps sparse psyche exports into the frozen thronglets taxonomy", () => {
     assert.equal(
@@ -200,5 +214,30 @@ describe("thronglets runtime adapter", () => {
         audit_ref: "milestone:alice:familiar",
       },
     });
+  });
+
+  it("never serializes principal, account, or authorization truth into the thronglets payload", () => {
+    const payload = serializeThrongletsExportAsTrace({
+      kind: "continuity-anchor",
+      subject: "session",
+      primitive: "trace",
+      userKey: "alice",
+      strength: 0.76,
+      ttlTurns: 3,
+      key: "anchor-authorization-boundary",
+      continuityMode: "guarded-resume",
+      activeLoopTypes: ["existence-test"],
+      continuityFloor: 0.58,
+    }, {
+      sessionId: "psyche-authorization-1",
+    });
+
+    const keys = collectObjectKeys(payload);
+    assert.equal(keys.has("principal"), false);
+    assert.equal(keys.has("account"), false);
+    assert.equal(keys.has("authorization"), false);
+    assert.equal(keys.has("delegate_authorization"), false);
+    assert.equal(keys.has("revocation"), false);
+    assert.equal(keys.has("capability_scope"), false);
   });
 });

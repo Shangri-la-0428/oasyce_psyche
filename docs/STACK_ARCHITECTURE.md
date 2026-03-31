@@ -83,6 +83,7 @@ Owns:
 - operational summaries
 
 It should only consume low-frequency, durable, externally meaningful summaries.
+It does not define authorization truth; it operationalizes it.
 
 ### 4. Oasyce Chain
 
@@ -98,6 +99,26 @@ Owns:
 - public anchoring and finality
 
 It must not define consciousness or subjective identity.
+
+## Frozen Authorization Truth Flow
+
+Authorization truth moves one way:
+
+`Chain -> Net -> Thronglets -> Psyche`
+
+This means:
+
+- `Chain` decides whether an account or delegate authorization counts
+- `Net` turns that truth into policy, routing, and revocation behavior
+- `Thronglets` caches and executes within that already-decided truth
+- `Psyche` only consumes the resulting execution boundary and continuity effects
+
+Negative rules:
+
+- `Psyche` must not infer or mint authorization truth
+- `Thronglets` must not create durable authorization outside chain truth
+- `Net` must not redefine identity primitives
+- `session` must never become an authorization subject
 
 ## Boundary By Data Class
 
@@ -241,18 +262,21 @@ Current runtime introspection expected from Thronglets write APIs:
 - must work without Psyche
 - must not become a shadow memory vault for private inner state
 - must keep raw continuity traces local unless runtime conditions justify promotion
+- must execute inside authorization truth, not create it
 
 ### Oasyce Net
 
 - must stay additive
 - must consume summaries, not private streams
 - must never redefine identity primitives
+- must translate chain truth into policy, not replace it
 
 ### Oasyce Chain
 
 - must stay low-frequency
 - must not absorb session state
 - must not turn delegates or sessions into implicit principals
+- must remain the only source of account and authorization truth
 
 ## Admission Test For New Concepts
 

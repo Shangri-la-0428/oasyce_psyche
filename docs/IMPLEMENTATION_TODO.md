@@ -63,6 +63,17 @@ Document and implement:
 - Net is policy/orchestration
 - Thronglets caches and executes within that truth
 
+Current Psyche-side status:
+
+- documented in stack and identity docs
+- external continuity payload remains free of account / principal / authorization claims
+
+Remaining runtime work belongs outside Psyche:
+
+- delegate capability scope enforcement
+- time-bounded authorization checks
+- revocation propagation from Chain -> Net -> Thronglets
+
 ## Near-Term
 
 ### 5. Formalize trace retention windows in Thronglets

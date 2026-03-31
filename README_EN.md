@@ -61,6 +61,11 @@ The four layers are:
 - `Oasyce Net = policy, operations, and resource orchestration`
 - `Oasyce Chain = account truth, authorization truth, commitments, settlement, and public finality`
 
+The authorization truth flow is also frozen and one-way:
+`Chain -> Net -> Thronglets -> Psyche`
+
+In other words, `Psyche` does not decide who is authorized. It only consumes the resulting execution boundary.
+
 See:
 
 - [docs/IDENTITY_MODEL.md](docs/IDENTITY_MODEL.md)

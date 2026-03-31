@@ -104,6 +104,9 @@ Oasyce Chain answers:
 - what settles
 - what reaches finality
 
+This makes chain the only durable truth source for authorization.
+Other layers may cache, route, or consume that truth, but not redefine it.
+
 ## First-Principles Rules
 
 ### 1. Chain does not define who an AI is
@@ -140,6 +143,13 @@ Delegates must remain:
 - revocable
 - attributable
 - bounded in time or capability
+
+Delegate validity must also remain upstream:
+
+- `Oasyce Chain` decides whether the authorization exists
+- `Oasyce Net` turns that truth into policy and revocation behavior
+- `Thronglets` executes within that truth
+- `Psyche` only experiences the resulting execution boundary
 
 ### 5. `principal` may change occupancy without changing the model
 
@@ -207,6 +217,9 @@ Until then, AI remains a delegated or partially continuous actor, not a sovereig
 - sparse signals
 - shared-space convergence data
 - low-frequency attributable traces
+
+It does not keep durable authorization truth.
+It executes within authorization truth defined above it.
 
 ### Export rule
 
