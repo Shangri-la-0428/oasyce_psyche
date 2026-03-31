@@ -6,7 +6,7 @@
 
 ```bash
 git clone https://github.com/Shangri-la-0428/oasyce_psyche.git
-cd psyche-ai
+cd oasyce_psyche
 npm install
 npm run build
 npm test
@@ -31,6 +31,42 @@ src/profiles.ts    — MBTI 人格
 
 架构详情见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
+## 先看战略约束
+
+在添加任何新概念之前，先读 [docs/PROJECT_DIRECTION.md](docs/PROJECT_DIRECTION.md)。
+
+默认规则不是“多加一个对象类型”，而是先把新概念压进已有 5 个原始容器：
+
+1. `Relation Move`
+2. `Dyadic Field`
+3. `Open Loop / Residue`
+4. `Reply Bias / Control ABI`
+5. `Writeback / Learning`
+
+如果一个概念放不进去，先怀疑概念本身，而不是扩充对象系统。
+
+跨 Psyche / Thronglets / Oasyce Net / Oasyce Chain 的身份抽象也已经冻结成 4 个对象：
+
+1. `principal`
+2. `account`
+3. `delegate`
+4. `session`
+
+不要再添加新的顶层身份对象，除非现有四元组和 policy / view / trace 层都无法表达现实。
+
+## 在新增刺激类型之前
+
+新增 `StimulusType` 现在应被视为**例外**，不是默认扩展路径。
+
+先确认它不能更好地表达为：
+
+- 一组 appraisal 轴的组合
+- 某种关系动作解释
+- 某种 residue / open loop
+- 某种 reply bias 或 writeback signal
+
+只有在这些都不能表达，而且它确实能稳定预测行为后果时，才考虑新增刺激类型。
+
 ## 添加新的刺激类型
 
 1. 在 `src/types.ts` 的 `StimulusType` 联合类型中添加
@@ -44,6 +80,18 @@ src/profiles.ts    — MBTI 人格
 每个向量有 6 个值（DA, HT, CORT, OT, NE, END），范围 -25 到 +25。思考：
 - 这个刺激在真人身上会激活什么神经化学反应？
 - 与现有的刺激类型是否一致？
+
+## 在新增情绪模式之前
+
+新增情绪模式也应该是**例外**。
+
+优先判断它是否只是：
+
+- 现有化学混合的另一种解释
+- 现有关系场的另一种外显结果
+- 现有 reply bias 的不同组合
+
+如果只是命名变漂亮，不要新增模式。
 
 ## 添加新的情绪模式
 
@@ -73,7 +121,7 @@ src/profiles.ts    — MBTI 人格
 
 ## PR 准则
 
-- 所有 PR 必须通过 `npm test`（339+ 测试）和 `npx tsc --noEmit --strict`
+- 所有 PR 必须通过 `npm test`（1301+ 测试）和 `npx tsc --noEmit --strict`
 - 新功能必须包含测试
 - 保持零依赖策略：不引入运行时依赖
 - 用户可见的字符串应通过 `src/i18n.ts`
@@ -87,7 +135,7 @@ src/profiles.ts    — MBTI 人格
 
 ```bash
 git clone https://github.com/Shangri-la-0428/oasyce_psyche.git
-cd psyche-ai
+cd oasyce_psyche
 npm install
 npm run build
 npm test
@@ -112,6 +160,43 @@ src/profiles.ts    — MBTI personalities
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for details.
 
+## Strategic Constraint First
+
+Read [docs/PROJECT_DIRECTION.md](docs/PROJECT_DIRECTION.md) before adding new concepts.
+
+The default move is not “add another object type.” First try to compress the new concept into one of the five primitive containers:
+
+1. `Relation Move`
+2. `Dyadic Field`
+3. `Open Loop / Residue`
+4. `Reply Bias / Control ABI`
+5. `Writeback / Learning`
+
+If the concept does not fit, question the concept before expanding the object model.
+
+The cross-stack identity model is also frozen around four objects:
+
+1. `principal`
+2. `account`
+3. `delegate`
+4. `session`
+
+Do not introduce new top-level identity objects unless these four plus policy / view / trace layers fail.
+
+## Before Adding a New Stimulus Type
+
+Treat new `StimulusType` entries as exceptional.
+
+First ask whether the behavior is better modeled as:
+
+- an appraisal-axis combination
+- a relation move
+- residue or an open loop
+- a reply bias
+- a writeback signal
+
+Only add a new stimulus if the above fail and the new type clearly predicts behavior.
+
 ## Adding a New Stimulus Type
 
 1. Add the type to `StimulusType` union in `src/types.ts`
@@ -125,6 +210,18 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for details.
 Each vector has 6 values (DA, HT, CORT, OT, NE, END) ranging from -25 to +25. Think about:
 - What neurochemicals would this stimulus activate in a real human?
 - Is the response consistent with existing stimulus types?
+
+## Before Adding a New Emotion Pattern
+
+Treat new emotion patterns as exceptional too.
+
+Prefer modeling them as:
+
+- a different read of existing chemistry mixtures
+- a relational outcome
+- a reply-bias combination
+
+If the idea only adds a prettier label, do not add a new pattern.
 
 ## Adding a New Emotion Pattern
 
@@ -154,7 +251,7 @@ Profiles live in `src/profiles.ts`. Each has:
 
 ## PR Guidelines
 
-- All PRs must pass `npm test` (339+ tests) and `npx tsc --noEmit --strict`
+- All PRs must pass `npm test` (1301+ tests) and `npx tsc --noEmit --strict`
 - Include tests for new features
 - Keep the zero-dependency policy: no runtime dependencies
 - Strings that users will see should go through `src/i18n.ts`

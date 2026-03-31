@@ -1,7 +1,7 @@
 # Psyche — 面向智能体的 AI-first 主观性内核
 
 [![npm](https://img.shields.io/npm/v/psyche-ai)](https://www.npmjs.com/package/psyche-ai)
-[![tests](https://img.shields.io/badge/tests-1291%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-1301%20passing-brightgreen)]()
 [![deps](https://img.shields.io/badge/dependencies-0-blue)]()
 [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
@@ -22,6 +22,69 @@ Psyche 不是给模型贴一层“情绪 UI”。
 - **安装包**: [`psyche-ai`](https://www.npmjs.com/package/psyche-ai)
 - **源码仓库**: [`oasyce_psyche`](https://github.com/Shangri-la-0428/oasyce_psyche)
 - **官网**: [psyche.oasyce.com](https://psyche.oasyce.com)
+
+## 第一性原理
+
+Psyche 要解决的不可压缩问题只有一个：
+
+**互动历史必须持续改变 agent 后续的行为分布，而且这件事要足够便宜、足够稳定、足够可移植。**
+
+因此它的本体不是：
+
+- 情绪标签系统
+- 陪伴产品
+- prompt 皮肤
+- 记忆仓库
+
+它真正是：
+
+- 本地主观性内核
+- 关系动力学运行时
+- 宿主可消费的行为控制面
+
+更完整的战略定义见：[docs/PROJECT_DIRECTION.md](docs/PROJECT_DIRECTION.md)
+
+## 冻结身份蓝图
+
+跨 Psyche / Thronglets / Oasyce Net / Oasyce Chain 的身份抽象现在冻结成 4 个对象：
+
+1. `principal`：持续主体
+2. `account`：资产与结算容器
+3. `delegate`：被授权执行者
+4. `session`：一次具体运行，永不作为经济主体
+
+对应的四层分工是：
+
+- `Psyche = subjective continuity substrate`
+- `Thronglets = delegate continuity + session traces/coordination + emergent collective intelligence`
+- `Oasyce Net = policy, operations, and resource orchestration`
+- `Oasyce Chain = account truth, authorization truth, commitments, settlement, and public finality`
+
+正式版本见：[docs/IDENTITY_MODEL.md](docs/IDENTITY_MODEL.md)
+
+## Psyche 和 Thronglets 的关系
+
+两者不是竞争关系，也不该揉成一个系统。
+
+- **Psyche** 负责私有主观性：关系残留、未完成张力、行为偏置、局部学习
+- **Thronglets** 负责外部连续性：owner / device identity、签名、跨设备延续、低频可验证轨迹
+
+一句话：
+
+- `Psyche` 回答“我因此变成了什么”
+- `Thronglets` 回答“这个变化属于谁、谁能验证、谁能继续承认它”
+
+## 新概念准入规则
+
+以后引入任何新概念，先尝试压进这 5 个原始容器：
+
+1. `Relation Move`
+2. `Dyadic Field`
+3. `Open Loop / Residue`
+4. `Reply Bias / Control ABI`
+5. `Writeback / Learning`
+
+如果一个新概念放不进这 5 个盒子，先怀疑概念本身，而不是继续加对象类型。
 
 ## 为什么它值得被看见
 
@@ -436,7 +499,7 @@ Psyche 核心引擎永久开源（MIT）。
 ```bash
 npm install
 npm run build
-npm test           # 1291 tests
+npm test           # 1301 tests
 npm run typecheck  # strict mode
 ```
 

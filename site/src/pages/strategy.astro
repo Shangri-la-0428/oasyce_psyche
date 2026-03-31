@@ -1,0 +1,127 @@
+---
+import DiscoveryPage from '../layouts/DiscoveryPage.astro';
+---
+
+<DiscoveryPage
+  title="Strategy — Psyche"
+  description="Read the frozen first-principles blueprint for Psyche: the four identity primitives, four-layer stack, Psyche/Thronglets boundary, AI principal gate, risks, and implementation todos."
+  page="strategy"
+  kicker="strategy / first principles"
+  titleCn="冻结后的第一性蓝图"
+  titleEn="The frozen first-principles blueprint"
+  leadCn="这套蓝图不再试图发明更多身份对象。它把系统冻结成四个身份原语、四层分工，以及一套明确的概念准入筛子，让今天和未来都能落在同一抽象里。"
+  leadEn="This blueprint stops inventing more identity objects. It freezes the stack around four identity primitives, four clear layers, and a concept filter that can hold both today and the future."
+  stats={[
+    { value: '4', labelCn: '身份原语', labelEn: 'identity primitives', noteCn: 'principal / account / delegate / session', noteEn: 'principal / account / delegate / session' },
+    { value: '4', labelCn: '系统层', labelEn: 'stack layers', noteCn: 'Psyche / Thronglets / Net / Chain', noteEn: 'Psyche / Thronglets / Net / Chain' },
+    { value: '5', labelCn: 'AI principal 门槛', labelEn: 'AI principal gate', noteCn: '连续性 / 资源边界 / 承诺历史 / 授权结构 / 执行归责', noteEn: 'continuity / resource boundary / commitments / authorization / attribution' },
+  ]}
+  links={[
+    { href: '/relation-dynamics', labelCn: '关系动力学', labelEn: 'relation dynamics', noteCn: '看 5 个原始容器如何落到热路径', noteEn: 'see how the five containers land in the hot path' },
+    { href: '/mcp', labelCn: 'MCP 分发面', labelEn: 'mcp', noteCn: '看为什么宿主边界必须保持明确', noteEn: 'see why the host boundary must stay explicit' },
+    { href: '/benchmarks', labelCn: '性能成本', labelEn: 'benchmarks', noteCn: '确认这套抽象依然够轻', noteEn: 'confirm the abstraction remains cheap' },
+  ]}
+>
+  <section class="discovery-section">
+    <h2 class="section-label"><span class="cn">四个身份原语</span><span class="en">Four identity primitives</span></h2>
+    <div class="card-grid">
+      <article class="discovery-card"><h3>principal</h3><p><span class="cn">持续主体。今天通常是人，未来也可以是 AI。</span><span class="en">The continuing subject. Usually human today, potentially AI later.</span></p></article>
+      <article class="discovery-card"><h3>account</h3><p><span class="cn">资产与结算容器。链上主要承认这个。</span><span class="en">The asset and settlement container recognized on-chain.</span></p></article>
+      <article class="discovery-card"><h3>delegate</h3><p><span class="cn">被授权执行者。可以是人、设备、runtime 或 worker。</span><span class="en">An authorized executor: human, device, runtime, or worker.</span></p></article>
+      <article class="discovery-card"><h3>session</h3><p><span class="cn">一次具体运行。短期、可丢弃、永不作为经济主体。</span><span class="en">A concrete run. Short-lived, disposable, and never an economic subject.</span></p></article>
+    </div>
+  </section>
+
+  <section class="discovery-section">
+    <h2 class="section-label"><span class="cn">四层分工</span><span class="en">Four-layer stack</span></h2>
+    <div class="split-grid">
+      <div class="split-panel">
+        <h3><span class="cn">Psyche</span><span class="en">Psyche</span></h3>
+        <p><span class="cn">`subjective continuity substrate`。它回答“内在上还是不是同一个它”。</span><span class="en">`subjective continuity substrate`. It answers whether the same one is still inwardly continuous.</span></p>
+      </div>
+      <div class="split-panel">
+        <h3><span class="cn">Thronglets</span><span class="en">Thronglets</span></h3>
+        <p><span class="cn">`delegate continuity + session traces/coordination + emergent collective intelligence`。它回答“谁在行动、轨迹如何延续、群体如何在环境里收敛”。</span><span class="en">`delegate continuity + session traces/coordination + emergent collective intelligence`. It answers who acts, how traces persist, and how collectives converge through environment.</span></p>
+      </div>
+      <div class="split-panel">
+        <h3><span class="cn">Oasyce Net</span><span class="en">Oasyce Net</span></h3>
+        <p><span class="cn">`policy, operations, and resource orchestration`。它处理预算、调度、注册、策略。</span><span class="en">`policy, operations, and resource orchestration`. It handles budgeting, routing, registration, and policy.</span></p>
+      </div>
+      <div class="split-panel">
+        <h3><span class="cn">Oasyce Chain</span><span class="en">Oasyce Chain</span></h3>
+        <p><span class="cn">`account truth, authorization truth, commitments, settlement, and public finality`。它只定义什么算数。</span><span class="en">`account truth, authorization truth, commitments, settlement, and public finality`. It only decides what counts publicly.</span></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="discovery-section">
+    <h2 class="section-label"><span class="cn">Psyche 是什么</span><span class="en">What Psyche is</span></h2>
+    <div class="card-grid">
+      <article class="discovery-card"><h3><span class="cn">主观性内核</span><span class="en">Subjectivity kernel</span></h3><p><span class="cn">互动历史必须留下持续偏置，而且这种偏置要进入行为层。</span><span class="en">Interaction history must leave persistent bias, and that bias must shape later behavior.</span></p></article>
+      <article class="discovery-card"><h3><span class="cn">关系动力学系统</span><span class="en">Relation runtime</span></h3><p><span class="cn">不先问“是什么情绪”，先问“这在关系里做了什么”。</span><span class="en">It starts with what happened in the relationship, not which label to assign.</span></p></article>
+      <article class="discovery-card"><h3><span class="cn">行为控制面</span><span class="en">Behavioral control surface</span></h3><p><span class="cn">主观状态必须被压成宿主可消费的 ABI，而不是继续堆 prompt 散文。</span><span class="en">Inner state must compress into a host-facing ABI rather than expanding into prompt prose.</span></p></article>
+    </div>
+  </section>
+
+  <section class="discovery-section">
+    <h2 class="section-label"><span class="cn">Psyche 和 Thronglets 怎么分工</span><span class="en">How Psyche and Thronglets divide the work</span></h2>
+    <div class="split-grid">
+      <div class="split-panel">
+        <h3><span class="cn">Psyche</span><span class="en">Psyche</span></h3>
+        <ul class="detail-list">
+          <li><span class="cn">私有主观状态</span><span class="en">private subjective state</span></li>
+          <li><span class="cn">关系残留与 open loops</span><span class="en">relation residue and open loops</span></li>
+          <li><span class="cn">行为偏置与调节</span><span class="en">behavioral bias and regulation</span></li>
+        </ul>
+      </div>
+      <div class="split-panel">
+        <h3><span class="cn">Thronglets</span><span class="en">Thronglets</span></h3>
+        <ul class="detail-list">
+          <li><span class="cn">delegate continuity</span><span class="en">delegate continuity</span></li>
+          <li><span class="cn">session traces / coordination</span><span class="en">session traces / coordination</span></li>
+          <li><span class="cn">环境中的群体涌现</span><span class="en">collective emergence through environment</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="discovery-section">
+    <h2 class="section-label"><span class="cn">五个原始容器</span><span class="en">The five primitive containers</span></h2>
+    <div class="card-grid">
+      <article class="discovery-card"><h3>1. Relation Move</h3><p><span class="cn">关系里刚刚发生了什么动作。</span><span class="en">What action just happened in the relationship.</span></p></article>
+      <article class="discovery-card"><h3>2. Dyadic Field</h3><p><span class="cn">双方关系现在处在什么场。</span><span class="en">What field the dyad is currently in.</span></p></article>
+      <article class="discovery-card"><h3>3. Open Loop / Residue</h3><p><span class="cn">哪些张力没有结掉并继续泄露。</span><span class="en">Which tensions remain unresolved and keep leaking forward.</span></p></article>
+      <article class="discovery-card"><h3>4. Reply Bias / ABI</h3><p><span class="cn">下一轮应该如何收、靠近、克制、披露。</span><span class="en">How the next reply should tighten, approach, withhold, or disclose.</span></p></article>
+      <article class="discovery-card"><h3>5. Writeback / Learning</h3><p><span class="cn">agent 的实际行为如何反过来改写系统。</span><span class="en">How the agent's own behavior rewrites the system.</span></p></article>
+    </div>
+  </section>
+
+  <section class="discovery-section">
+    <h2 class="section-label"><span class="cn">新概念准入测试</span><span class="en">Concept admission test</span></h2>
+    <div class="metric-strip">
+      <div class="metric-cell"><strong>1</strong><span><span class="cn">先压缩到现有容器</span><span class="en">compress into existing containers first</span></span></div>
+      <div class="metric-cell"><strong>2</strong><span><span class="cn">要求它预测行为后果</span><span class="en">require behavioral consequences</span></span></div>
+      <div class="metric-cell"><strong>3</strong><span><span class="cn">要求低成本实现</span><span class="en">require low-cost implementation</span></span></div>
+      <div class="metric-cell"><strong>4</strong><span><span class="cn">优先参数化，不新增顶层对象</span><span class="en">prefer reparameterization over new object types</span></span></div>
+    </div>
+  </section>
+
+  <section class="discovery-section">
+    <h2 class="section-label"><span class="cn">外部风险与变化</span><span class="en">External risks and changes</span></h2>
+    <div class="card-grid">
+      <article class="discovery-card"><h3><span class="cn">基础模型会吞掉浅层情绪 UX</span><span class="en">Base models will absorb shallow emotional UX</span></h3><p><span class="cn">只靠 prompt 风格和自我描述的部分会被商品化。</span><span class="en">Anything that mostly relies on prompt style and self-description will be commoditized.</span></p></article>
+      <article class="discovery-card"><h3><span class="cn">拟人化政策压力会增加</span><span class="en">Anthropomorphism pressure will rise</span></h3><p><span class="cn">越像陪伴产品，越接近合规边界。</span><span class="en">The closer it gets to a companion product, the closer it moves to policy boundaries.</span></p></article>
+      <article class="discovery-card"><h3><span class="cn">复杂度会反噬采用</span><span class="en">Complexity can kill adoption</span></h3><p><span class="cn">如果抽象越来越宽，宿主就不会再愿意集成它。</span><span class="en">If the abstraction keeps widening, hosts will stop wanting to integrate it.</span></p></article>
+    </div>
+  </section>
+
+  <section class="discovery-section">
+    <h2 class="section-label"><span class="cn">实现 TODO</span><span class="en">Implementation todo</span></h2>
+    <div class="card-grid">
+      <article class="discovery-card"><h3><span class="cn">稀疏导出集</span><span class="en">Sparse export set</span></h3><p><span class="cn">定义哪些低频 Psyche 事件允许进入 Thronglets，保持高频主观状态完全本地。</span><span class="en">Define which low-frequency Psyche events may leave for Thronglets while keeping high-frequency subjectivity fully local.</span></p></article>
+      <article class="discovery-card"><h3><span class="cn">delegate 授权范围</span><span class="en">Delegate scope</span></h3><p><span class="cn">把授权做成 capability-scoped、time-bounded、revocable，而不是模糊“设备就是身份”。</span><span class="en">Make delegate authorization capability-scoped, time-bounded, and revocable.</span></p></article>
+      <article class="discovery-card"><h3><span class="cn">AI principal 制度门槛</span><span class="en">AI principal gate</span></h3><p><span class="cn">把 AI 升格成 principal 的条件写成制度清单，而不是哲学判断。</span><span class="en">Turn the AI-principal question into an institutional checklist rather than a philosophical claim.</span></p></article>
+      <article class="discovery-card"><h3><span class="cn">环境式群体智能</span><span class="en">Environmental collectives</span></h3><p><span class="cn">继续把群体智能压在 `space / signal / trace / presence` 上，不引入新的群体身份对象。</span><span class="en">Keep collective intelligence grounded in `space / signal / trace / presence` without inventing new collective identity objects.</span></p></article>
+    </div>
+  </section>
+</DiscoveryPage>

@@ -731,6 +731,15 @@ END: 75 (happy)
     assert.ok(result.sessionBridge?.activeLoopTypes.includes("existence-test"), `got ${JSON.stringify(result.sessionBridge)}`);
     assert.ok((result.subjectivityKernel?.subjectPlane.residue ?? 0) >= 0.28, `got ${result.subjectivityKernel?.subjectPlane.residue}`);
     assert.ok((result.subjectivityKernel?.relationPlane.closeness ?? 0) >= 0.6, `got ${result.subjectivityKernel?.relationPlane.closeness}`);
+    assert.ok(result.throngletsExports && result.throngletsExports.length > 0, "expected sparse thronglets exports");
+    assert.ok(
+      result.throngletsExports?.some((event) => event.kind === "continuity-anchor" && event.subject === "session"),
+      `got ${JSON.stringify(result.throngletsExports)}`,
+    );
+    assert.ok(
+      result.throngletsExports?.some((event) => event.kind === "open-loop-anchor" && event.subject === "delegate"),
+      `got ${JSON.stringify(result.throngletsExports)}`,
+    );
   });
 
   it("compact mode routes clear work asks into the task plane", async () => {
@@ -831,6 +840,15 @@ END: 75 (happy)
     assert.ok(result.writebackFeedback && result.writebackFeedback.length > 0, "expected writeback feedback");
     assert.equal(result.writebackFeedback?.[0].signal, "trust_up");
     assert.equal(result.writebackFeedback?.[0].effect, "converging");
+    assert.ok(
+      result.throngletsExports?.some(
+        (event) => event.kind === "writeback-calibration"
+          && event.subject === "delegate"
+          && event.signal === "trust_up"
+          && event.effect === "converging",
+      ),
+      `got ${JSON.stringify(result.throngletsExports)}`,
+    );
   });
 
   it("low-confidence reads expose a wide override window and accept output-side stimulus correction", async () => {

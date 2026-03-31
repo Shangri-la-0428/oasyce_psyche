@@ -162,7 +162,8 @@ server.tool(
   "Process user input through the emotional engine. Returns emotional " +
   "context to inject into the LLM system prompt (systemContext + dynamicContext), " +
   "detected stimulus type, behavioral policy modifiers, the narrow AI-first ABI " +
-  "(subjectivityKernel + responseContract), and generationControls. " +
+  "(subjectivityKernel + responseContract), generationControls, and sparse " +
+  "low-frequency throngletsExports suitable for external continuity layers. " +
   "Call this BEFORE generating a response to the user.",
   {
     text: z.string().describe("The user's message text"),
@@ -182,6 +183,9 @@ server.tool(
           subjectivityKernel: result.subjectivityKernel ?? null,
           responseContract: result.responseContract ?? null,
           generationControls: result.generationControls ?? null,
+          sessionBridge: result.sessionBridge ?? null,
+          writebackFeedback: result.writebackFeedback ?? null,
+          throngletsExports: result.throngletsExports ?? null,
           policyContext: result.policyContext,
         }, null, 2),
       }],

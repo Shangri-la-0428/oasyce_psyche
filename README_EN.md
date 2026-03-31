@@ -7,7 +7,7 @@ It compresses continuous appraisal, relation dynamics, adaptive reply loops, and
 **One sentence:** Psyche is a subjectivity kernel for agents.
 
 [![npm](https://img.shields.io/npm/v/psyche-ai)](https://www.npmjs.com/package/psyche-ai)
-[![tests](https://img.shields.io/badge/tests-1291%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-1301%20passing-brightgreen)]()
 [![deps](https://img.shields.io/badge/dependencies-0-blue)]()
 [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
@@ -20,6 +20,69 @@ It compresses continuous appraisal, relation dynamics, adaptive reply loops, and
 - **Package**: [`psyche-ai`](https://www.npmjs.com/package/psyche-ai)
 - **Source repo**: [`oasyce_psyche`](https://github.com/Shangri-la-0428/oasyce_psyche)
 - **Website**: [psyche.oasyce.com](https://psyche.oasyce.com)
+
+## First Principles
+
+Psyche is solving one irreducible problem:
+
+**interaction history must keep changing an agent's later behavior, and that change must stay cheap, stable, and portable.**
+
+That means Psyche is not:
+
+- an emotion label system
+- a companion product
+- a prompt skin
+- a generic memory vault
+
+It is:
+
+- a local subjectivity kernel
+- a relation dynamics runtime
+- a host-facing behavioral control surface
+
+See [docs/PROJECT_DIRECTION.md](docs/PROJECT_DIRECTION.md) for the canonical strategy document.
+
+## Frozen Identity Blueprint
+
+Across Psyche / Thronglets / Oasyce Net / Oasyce Chain, identity is now frozen around four objects:
+
+1. `principal` — continuing subject
+2. `account` — asset and settlement container
+3. `delegate` — authorized executor
+4. `session` — concrete run, never an economic subject
+
+The four layers are:
+
+- `Psyche = subjective continuity substrate`
+- `Thronglets = delegate continuity + session traces/coordination + emergent collective intelligence`
+- `Oasyce Net = policy, operations, and resource orchestration`
+- `Oasyce Chain = account truth, authorization truth, commitments, settlement, and public finality`
+
+See [docs/IDENTITY_MODEL.md](docs/IDENTITY_MODEL.md) for the canonical version.
+
+## Psyche vs Thronglets
+
+These projects should remain separate.
+
+- **Psyche** owns private subjectivity: residue, unfinished tension, behavioral bias, local learning
+- **Thronglets** owns external continuity: owner/device identity, signatures, multi-device carry, and low-frequency verifiable traces
+
+One sentence:
+
+- `Psyche` answers "what did this change me into?"
+- `Thronglets` answers "who owns that change and who can verify it?"
+
+## Concept Admission Rule
+
+Every new concept should first try to fit into one of these five containers:
+
+1. `Relation Move`
+2. `Dyadic Field`
+3. `Open Loop / Residue`
+4. `Reply Bias / Control ABI`
+5. `Writeback / Learning`
+
+If a concept cannot be compressed into those containers, question the concept before adding a new object type.
 
 ## Why this is different
 
@@ -398,7 +461,7 @@ git clone https://github.com/Shangri-la-0428/oasyce_psyche.git
 cd oasyce_psyche
 npm install
 npm run build
-npm test                        # 1291 tests
+npm test                        # 1301 tests
 npm run typecheck               # strict mode
 ```
 

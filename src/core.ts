@@ -12,7 +12,7 @@
 // Orchestrates: chemistry, classify, prompt, profiles, guards, learning
 // ============================================================
 
-import type { PsycheState, StimulusType, Locale, MBTIType, ChemicalState, OutcomeScore, PsycheMode, PersonalityTraits, PolicyModifiers, ClassifierProvider, SubjectivityKernel, ResponseContract, GenerationControls, SessionBridgeState, WritebackCalibrationFeedback, WritebackSignalType } from "./types.js";
+import type { PsycheState, StimulusType, Locale, MBTIType, ChemicalState, OutcomeScore, PsycheMode, PersonalityTraits, PolicyModifiers, ClassifierProvider, SubjectivityKernel, ResponseContract, GenerationControls, SessionBridgeState, ThrongletsExport, WritebackCalibrationFeedback, WritebackSignalType } from "./types.js";
 import { DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE, DEFAULT_ENERGY_BUDGETS, DEFAULT_TRAIT_DRIFT, DEFAULT_SUBJECT_RESIDUE, DEFAULT_DYADIC_FIELD } from "./types.js";
 import type { StorageAdapter } from "./storage.js";
 import { MemoryStorageAdapter } from "./storage.js";
@@ -51,6 +51,7 @@ import {
 } from "./primary-systems.js";
 import { applyRelationalTurn, applySessionBridge, applyWritebackSignals, createWritebackCalibrations, evaluateWritebackCalibrations } from "./relation-dynamics.js";
 import { deriveReplyEnvelope } from "./reply-envelope.js";
+import { deriveThrongletsExports } from "./thronglets-export.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -104,6 +105,8 @@ export interface ProcessInputResult {
   sessionBridge?: SessionBridgeState | null;
   /** v9.2.8: sparse writeback signals evaluated on the latest turn */
   writebackFeedback?: WritebackCalibrationFeedback[];
+  /** v9.2.8: sparse low-frequency export surface suitable for Thronglets */
+  throngletsExports?: ThrongletsExport[];
   /**
    * v9: Ready-to-use LLM prompt fragment summarizing current behavioral policy.
    *
@@ -391,6 +394,7 @@ export class PsycheEngine {
     let state = this.ensureInitialized();
     let sessionBridge: SessionBridgeState | null = null;
     let writebackFeedback: WritebackCalibrationFeedback[] = [];
+    let throngletsExports: ThrongletsExport[] = [];
 
     // ── Auto-learning: evaluate previous turn's outcome ──────
     if (this.pendingPrediction && text.length > 0) {
@@ -599,6 +603,15 @@ export class PsycheEngine {
     const writebackEvaluation = evaluateWritebackCalibrations(state);
     state = writebackEvaluation.state;
     writebackFeedback = writebackEvaluation.feedback;
+
+    const throngletsExportResult = deriveThrongletsExports(state, {
+      relationContext: relationalTurn.relationContext,
+      sessionBridge,
+      writebackFeedback,
+      now: now.toISOString(),
+    });
+    state = throngletsExportResult.state;
+    throngletsExports = throngletsExportResult.exports;
 
     // ── Locale (used by multiple subsystems below) ──────────
     const locale = state.meta.locale ?? this.cfg.locale;
@@ -862,6 +875,7 @@ export class PsycheEngine {
         generationControls: replyEnvelope.generationControls,
         sessionBridge,
         writebackFeedback,
+        throngletsExports,
         policyContext: replyEnvelope.policyContext,
       };
     }
@@ -887,6 +901,7 @@ export class PsycheEngine {
       generationControls: replyEnvelope.generationControls,
       sessionBridge,
       writebackFeedback,
+      throngletsExports,
       policyContext: replyEnvelope.policyContext,
     };
   }

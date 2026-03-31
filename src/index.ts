@@ -31,7 +31,9 @@ export type {
   PersonalityTraits, PsycheMode, PolicyModifiers, SubjectivityKernel, ResponseContract, GenerationControls,
   AppraisalAxes, SubjectResidue, TaskPlaneState, SubjectPlaneState, RelationPlaneState,
   AmbiguityPlaneState, RelationMoveType, RelationMove, OpenLoopType, OpenLoopState, PendingRelationSignalState, DyadicFieldState,
-  SessionBridgeState, WritebackSignalType, WritebackSignalWeightMap, PendingWritebackCalibration, WritebackCalibrationFeedback, WritebackCalibrationMetric,
+  SessionBridgeState, ThrongletsExportSubject, ThrongletsExportPrimitive, ThrongletsExportBase, RelationMilestoneExport,
+  OpenLoopAnchorExport, WritebackCalibrationExport, ContinuityAnchorExport, ThrongletsExport, ThrongletsExportState,
+  WritebackSignalType, WritebackSignalWeightMap, PendingWritebackCalibration, WritebackCalibrationFeedback, WritebackCalibrationMetric,
   TraitDriftState, EnergyBudgets,
   ClassifierProvider, ClassifierContext, ClassificationResult,
 } from "./types.js";
@@ -106,6 +108,7 @@ export {
   computeRelationMove, evolveDyadicField, evolvePendingRelationSignals, getLoopPressure,
   applySessionBridge, applyWritebackSignals, createWritebackCalibrations, evaluateWritebackCalibrations,
 } from "./relation-dynamics.js";
+export { deriveThrongletsExports } from "./thronglets-export.js";
 
 // Experiential field (P6 + P8 Barrett construction)
 export { computeExperientialField, computeCoherence, detectUnnamedEmotion, computeAffectCore } from "./experiential-field.js";
