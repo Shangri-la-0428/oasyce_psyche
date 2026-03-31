@@ -177,6 +177,10 @@ v9.0 把“反向 baseline test”引入主体性方向。v9.2.7 则继续把关
 - 默认关系视角解析只做一次
 - 宿主控制面只从一个地方导出，减少重复计算和叙述漂移
 
+当前主线又进一步把 autonomic / metacognition / experiential / ethics / shared intentionality 这组“反思阶段”抽进了独立的 `input-turn.ts`。`core.ts` 现在更接近：
+
+`state evolution -> reflective turn phases -> result assembly`
+
 当前主线里，`processInput()` 会直接返回 `replyEnvelope` 作为规范主接口；`subjectivityKernel`、`responseContract`、`generationControls` 继续保留为兼容别名，`policyModifiers` 则降级为 legacy raw vector。
 
 ### 3. AI-first ABI + 双回应 profile (`subjectivity.ts`, `response-contract.ts`, `host-controls.ts`)
