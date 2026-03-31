@@ -11,6 +11,7 @@ function makeState(overrides: Partial<PsycheState> = {}): PsycheState {
   return {
     version: 6,
     mbti: "ENFP",
+    sensitivity: 1.0,
     baseline: { DA: 75, HT: 55, CORT: 30, OT: 60, NE: 65, END: 70 },
     current: { DA: 75, HT: 55, CORT: 30, OT: 60, NE: 65, END: 70 },
     updatedAt: new Date().toISOString(),
@@ -92,6 +93,7 @@ describe("FileStorageAdapter", () => {
     const v1 = {
       version: 1,
       mbti: "INTJ",
+    sensitivity: 1.0,
       baseline: { DA: 45, HT: 70, CORT: 40, OT: 30, NE: 60, END: 35 },
       current: { DA: 60, HT: 65, CORT: 50, OT: 35, NE: 55, END: 30 },
       updatedAt: new Date().toISOString(),
@@ -118,6 +120,7 @@ describe("FileStorageAdapter", () => {
   it("migrates state with no version field", async () => {
     const noVersion = {
       mbti: "ENFP",
+    sensitivity: 1.0,
       baseline: { DA: 75, HT: 55, CORT: 30, OT: 60, NE: 65, END: 70 },
       current: { DA: 75, HT: 55, CORT: 30, OT: 60, NE: 65, END: 70 },
       updatedAt: new Date().toISOString(),

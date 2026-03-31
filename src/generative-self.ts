@@ -124,7 +124,7 @@ export function computeGenerativeSelf(state: PsycheState): GenerativeSelfModel {
  * Predict own emotional reaction to a hypothetical stimulus.
  *
  * Uses learned vectors if available for context, otherwise falls back
- * to the baseline MBTI profile vectors. Returns predicted chemistry,
+ * to the baseline profile vectors. Returns predicted chemistry,
  * dominant emotion label, and confidence.
  */
 export function predictSelfReaction(
@@ -147,7 +147,7 @@ export function predictSelfReaction(
 
   // Build the effective vector: base + learned adjustment
   const effectiveVector: StimulusVector = { ...base };
-  let confidence = 0.3; // baseline confidence from MBTI profile alone
+  let confidence = 0.3; // baseline confidence from profile alone
 
   if (learned) {
     for (const key of CHEMICAL_KEYS) {
@@ -316,7 +316,7 @@ export function buildIdentityNarrative(
   const isZh = locale === "zh";
   const parts: string[] = [];
 
-  // ── Sentence 1: Core personality from MBTI + chemical signature ──
+  // ── Sentence 1: Core personality from baseline chemistry ──
   const coreTraits = describeCoreTraits(state, isZh);
   parts.push(coreTraits);
 
@@ -594,19 +594,18 @@ function computeGrowthArc(state: PsycheState, locale: Locale): GrowthArc {
 // ── Internal: Core Trait Description ────────────────────────
 
 /**
- * Describe the agent's core personality traits from MBTI dimensions
+ * Describe the agent's core personality traits from baseline chemistry
  * and current chemical signature.
  */
 function describeCoreTraits(state: PsycheState, isZh: boolean): string {
-  const mbti = state.mbti;
   const chem = state.current;
 
-  // Extract MBTI dimensions
-  const isIntro = mbti[0] === "I";
-  const isIntuitive = mbti[1] === "N";
-  const isFeeling = mbti[2] === "F";
+  // Derive personality dimensions from baseline chemistry
+  const isIntro = state.baseline.DA < 55;               // low DA baseline → introverted
+  const isIntuitive = state.baseline.DA > state.baseline.HT; // novelty over stability → intuitive
+  const isFeeling = state.baseline.OT >= 50;             // warm baseline → feeling
 
-  // Build trait fragments based on MBTI + chemical state
+  // Build trait fragments based on baseline + chemical state
   const fragments: string[] = [];
 
   // Energy orientation

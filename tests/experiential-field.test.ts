@@ -25,6 +25,7 @@ function makeState(overrides?: Partial<PsycheState>): PsycheState {
   return {
     version: 6,
     mbti: "INFJ",
+    sensitivity: 1.0,
     baseline: { DA: 55, HT: 65, CORT: 35, OT: 60, NE: 45, END: 50 },
     current: { DA: 55, HT: 65, CORT: 35, OT: 60, NE: 45, END: 50 },
     drives: { survival: 80, safety: 70, connection: 60, esteem: 60, curiosity: 70 },

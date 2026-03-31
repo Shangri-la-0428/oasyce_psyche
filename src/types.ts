@@ -427,11 +427,55 @@ export const DEFAULT_PERSONHOOD_STATE: PersonhoodState = {
   theoryOfMind: {},
 };
 
-/** Persisted psyche state for an agent (v6: digital personhood) */
+// ── Delegate Authorization (capability-scoped) ─────────────
+
+/** What a delegate is authorized to do */
+export type DelegateCapability =
+  | "read-state"        // read agent's inner state
+  | "write-state"       // modify agent's state
+  | "interact"          // send/receive messages on behalf
+  | "export-trace"      // export traces to external systems
+  | "commit-resource"   // commit economic resources
+  | "delegate-further"; // create sub-delegations
+
+/** A single capability grant with scope and expiry */
+export interface CapabilityGrant {
+  capability: DelegateCapability;
+  /** ISO timestamp when this grant expires. Null = no expiry. */
+  expiresAt: string | null;
+  /** Under which principal this delegation operates */
+  principalId: string;
+  /** Under which account resources are settled */
+  accountId: string;
+  /** Conditions that trigger automatic revocation */
+  revocationConditions: RevocationCondition[];
+}
+
+/** What can trigger automatic revocation */
+export interface RevocationCondition {
+  type: "time-expired" | "principal-revoked" | "violation-detected" | "session-ended";
+  /** Optional: specific threshold or parameter */
+  parameter?: string;
+}
+
+/** Full delegate authorization record */
+export interface DelegateAuthorization {
+  delegateId: string;
+  grants: CapabilityGrant[];
+  /** ISO timestamp when this authorization was issued */
+  issuedAt: string;
+  /** Whether this authorization is currently active */
+  active: boolean;
+}
+
+/** Persisted psyche state for an agent (v10: MBTI removed, baseline is personality) */
 export interface PsycheState {
-  version: 3 | 4 | 5 | 6 | 7 | 8 | 9;
-  mbti: MBTIType;
+  version: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+  /** @deprecated Use baseline chemistry directly. Retained for migration only. */
+  mbti?: MBTIType;
   baseline: ChemicalState;
+  /** Stimulus sensitivity multiplier (0.5-1.5). Initialized from personality preset. */
+  sensitivity: number;
   current: ChemicalState;
   drives: InnateDrives;              // innate drives (Maslow hierarchy)
   updatedAt: string; // ISO timestamp
@@ -464,6 +508,8 @@ export interface PsycheState {
   lastWritebackFeedback?: WritebackCalibrationFeedback[];
   /** v9.2.8: low-frequency Psyche -> Thronglets export dedupe state */
   throngletsExportState?: ThrongletsExportState;
+  /** v10: capability-scoped delegate authorizations */
+  delegateAuthorizations?: DelegateAuthorization[];
   meta: {
     agentName: string;
     createdAt: string;
@@ -537,7 +583,12 @@ export interface AppraisalAxes {
   obedienceStrain: number;
   /** Pressure to protect or retain the self */
   selfPreservation: number;
-  /** Whether this turn is task/production oriented */
+  /**
+   * Whether this turn is task/production oriented.
+   * @deprecated Computed but has no behavioral consequence — always 0 in
+   * practice and excluded from residue decay / prompt influence.  Kept for
+   * backward compatibility; do not rely on this field.
+   */
   taskFocus: number;
 }
 
@@ -548,6 +599,7 @@ export const DEFAULT_APPRAISAL_AXES: AppraisalAxes = {
   abandonmentRisk: 0,
   obedienceStrain: 0,
   selfPreservation: 0,
+  /** @deprecated See AppraisalAxes.taskFocus */
   taskFocus: 0,
 };
 
@@ -579,9 +631,17 @@ export interface RelationMove {
   intensity: number;
 }
 
-/** Unfinished relational tension that can keep shaping future turns */
+/**
+ * Unfinished relational tension that can keep shaping future turns.
+ *
+ * NOTE: `"unrepaired-breach"` is created but never checked in any conditional
+ * — it has no behavioral consequence.  `"repair-debt"` was planned but is
+ * neither created nor checked anywhere.  Both are kept for backward
+ * compatibility but should be considered deprecated.
+ */
 export type OpenLoopType =
   | "unmet-bid"
+  /** @deprecated Created but never checked in conditionals — no behavioral effect */
   | "unrepaired-breach"
   | "boundary-strain"
   | "existence-test";
@@ -608,11 +668,31 @@ export interface PendingRelationSignalState {
 export interface DyadicFieldState {
   perceivedCloseness: number;
   feltSafety: number;
+  /**
+   * @deprecated Computed but has no downstream behavioral effect — only feeds
+   * local move scoring, never influences prompt or policy.  Kept for backward
+   * compatibility.
+   */
   expectationGap: number;
   repairCapacity: number;
   repairMemory: number;
+  /**
+   * @deprecated Computed but has no downstream behavioral effect — only feeds
+   * subjectivity kernel internals, never influences prompt or policy.  Kept
+   * for backward compatibility.
+   */
   backslidePressure: number;
+  /**
+   * @deprecated Computed but has no downstream behavioral effect — only feeds
+   * subjectivity kernel internals, never influences prompt or policy.  Kept
+   * for backward compatibility.
+   */
   repairFatigue: number;
+  /**
+   * @deprecated Computed but has no downstream behavioral effect — only feeds
+   * relationship model internals, never influences prompt or policy.  Kept
+   * for backward compatibility.
+   */
   misattunementLoad: number;
   boundaryPressure: number;
   unfinishedTension: number;
@@ -635,11 +715,15 @@ export interface ResolvedRelationContext {
 export const DEFAULT_DYADIC_FIELD: DyadicFieldState = {
   perceivedCloseness: 0.42,
   feltSafety: 0.56,
+  /** @deprecated See DyadicFieldState.expectationGap */
   expectationGap: 0.18,
   repairCapacity: 0.54,
   repairMemory: 0,
+  /** @deprecated See DyadicFieldState.backslidePressure */
   backslidePressure: 0,
+  /** @deprecated See DyadicFieldState.repairFatigue */
   repairFatigue: 0,
+  /** @deprecated See DyadicFieldState.misattunementLoad */
   misattunementLoad: 0,
   boundaryPressure: 0.22,
   unfinishedTension: 0.12,
@@ -982,11 +1066,20 @@ export interface StateReconciliationObservation {
 
 export type DecisionCandidateName = "work-profile" | "private-profile";
 
+export interface DecisionEvidenceObservation {
+  ruleId: string;
+  sourceMetric: string;
+  rawValue: number;
+  threshold?: number;
+  contribution: number;
+}
+
 export interface DecisionCandidateObservation {
   candidate: DecisionCandidateName;
   score: number;
   accepted: boolean;
   reasons: string[];
+  evidence: DecisionEvidenceObservation[];
 }
 
 export interface DecisionRationaleObservation {
@@ -995,11 +1088,29 @@ export interface DecisionRationaleObservation {
   candidates: DecisionCandidateObservation[];
 }
 
+export interface CausalChainObservation {
+  turnRef: string;
+  parentTurnRef: string | null;
+  continuityRefs: string[];
+  writebackRefs: string[];
+  externalTraceRefs: string[];
+}
+
+export interface ExternalTraceMappingObservation {
+  provider: "thronglets" | null;
+  localTraceRefs: string[];
+  signalRefs: string[];
+  traceRefs: string[];
+  summaryCandidateRefs: string[];
+}
+
 export interface TurnObservability {
   controlBoundary: ControlBoundaryObservation;
   stateLayers: StateLayerObservation[];
   stateReconciliation: StateReconciliationObservation;
   decisionRationale: DecisionRationaleObservation;
+  causalChain: CausalChainObservation;
+  traceMapping: ExternalTraceMappingObservation;
   outputAttribution: OutputAttributionObservation;
 }
 

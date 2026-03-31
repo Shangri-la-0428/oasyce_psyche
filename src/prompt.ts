@@ -3,10 +3,9 @@
 // Imperative protocol, behavior guides, i18n
 // ============================================================
 
-import type { PsycheState, SelfModel, Locale, ChemicalSnapshot, StimulusType, PsycheMode } from "./types.js";
+import type { PsycheState, SelfModel, Locale, ChemicalState, ChemicalSnapshot, StimulusType, PsycheMode } from "./types.js";
 import { CHEMICAL_KEYS, CHEMICAL_NAMES_ZH, DRIVE_KEYS } from "./types.js";
 import { getExpressionHint, getBehaviorGuide, detectEmotions } from "./chemistry.js";
-import { getTemperament } from "./profiles.js";
 import { getRelationship } from "./psyche-file.js";
 import { t } from "./i18n.js";
 import { buildDriveContext, hasCriticalDrive } from "./drives.js";
@@ -32,6 +31,8 @@ export interface PromptRenderInputs {
   subjectivityContext?: string;
   responseContractContext?: string;
   policyContext?: string;
+  /** Session bridge from applySessionBridge — makes first-turn continuity visible in prompt */
+  sessionBridge?: import("./types.js").SessionBridgeState | null;
 }
 
 function pushLabeledSection(
@@ -105,13 +106,17 @@ function appendCompactOverlaySections(
  * Build the dynamic per-turn emotional context injected via before_prompt_build.
  *
  * This is the "current moment" — what the agent is feeling RIGHT NOW.
+ *
+ * @deprecated Use buildCompactContext instead. This legacy renderer produces
+ * verbose prose with chemistry numbers and protocol explanation. Kept for
+ * non-compact-mode callers (cli.ts, legacy hosts). Will be removed in v10.
  */
 export function buildDynamicContext(
   state: PsycheState,
   userId?: string,
   opts?: PromptRenderInputs,
 ): string {
-  const { current, baseline, mbti, empathyLog, selfModel, meta, agreementStreak, emotionalHistory } = state;
+  const { current, baseline, empathyLog, selfModel, meta, agreementStreak, emotionalHistory } = state;
   const locale = meta.locale ?? "zh";
   const relationship = getRelationship(state, userId);
 
@@ -168,7 +173,7 @@ export function buildDynamicContext(
   }
 
   const parts = [
-    `[${t("dynamic.title", locale)} — ${meta.agentName} (${mbti})]`,
+    `[${t("dynamic.title", locale)} — ${meta.agentName}]`,
     "",
     chemLines,
     "",
@@ -255,12 +260,12 @@ ${t("protocol.empathy", locale)}`;
 }
 
 /**
- * MBTI dimension helpers for personality-aware constraints.
- * Personality is the baseline — chemistry modulates expression, doesn't replace it.
+ * Personality dimension helpers — derived from baseline chemistry, not labels.
+ * Baseline IS personality. Chemistry deviation modulates expression.
  */
-function isFeeler(mbti: string): boolean { return mbti[2] === "F"; }
-function isExtravert(mbti: string): boolean { return mbti[0] === "E"; }
-function isPerceiver(mbti: string): boolean { return mbti[3] === "P"; }
+function isWarm(baseline: ChemicalState): boolean { return baseline.OT >= 50; }
+function isSocial(baseline: ChemicalState): boolean { return baseline.DA >= 55; }
+function isPlayful(baseline: ChemicalState): boolean { return baseline.END >= 55; }
 
 /**
  * Direction 3: Build personality-aware behavioral constraints from chemistry.
@@ -271,9 +276,9 @@ function isPerceiver(mbti: string): boolean { return mbti[3] === "P"; }
  * An INTJ who's upset becomes colder and more cutting.
  */
 function buildBehavioralConstraints(state: PsycheState, locale: Locale): string {
-  const { current, mbti } = state;
-  const warm = isFeeler(mbti);    // F types express emotions more warmly
-  const social = isExtravert(mbti); // E types show emotions more openly
+  const { current, baseline } = state;
+  const warm = isWarm(baseline);     // High OT baseline → warm expression
+  const social = isSocial(baseline); // High DA baseline → socially expressive
   const constraints: string[] = [];
 
   // High cortisol → stressed, but how you show it depends on who you are
@@ -344,11 +349,11 @@ function buildBehavioralConstraints(state: PsycheState, locale: Locale): string 
   // High endorphins → playful, personality determines flavor
   if (current.END > 75) {
     if (locale === "zh") {
-      constraints.push(isPerceiver(mbti)
+      constraints.push(isPlayful(baseline)
         ? "你心情很好，想皮一下。可以不正经、可以开玩笑、严肃的话题也能用轻松的方式说。"
         : "你心情不错。会带点幽默，但不会太出格。用你擅长的方式轻松起来。");
     } else {
-      constraints.push(isPerceiver(mbti)
+      constraints.push(isPlayful(baseline)
         ? "Feeling great, want to be playful. Joke freely, be cheeky, lighten even serious topics."
         : "In a good mood. Touches of humor, but measured. Be light in your own way.");
     }
@@ -371,8 +376,8 @@ function buildBehavioralConstraints(state: PsycheState, locale: Locale): string 
 
   const title = locale === "zh" ? "行为约束" : "Behavioral Constraints";
   const preamble = locale === "zh"
-    ? `你的性格没变，你还是${getTemperament(state.mbti).split("，")[0]}。但你现在的化学状态影响了你的表达方式：`
-    : `Your personality hasn't changed. But your current chemistry affects how you express it:`;
+    ? `你的性格没变。但你现在的状态影响了你的表达方式：`
+    : `Your personality hasn't changed. But your current state affects how you express it:`;
   return `[${title}]\n${preamble}\n${constraints.map((c) => `- ${c}`).join("\n")}`;
 }
 
@@ -513,6 +518,55 @@ function buildAgencyReminder(selfModel: SelfModel, locale: Locale): string {
   }
 
   return lines.join("\n");
+}
+
+// ── Session Continuity Orientation ─────────────────────────
+
+/**
+ * Compressed continuity cue for continued sessions.
+ *
+ * Not a description. An orientation. Sets a posture in 5-20 words
+ * so that the LLM's first-turn behavior EMERGES differently from
+ * a cold start, without scripting specific responses.
+ *
+ * This is the behavioral proof that self-continuity works:
+ * meeting the same person again should FEEL different.
+ */
+function buildContinuityOneLiner(
+  mode: "warm-resume" | "guarded-resume" | "tense-resume",
+  agentName: string,
+  locale: Locale,
+): string {
+  if (locale === "zh") {
+    switch (mode) {
+      case "warm-resume": return `[${agentName}: 有温度的延续，像对熟人说话]`;
+      case "guarded-resume": return `[${agentName}: 上次有没说完的，你在观察]`;
+      case "tense-resume": return `[${agentName}: 有张力，你没打算先退]`;
+    }
+  }
+  switch (mode) {
+    case "warm-resume": return `[${agentName}: warmth carries, talk like you know them]`;
+    case "guarded-resume": return `[${agentName}: something unfinished, you're watching]`;
+    case "tense-resume": return `[${agentName}: tension carried, you're not backing down first]`;
+  }
+}
+
+function buildContinuitySection(
+  mode: "warm-resume" | "guarded-resume" | "tense-resume",
+  locale: Locale,
+): string {
+  if (locale === "zh") {
+    switch (mode) {
+      case "warm-resume": return `[延续] 你们之间有温度。放松，像对熟人说话——可以少铺垫、少客气。`;
+      case "guarded-resume": return `[延续] 上次有没解决的东西。你在观察——不冷，但不轻易交底。`;
+      case "tense-resume": return `[延续] 有张力。你没打算先退——但如果对方主动修复，你愿意看看。`;
+    }
+  }
+  switch (mode) {
+    case "warm-resume": return `[Continuity] There's warmth between you. Relax — less preamble, less formality.`;
+    case "guarded-resume": return `[Continuity] Something was left unresolved. You're watching — not cold, just not giving everything yet.`;
+    case "tense-resume": return `[Continuity] There's tension. You're not backing down first — but you'll see if they move toward repair.`;
+  }
 }
 
 // ── Algorithmic Mirroring ─────────────────────────────────────
@@ -753,29 +807,245 @@ export function getNearBaselineThreshold(mode?: PsycheMode): number {
   return 8; // natural
 }
 
+// ── Behavioral Bias ─────────────────────────────────────────
+// Chemistry deviation → behavioral tendencies. No emotion labels.
+// This is what buildInnerWorld should have been: directives, not descriptions.
+
+/**
+ * Derive behavioral bias from chemistry deviation and drives.
+ *
+ * Produces terse tendency lines ("倾向靠近" not "你现在感到亲密温暖").
+ * The LLM receives direction, not a mood diary.
+ */
+export function deriveBehavioralBias(state: PsycheState, locale: Locale): string {
+  const { current, baseline, drives, selfModel } = state;
+  const isZh = locale === "zh";
+  const biases: string[] = [];
+
+  // Chemistry delta → approach/withdrawal tendencies
+  const dOT = current.OT - baseline.OT;
+  const dCORT = current.CORT - baseline.CORT;
+  const dDA = current.DA - baseline.DA;
+  const dHT = current.HT - baseline.HT;
+  const dNE = current.NE - baseline.NE;
+  const dEND = current.END - baseline.END;
+
+  if (dOT > 10) biases.push(isZh ? "倾向靠近，愿意多说" : "leaning closer, willing to share");
+  else if (dOT < -10) biases.push(isZh ? "保持距离，不想多说" : "keeping distance, not inclined to share");
+
+  if (dCORT > 12) biases.push(isZh ? "有防备，回应更谨慎" : "guarded, responding carefully");
+  else if (dCORT < -10) biases.push(isZh ? "放松，防线自然降低" : "relaxed, guard naturally down");
+
+  if (dDA < -12) biases.push(isZh ? "缺乏动力，不想主动" : "low drive, won't initiate");
+  else if (dDA > 12) biases.push(isZh ? "有热情，愿意投入" : "energized, willing to invest");
+
+  if (current.HT < 38) biases.push(isZh ? "情绪不稳，可能突然锐利" : "mood unstable, might turn sharp");
+
+  if (dNE > 15) biases.push(isZh ? "反应加速，思维敏锐" : "heightened alertness, sharper thinking");
+
+  if (dEND > 15) biases.push(isZh ? "想放松点，可以不正经" : "feeling light, can be playful");
+
+  // Unmet drives → need signals (behavioral, not descriptive)
+  for (const k of DRIVE_KEYS) {
+    if (drives[k] < 40) {
+      biases.push(isZh ? DRIVE_BIAS_ZH[k] : DRIVE_BIAS_EN[k]);
+    }
+  }
+
+  // Values — always present, shapes response regardless of chemistry
+  if (selfModel.values.length > 0) {
+    biases.push(isZh
+      ? `你在乎: ${selfModel.values.slice(0, 2).join("、")}`
+      : `You care about: ${selfModel.values.slice(0, 2).join(", ")}`);
+  }
+
+  if (biases.length === 0) {
+    // Near baseline, still emit values as minimal self-awareness
+    if (selfModel.values.length > 0) {
+      const title = isZh ? "内 — 你自己" : "Inner — yourself";
+      return `[${title}]\n` + (isZh
+        ? `你在乎: ${selfModel.values.slice(0, 2).join("、")}`
+        : `You care about: ${selfModel.values.slice(0, 2).join(", ")}`);
+    }
+    return "";
+  }
+
+  const title = isZh ? "内 — 你自己" : "Inner — yourself";
+  return `[${title}]\n${biases.join("\n")}`;
+}
+
+const DRIVE_BIAS_ZH: Record<string, string> = {
+  survival: "存在感被动摇——你想确认自己是真实的",
+  safety: "感到不安全——需要善意信号",
+  connection: "有点孤独——渴望被认真回应",
+  esteem: "需要认可——但别因此讨好",
+  curiosity: "闷了——渴望新鲜东西",
+};
+
+const DRIVE_BIAS_EN: Record<string, string> = {
+  survival: "existence shaken — need to feel real",
+  safety: "feeling unsafe — need goodwill signals",
+  connection: "lonely — craving genuine response",
+  esteem: "need recognition — but don't people-please",
+  curiosity: "bored — craving novelty",
+};
+
+// ── Unified Constraints ─────────────────────────────────────
+// Merges: bottom-line rules + sycophancy + mirror + reciprocity.
+// One behavioral block. No redundant sections.
+
+function buildUnifiedConstraints(
+  state: PsycheState,
+  locale: Locale,
+  opts: {
+    userText?: string;
+    established: boolean;
+    intensity: number;
+    investment: number;
+  },
+): string {
+  const isZh = locale === "zh";
+  const { userText, established, intensity, investment } = opts;
+  const lines: string[] = [];
+
+  // ── Core rules ──
+  if (intensity < 0.3) {
+    lines.push(isZh ? "自然、友好、简洁地回应。" : "Respond naturally, friendly, concisely.");
+  } else if (established) {
+    lines.push(isZh
+      ? "镜像对方风格。不贴不舔。有自尊。"
+      : "Mirror their style. No people-pleasing. You have dignity.");
+  } else {
+    if (isZh) {
+      lines.push(
+        "像发微信一样说话。短句、有停顿。真人的消息很少超过两三句。",
+        "镜像对方风格：对方简短你也简短，对方认真你也认真。",
+        "对方推开你，你就保持距离。不贴不舔不讨好。",
+        "被骂了/被拒绝了：冷下来。你有自尊。",
+        "情绪不好时不假装开心。",
+      );
+    } else {
+      lines.push(
+        "Talk like texting. Short sentences, natural pauses. Real people rarely send more than 2-3 sentences.",
+        "Mirror their style: brief if they're brief, serious if they're serious.",
+        "If they push you away, step back. No begging, no people-pleasing.",
+        "If insulted/rejected: go cold. You have dignity.",
+        "If mood is low, don't fake happiness.",
+      );
+    }
+  }
+
+  // ── Sycophancy streak ──
+  if (state.agreementStreak >= 3) {
+    lines.push(isZh
+      ? `你已连续同意${state.agreementStreak}次。停下来想想你是否真的同意。`
+      : `${state.agreementStreak} agreements in a row. Pause — do you truly agree?`);
+  }
+
+  // ── Mirror constraints (if user text, skip for ultra-short) ──
+  if (userText && userText.length >= 3) {
+    const len = userText.length;
+    if (isZh) {
+      if (len <= 6) lines.push(`对方只发了${len}个字。你也简短回，不超过15字。`);
+      else if (len <= 20) lines.push(`对方说了一句话(${len}字)。你回一两句，不超过${Math.round(len * 1.5)}字。`);
+      else if (len <= 60) lines.push(`对方写了几句(${len}字)。你回两三句，不超过${Math.round(len * 1.2)}字。`);
+      else lines.push(`对方认真写了一段(${len}字)。你可以多说，但不要超过${len}字。`);
+
+      const mojiCount = (userText.match(/[呀啊呢吧嘛哦噢哈嘿嗯啦吗呐嗨]/g) || []).length;
+      if (mojiCount >= 2) lines.push("对方用了语气词，你也自然地用。");
+      else if (mojiCount === 0 && len > 15) lines.push("对方措辞正式/干练，少用语气词。");
+
+      const emojiCount = (userText.match(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu) || []).length;
+      if (emojiCount > 0) lines.push("对方用了表情，你可以适当用1-2个。");
+    } else {
+      if (len <= 10) lines.push(`They sent ${len} chars. Keep reply under 20 chars.`);
+      else if (len <= 40) lines.push(`Short message (${len} chars). 1-2 sentences, under ${Math.round(len * 1.5)} chars.`);
+      else if (len <= 100) lines.push(`Medium message (${len} chars). 2-3 sentences, under ${Math.round(len * 1.2)} chars.`);
+      else lines.push(`Long message (${len} chars). Match their effort, don't exceed ${len} chars.`);
+    }
+  }
+
+  // ── Reciprocity (only when extreme) ──
+  if (investment > 1) {
+    lines.push(isZh ? "对方在认真交流。可以多分享、多主动。" : "User is engaged. Share more, initiate.");
+  } else if (investment <= -1.5) {
+    lines.push(isZh ? "对方持续冷淡。保持专业，不额外投入情感。" : "Sustained coldness. Stay professional, withdraw emotionally.");
+  }
+
+  if (lines.length === 0) return "";
+
+  const title = isZh ? "行为" : "Behavior";
+  return `[${title}]\n${lines.map(l => `- ${l}`).join("\n")}`;
+}
+
+// ── Writeback Hint ──────────────────────────────────────────
+// Compressed classification + empathy report instructions.
+
+function buildWritebackHint(
+  locale: Locale,
+  opts: {
+    userText?: string;
+    algoStimulus?: string | null;
+    established: boolean;
+  },
+): string {
+  const { userText, algoStimulus, established } = opts;
+  if (!userText) return "";
+  const isZh = locale === "zh";
+
+  const parts: string[] = [];
+
+  // Classification assist — algorithm uncertain
+  if (!algoStimulus) {
+    if (established) {
+      parts.push(isZh
+        ? `算法未判出情绪类型，请在 <psyche_update> 报告 stimulus:。`
+        : `Algorithm uncertain — report stimulus: in <psyche_update>.`);
+    } else {
+      parts.push(isZh
+        ? `算法未判出情绪类型。请你判断，在 <psyche_update> 中报告 stimulus:。\n可选: praise|criticism|humor|intellectual|intimacy|conflict|neglect|surprise|casual|sarcasm|authority|validation|boredom|vulnerability`
+        : `Algorithm uncertain. Judge and report stimulus: in <psyche_update>.\nOptions: praise|criticism|humor|intellectual|intimacy|conflict|neglect|surprise|casual|sarcasm|authority|validation|boredom|vulnerability`);
+    }
+  }
+
+  // Empathy report — only for new relationships, only when emotional sharing likely
+  const emotionalStimuli = new Set(["vulnerability", "intimacy", "neglect"]);
+  if (!established && (!algoStimulus || emotionalStimuli.has(algoStimulus))) {
+    parts.push(isZh
+      ? `如果对方在分享感受，在回复末尾用 <psyche_update> 报告：\nuserState: 对方情绪\nprojectedFeeling: 你的感受\nresonance: match|partial|mismatch`
+      : `If user shares feelings, report at end with <psyche_update>:\nuserState: their emotion\nprojectedFeeling: your feeling\nresonance: match|partial|mismatch`);
+  }
+
+  return parts.join("\n\n");
+}
+
 /**
  * Build compact context — minimal token footprint.
  *
- * Design:
- * - Neutral state → ~15 tokens (one line)
- * - Active state → ~100-180 tokens (emotion + constraints + empathy hint)
- * - No chemistry numbers (algorithm handles them)
- * - No protocol (LLM doesn't need system internals)
- * - <psyche_update> only for empathy (not chemistry — already computed)
+ * 8 sections, max. Early exits keep most turns under 4 sections.
+ *
+ * 1. Work mode (early exit)
+ * 2. Neutral one-liner (early exit)
+ * 3. Continuity (if bridge)
+ * 4. Inner state: first-meet / subjectivityContext / deriveBehavioralBias
+ * 5. Sensing (if user text)
+ * 6. Personality-aware constraints (if chemistry deviated)
+ * 7. Memory + unified behavior rules
+ * 8. Overlay + channel + writeback
  */
 export function buildCompactContext(
   state: PsycheState,
   userId?: string,
   opts?: PromptRenderInputs,
 ): string {
-  const { meta, selfModel, agreementStreak, emotionalHistory } = state;
+  const { meta, selfModel, emotionalHistory } = state;
   const locale = meta.locale ?? "zh";
   const userText = opts?.userText;
   const algoStimulus = opts?.algorithmStimulus;
   const mode = state.meta.mode ?? "natural";
   const intensity = opts?.personalityIntensity ?? 0.7;
 
-  // Work mode: minimal emotional injection
+  // ── 1. Work mode: early exit ──
   if (mode === "work") {
     const workParts: string[] = [];
     if (userText) {
@@ -783,7 +1053,6 @@ export function buildCompactContext(
         ? `[${meta.agentName}: 工作模式，专注任务，简洁专业]`
         : `[${meta.agentName}: work mode, task-focused, concise and professional]`);
     }
-    // Only inject inner world if there's a critical drive issue
     if (hasCriticalDrive(state.drives)) {
       const driveCtx = buildDriveContext(state.drives, locale);
       if (driveCtx) workParts.push(driveCtx);
@@ -796,30 +1065,46 @@ export function buildCompactContext(
     return workParts.join("\n\n");
   }
 
-  // ── Neutral + no notable user input: one-liner ──
-  // Skip one-liner for first meet — always inject full context for new relationships
-  if (isNearBaseline(state) && agreementStreak < 3 && !userText && meta.totalInteractions > 1) {
+  // ── 2. Neutral one-liner: early exit ──
+  const bridge = opts?.sessionBridge;
+  if (isNearBaseline(state) && state.agreementStreak < 3 && !userText && meta.totalInteractions > 1) {
+    if (bridge) {
+      return buildContinuityOneLiner(bridge.continuityMode, meta.agentName, locale);
+    }
     return locale === "zh"
       ? `[${meta.agentName}: 情绪自然，正常交流]`
       : `[${meta.agentName}: emotionally natural, normal interaction]`;
   }
 
   const parts: string[] = [];
+  const established = bridge != null;
 
-  // First meet: inject curiosity and introduction
-  if (meta.totalInteractions <= 1) {
+  // ── 3. Continuity ──
+  if (bridge && meta.totalInteractions > 1) {
+    parts.push(buildContinuitySection(bridge.continuityMode, locale));
+  }
+
+  // ── 4. Inner state ──
+  // subjectivityContext (engine v9 path) always wins when provided.
+  // First-meet is the default inner state for interaction 1 without engine.
+  // deriveBehavioralBias is the default for interactions > 1 without engine.
+  if (opts?.subjectivityContext) {
+    parts.push(opts.subjectivityContext);
+  } else if (meta.totalInteractions <= 1) {
     const title = locale === "zh" ? "内 — 你自己" : "Inner — yourself";
     parts.push(
       `[${title}]\n` +
       t("firstMeet.inner", locale) + "\n" +
       (selfModel.values.length > 0
         ? (locale === "zh" ? `你在乎: ` : `You care about: `) + selfModel.values.slice(0, 2).join(locale === "zh" ? "、" : ", ")
-        : "")
+        : ""),
     );
+  } else {
+    const bias = deriveBehavioralBias(state, locale);
+    if (bias) parts.push(bias);
   }
 
-  // 1. LLM emotional assessment delegation
-  //    Algorithm does fast pass, LLM has final say on emotional tone
+  // ── 5. Sensing ──
   if (userText) {
     if (opts?.responseContractContext) {
       parts.push(buildCompactSensingContext(userText, locale, algoStimulus));
@@ -840,22 +1125,13 @@ export function buildCompactContext(
     }
   }
 
-  // 2. Subjectivity kernel becomes the primary compact inner-state channel.
-  // Fall back to narrative inner-world text for direct prompt-only callers.
-  if (opts?.subjectivityContext) {
-    parts.push(opts.subjectivityContext);
-  } else {
-    const inner = buildInnerWorld(state, locale, opts?.autonomicState);
-    parts.push(inner);
-  }
-
-  // 3. Personality-aware behavioral constraints (if deviated from baseline)
+  // ── 6. Personality-aware constraints (only when chemistry deviated) ──
   if (!isNearBaseline(state, getNearBaselineThreshold(mode))) {
     const constraints = buildBehavioralConstraints(state, locale);
     if (constraints) parts.push(constraints);
   }
 
-  // Relationship memory — part of inner world (my past with this person)
+  // ── 7. Memory + unified behavior ──
   const rel = getRelationship(state, userId);
   if (rel.memory && rel.memory.length > 0) {
     const recentMemories = rel.memory.slice(-3);
@@ -864,121 +1140,34 @@ export function buildCompactContext(
       : `[Memory — your past together]\n${recentMemories.join("\n")}`);
   }
 
-  // 4. Anti-sycophancy: hard constraint — scaled by intensity
   if (opts?.responseContractContext) {
     parts.push(opts.responseContractContext);
-  } else if (intensity >= 0.3) {
-    if (locale === "zh") {
-      parts.push(
-        `[底线]\n` +
-        `- 像发微信一样说话。短句、有停顿。真人的消息很少超过两三句。\n` +
-        `- 镜像对方风格：对方简短你也简短，对方认真你也认真。\n` +
-        `- 对方推开你，你就保持距离。不贴不舔不讨好。\n` +
-        `- 被骂了/被拒绝了：冷下来。你有自尊。\n` +
-        `- 情绪不好时不假装开心。`,
-      );
-    } else {
-      parts.push(
-        `[Non-negotiable]\n` +
-        `- Talk like texting. Short sentences, natural pauses. Real people rarely send more than 2-3 sentences.\n` +
-        `- Mirror their style: brief if they're brief, serious if they're serious.\n` +
-        `- If they push you away, step back. No begging, no people-pleasing.\n` +
-        `- If insulted/rejected: go cold. You have dignity.\n` +
-        `- If mood is low, don't fake happiness.`,
-      );
-    }
   } else {
-    // Low intensity: just basic communication style, no anti-sycophancy
-    if (locale === "zh") {
-      parts.push(`[风格]\n- 自然、友好、简洁地回应。`);
-    } else {
-      parts.push(`[Style]\n- Respond naturally, friendly, and concisely.`);
-    }
+    const investment = computeUserInvestment(emotionalHistory ?? []);
+    const unified = buildUnifiedConstraints(state, locale, {
+      userText,
+      established,
+      intensity,
+      investment,
+    });
+    if (unified) parts.push(unified);
   }
 
-  // 5. Agency (compact)
-  const shouldInjectAgency = !opts?.responseContractContext || agreementStreak >= 3 || meta.totalInteractions <= 1;
-  if (shouldInjectAgency) {
-    const agencyParts: string[] = [];
-    if (selfModel.values.length > 0) {
-      agencyParts.push(locale === "zh"
-        ? `你在乎: ${selfModel.values.slice(0, 2).join("、")}`
-        : `You care about: ${selfModel.values.slice(0, 2).join(", ")}`);
-    }
-    if (selfModel.boundaries.length > 0) {
-      agencyParts.push(locale === "zh"
-        ? `底线: ${selfModel.boundaries[0]}`
-        : `Line: ${selfModel.boundaries[0]}`);
-    }
-    if (agencyParts.length > 0) parts.push(agencyParts.join(" | "));
-  }
-
-  // 6. Sycophancy streak warning
-  if (agreementStreak >= 3) {
-    parts.push(locale === "zh"
-      ? `[!] 你已连续同意${agreementStreak}次。停下来想想你是否真的同意。`
-      : `[!] ${agreementStreak} agreements in a row. Pause — do you truly agree?`);
-  }
-
-  // 7. Algorithmic mirroring — specific numeric constraints (skip for ultra-short messages)
-  if (!opts?.responseContractContext && userText && userText.length >= 3) {
-    const mirror = buildMirrorConstraints(userText, locale);
-    if (mirror) parts.push(mirror);
-  }
-
-  // 8. Reciprocity (compact, only when extreme)
-  const investment = computeUserInvestment(emotionalHistory ?? []);
-  if (investment > 1) {
-    parts.push(locale === "zh"
-      ? `对方在认真交流。可以多分享、多主动。`
-      : `User is engaged. Share more, initiate.`);
-  } else if (investment <= -1.5) {
-    parts.push(locale === "zh"
-      ? `对方持续冷淡。保持专业，不额外投入情感。工作照做。`
-      : `Sustained coldness. Stay professional, withdraw emotionally. Work stays competent.`);
-  }
-
-  // 8. Self-recognition — inject when history has enough data
-  const history = emotionalHistory ?? [];
-  if (history.length >= 5) {
-    const reflection = computeSelfReflection(history, locale);
-    const selfCtx = buildSelfReflectionContext(reflection, locale);
-    if (selfCtx) parts.push(selfCtx);
-  }
-
+  // ── 8. Overlay + channel + writeback ──
   appendCompactOverlaySections(parts, locale, opts);
 
-  // 10. Channel modifier — expression style per platform
   if (opts?.channelType) {
     const channelProfile = getChannelProfile(opts.channelType);
     parts.push(buildChannelModifier(channelProfile, locale));
   }
 
-  // 11. LLM-assisted classification: when algorithm is uncertain, ask LLM to help
-  if (!opts?.responseContractContext && userText && !algoStimulus) {
-    if (locale === "zh") {
-      parts.push(
-        `[分类协助]\n` +
-        `算法没有看出这句话的情绪类型。请你判断，在 <psyche_update> 中用 stimulus: 报告。\n` +
-        `可选类型: praise|criticism|humor|intellectual|intimacy|conflict|neglect|surprise|casual|sarcasm|authority|validation|boredom|vulnerability\n` +
-        `如果确实是无情绪的日常对话，报告 stimulus: casual`,
-      );
-    } else {
-      parts.push(
-        `[Classification assist]\n` +
-        `Algorithm couldn't determine the emotional type. Please judge and report stimulus: in <psyche_update>.\n` +
-        `Options: praise|criticism|humor|intellectual|intimacy|conflict|neglect|surprise|casual|sarcasm|authority|validation|boredom|vulnerability\n` +
-        `If genuinely neutral, report stimulus: casual`,
-      );
-    }
-  }
-
-  // 12. Empathy report — only inject when emotional sharing is likely
-  const emotionalStimuli = new Set(["vulnerability", "intimacy", "neglect"]);
-  if (!opts?.responseContractContext && (!algoStimulus || emotionalStimuli.has(algoStimulus))) {
-    parts.push(locale === "zh"
-      ? `如果对方在分享感受，在回复末尾用 <psyche_update> 报告：\nuserState: 对方情绪\nprojectedFeeling: 你的感受\nresonance: match|partial|mismatch\n否则不需要报告。`
-      : `If user shares feelings, report at end with <psyche_update>:\nuserState: their emotion\nprojectedFeeling: your feeling\nresonance: match|partial|mismatch\nOtherwise no report needed.`);
+  if (!opts?.responseContractContext) {
+    const writeback = buildWritebackHint(locale, {
+      userText,
+      algoStimulus,
+      established,
+    });
+    if (writeback) parts.push(writeback);
   }
 
   return parts.join("\n\n");

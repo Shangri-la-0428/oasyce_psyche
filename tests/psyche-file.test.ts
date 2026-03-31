@@ -25,6 +25,7 @@ function makeMinimalState(overrides: Partial<PsycheState> = {}): PsycheState {
   return {
     version: 6,
     mbti: "ENFP",
+    sensitivity: 1.0,
     baseline: { DA: 75, HT: 55, CORT: 30, OT: 60, NE: 65, END: 70 },
     current: { DA: 75, HT: 55, CORT: 30, OT: 60, NE: 65, END: 70 },
     updatedAt: new Date().toISOString(),
@@ -49,8 +50,9 @@ describe("loadState", () => {
   it("auto-initializes when no state file exists", async () => {
     const dir = await freshDir();
     const state = await loadState(dir);
-    assert.equal(state.version, 6);
-    assert.equal(state.mbti, "INFJ"); // default
+    assert.equal(state.version, 10);
+    // v10: mbti no longer stored on new states
+    assert.equal(state.mbti, undefined);
     assert.ok(state.relationships._default);
     assert.equal(state.agreementStreak, 0);
     await rm(dir, { recursive: true });
@@ -93,7 +95,7 @@ describe("loadState", () => {
     await writeFile(join(dir, "psyche-state.json"), "not json {{{", "utf-8");
     const state = await loadState(dir);
     // Should auto-initialize instead of crash
-    assert.equal(state.version, 6);
+    assert.equal(state.version, 10);
     await rm(dir, { recursive: true });
   });
 });
@@ -124,12 +126,14 @@ describe("saveState", () => {
 // ── initializeState ─────────────────────────────────────────
 
 describe("initializeState", () => {
-  it("creates state with explicit MBTI", async () => {
+  it("creates state with explicit MBTI preset", async () => {
     const dir = await freshDir();
     const state = await initializeState(dir, { mbti: "ESTP", name: "Tester" });
-    assert.equal(state.mbti, "ESTP");
+    // v10: mbti is no longer stored on new states; baseline is derived from preset
+    assert.equal(state.mbti, undefined);
     assert.equal(state.meta.agentName, "Tester");
-    assert.equal(state.version, 6);
+    assert.equal(state.version, 10);
+    assert.ok(state.sensitivity > 0, "sensitivity should be set from preset");
     await rm(dir, { recursive: true });
   });
 
@@ -138,15 +142,18 @@ describe("initializeState", () => {
     await initializeState(dir, { mbti: "INFP", name: "Dreamer" });
     const md = await readFile(join(dir, "PSYCHE.md"), "utf-8");
     assert.ok(md.includes("Dreamer"));
-    assert.ok(md.includes("INFP"));
+    // v10: PSYCHE.md shows baseline chemistry, not MBTI label
+    assert.ok(md.includes("DA:") || md.includes("多巴胺"), "should include baseline chemistry");
     await rm(dir, { recursive: true });
   });
 
-  it("detects MBTI from IDENTITY.md", async () => {
+  it("detects MBTI from IDENTITY.md for baseline derivation", async () => {
     const dir = await freshDir();
     await writeFile(join(dir, "IDENTITY.md"), "# Identity\nMBTI: ENTP\nName: Debater", "utf-8");
     const state = await initializeState(dir);
-    assert.equal(state.mbti, "ENTP");
+    // v10: mbti not stored, but baseline should reflect ENTP profile
+    assert.equal(state.mbti, undefined);
+    assert.ok(state.baseline.DA > 0, "baseline should be set from detected MBTI");
     await rm(dir, { recursive: true });
   });
 
@@ -485,7 +492,8 @@ describe("generatePsycheMd", () => {
     const md = await readFile(join(dir, "PSYCHE.md"), "utf-8");
     assert.ok(md.includes("# Psyche"));
     assert.ok(md.includes("TestAgent"));
-    assert.ok(md.includes("ENFP"));
+    // v10: PSYCHE.md shows baseline chemistry, not MBTI label
+    assert.ok(md.includes("多巴胺") || md.includes("DA"));
     assert.ok(md.includes("<psyche_update>"));
     await rm(dir, { recursive: true });
   });

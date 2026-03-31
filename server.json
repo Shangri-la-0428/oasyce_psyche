@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.Shangri-la-0428/psyche-ai",
-  "description": "Emotional intelligence for AI agents: neurotransmitter mood, personality, empathy, trait drift.",
+  "description": "AI-first subjectivity kernel for agents with continuous appraisal, relation dynamics, and adaptive reply loops.",
   "repository": {
     "url": "https://github.com/Shangri-la-0428/oasyce_psyche",
     "source": "github"
   },
-  "version": "9.2.3",
+  "version": "9.2.11",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "psyche-ai",
-      "version": "9.2.3",
+      "version": "9.2.11",
       "transport": {
         "type": "stdio"
       },

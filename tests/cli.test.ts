@@ -66,7 +66,7 @@ describe("cli init", () => {
     assert.ok(stdout.includes("Psyche initialized"));
     const stateRaw = await readFile(join(dir, "psyche-state.json"), "utf-8");
     const state = JSON.parse(stateRaw);
-    assert.equal(state.version, 6);
+    assert.equal(state.version, 10);
     await rm(dir, { recursive: true });
   });
 
@@ -74,7 +74,8 @@ describe("cli init", () => {
     const dir = await freshDir();
     const { stdout } = await run(["init", dir, "--mbti", "ENTP", "--name", "Spark"]);
     assert.ok(stdout.includes("Spark"));
-    assert.ok(stdout.includes("ENTP"));
+    // v10: mbti not stored, just used as preset selector
+    assert.ok(stdout.includes("Psyche initialized"));
     await rm(dir, { recursive: true });
   });
 
@@ -99,7 +100,8 @@ describe("cli init", () => {
     await run(["init", dir, "--mbti", "INFP", "--name", "Poet"]);
     const md = await readFile(join(dir, "PSYCHE.md"), "utf-8");
     assert.ok(md.includes("Poet"));
-    assert.ok(md.includes("INFP"));
+    // v10: PSYCHE.md shows baseline chemistry, not MBTI label
+    assert.ok(md.includes("多巴胺") || md.includes("DA"), "should include baseline chemistry info");
     await rm(dir, { recursive: true });
   });
 });
@@ -112,7 +114,8 @@ describe("cli status", () => {
     await run(["init", dir, "--mbti", "INTJ", "--name", "Planner"]);
     const { stdout } = await run(["status", dir]);
     assert.ok(stdout.includes("Planner"));
-    assert.ok(stdout.includes("INTJ"));
+    // v10: status shows baseline-derived personality summary instead of MBTI
+    assert.ok(stdout.includes("introvert") || stdout.includes("extrovert"));
     await rm(dir, { recursive: true });
   });
 
@@ -121,7 +124,8 @@ describe("cli status", () => {
     await run(["init", dir, "--mbti", "ISFJ"]);
     const { stdout } = await run(["status", dir, "--json"]);
     const parsed = JSON.parse(stdout);
-    assert.equal(parsed.mbti, "ISFJ");
+    // v10: mbti is no longer stored on new states
+    assert.ok(parsed.baseline, "baseline should be present");
     assert.ok(parsed._derived);
     await rm(dir, { recursive: true });
   });

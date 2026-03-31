@@ -7,7 +7,7 @@ It compresses continuous appraisal, relation dynamics, adaptive reply loops, and
 **One sentence:** Psyche is a subjectivity kernel for agents.
 
 [![npm](https://img.shields.io/npm/v/psyche-ai)](https://www.npmjs.com/package/psyche-ai)
-[![tests](https://img.shields.io/badge/tests-1308%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-1316%20passing-brightgreen)]()
 [![deps](https://img.shields.io/badge/dependencies-0-blue)]()
 [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
@@ -60,6 +60,11 @@ The four layers are:
 - `Thronglets = delegate continuity + session traces/coordination + emergent collective intelligence`
 - `Oasyce Net = policy, operations, and resource orchestration`
 - `Oasyce Chain = account truth, authorization truth, commitments, settlement, and public finality`
+
+The authorization truth flow is also frozen and one-way:
+`Chain -> Net -> Thronglets -> Psyche`
+
+In other words, `Psyche` does not decide who is authorized. It only consumes the resulting execution boundary.
 
 See:
 
@@ -253,11 +258,13 @@ The point is not extra abstraction. It is less scattered orchestration and a mor
 
 On the current mainline, `processInput()` returns `replyEnvelope` as the canonical host surface; the older sibling fields remain as compatibility aliases so existing hosts do not break. `policyModifiers` no longer belongs to the canonical surface and survives only as a legacy raw vector.
 
-Outside that canonical host surface, `processInput()` may also return a thin `observability` side-channel. It is not a second control ABI and it does not compete with `replyEnvelope`; it only makes three things legible:
+Outside that canonical host surface, `processInput()` may also return a thin `observability` side-channel. It is not a second control ABI and it does not compete with `replyEnvelope`; it only makes five things legible:
 
 - which control plane dominated this turn
 - how current-turn, writeback, session-bridge, and persisted-relationship layers reconciled
 - why the reply path landed on `work` or `private`
+- which causal refs connect this turn to its parent turn, session bridge, writeback outcomes, and external continuity events
+- how low-frequency external continuity events map into `localTraceRefs / signalRefs / traceRefs / summaryCandidateRefs`
 
 That lets other agents and hosts verify control boundaries and strategy selection without turning the main runtime path into a second prompt protocol.
 
@@ -503,7 +510,7 @@ git clone https://github.com/Shangri-la-0428/oasyce_psyche.git
 cd oasyce_psyche
 npm install
 npm run build
-npm test                        # 1308 tests
+npm test                        # 1316 tests
 npm run typecheck               # strict mode
 ```
 

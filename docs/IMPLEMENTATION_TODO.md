@@ -63,6 +63,17 @@ Document and implement:
 - Net is policy/orchestration
 - Thronglets caches and executes within that truth
 
+Current Psyche-side status:
+
+- documented in stack and identity docs
+- external continuity payload remains free of account / principal / authorization claims
+
+Remaining runtime work belongs outside Psyche:
+
+- delegate capability scope enforcement
+- time-bounded authorization checks
+- revocation propagation from Chain -> Net -> Thronglets
+
 ## Near-Term
 
 ### 5. Formalize trace retention windows in Thronglets
@@ -84,25 +95,43 @@ Do not add new signal kinds.
 
 ### 7. Principal gate checklist
 
-Turn the institutional AI-principal gate into a concrete evaluation checklist.
+Formal specification now lives in [AI_PRINCIPAL_GATE.md](AI_PRINCIPAL_GATE.md).
+
+Remaining work:
+
+- fill threshold values in the threshold table once operational data exists
+- implement gate evaluation as an executable protocol (not just a document)
+- wire Psyche self-continuity evidence (session coherence score, trait drift trajectory, corruption detection) into a machine-readable report
+- wire Thronglets execution chain evidence (signed trace completeness, cross-session linkage) into a machine-readable report
+- define and test revocation propagation end-to-end across all four layers
+- run at least one demonstration evaluation (expected result: fail, with specific condition gaps identified)
 
 ### 8. Diagnostics by layer
 
-Split diagnostics explicitly by:
+Implemented in `src/diagnostics.ts`. Every `DiagnosticIssue` now carries a `layer` field. Report includes `layeredIssues` and `layerHealth`.
 
-- subjective continuity
-- delegate continuity
-- policy/orchestration
-- public fact/finality
+Layers:
+
+- `subjective-continuity` (L1): chemistry, drives, classifier, trait drift, dyadic coherence, energy — fully implemented
+- `delegate-continuity` (L2): writeback calibration, Thronglets export boundary — fully implemented
+- `policy-orchestration` (L3): structural interface defined, implementation lives in Oasyce Net
+- `public-truth` (L4): structural interface defined, implementation lives in Oasyce Chain
+
+`LayerHealthSummary` provides per-layer status (healthy/degraded/failing) plus L1/L2 measurements (chemistryDeviation, traitDriftEstablished, predictionError, writebackLoopActive, calibrationEffects, etc.).
 
 ### 9. Add causal audit chain without widening control ABI
 
-Observability is now good enough for single-turn control and attribution, but not yet for full auditability.
-The next hardening step is:
+Observability now covers:
 
-- cross-turn / cross-session causal linking
+- cross-turn causal linking
 - machine-verifiable evidence pointers for rule ids and scoring sources
-- one normalized mapping from `observability` into external tracing / telemetry
+- one normalized local mapping from `observability` into external trace candidates
+
+The remaining hardening step is:
+
+- cross-session linking beyond turn-local refs
+- provider-specific trace / telemetry promotion rules
+- one stable audit export contract from local observability into external systems
 
 Keep this as an audit layer, not a second control surface.
 

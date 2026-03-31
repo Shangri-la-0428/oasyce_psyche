@@ -287,7 +287,8 @@ describe("createPsycheServer (HTTP)", () => {
     assert.equal(status, 200);
     assert.ok(data.current);
     assert.ok(data.baseline);
-    assert.equal(data.mbti, "ENFP");
+    // v10: mbti not stored on new states
+    assert.ok(data.baseline, "baseline should be present");
   });
 
   it("GET /protocol returns protocol text", async () => {
@@ -321,6 +322,8 @@ describe("createPsycheServer (HTTP)", () => {
     assert.ok(Array.isArray(data.observability?.stateLayers));
     assert.ok(data.observability?.stateReconciliation);
     assert.ok(Array.isArray(data.observability?.decisionRationale?.candidates));
+    assert.ok(data.observability?.causalChain);
+    assert.ok(Array.isArray(data.observability?.traceMapping?.localTraceRefs));
   });
 
   it("POST /process-output strips tags", async () => {

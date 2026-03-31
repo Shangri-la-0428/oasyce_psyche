@@ -1,5 +1,39 @@
 # 更新日志 / Changelog
 
+## v10.0.0 — Radical Simplification
+
+**Breaking changes:**
+
+- **MBTI 移除**：`PsycheState.mbti` 不再存储。人格现在完全由 `baseline` 化学值和 `sensitivity` 系数定义。MBTI 仍可作为初始化预设（`PsycheEngine({ mbti: “ENFP” })`），但不再是运行时状态。
+  - `isFeeler/isExtravert/isPerceiver` → `isWarm/isSocial/isPlayful`（基于 baseline 化学值阈值）
+  - 旧状态自动迁移：加载时计算 `sensitivity` 并保留 `mbti` 字段以备兼容。
+- **Compact 模式永久启用**：`compactMode: false` 选项已弃用。引擎始终使用 `buildCompactContext`。`buildDynamicContext` 仅作为已弃用导出保留。
+- **公共 API 精简**：`index.ts` 导出从 ~198 缩减至 ~35（19 个值导出 + 16 个类型导出）。内部计算函数不再公开导出。
+
+**New features:**
+
+- **行为偏向引擎**：`deriveBehavioralBias()` — 化学偏差 → 行为倾向（”倾向靠近” 而非 “你现在感到亲密温暖”），无情绪标签。
+- **统一行为约束**：`buildUnifiedConstraints()` — 合并底线、镜像、反谄媚、互惠为单一 `[行为]` 区块。
+- **写回提示压缩**：`buildWritebackHint()` — 分类 + 共情报告合并为压缩尾部。
+- **Delegate 授权类型**：`DelegateAuthorization`、`CapabilityGrant`、`RevocationCondition` — 能力作用域、可撤销、时间限定的授权原语。
+- **概念压缩测试**：`concept-compression.test.ts` — 强制新概念必须进入现有 5 容器。
+- **延续性评估轨道**：`eval-continuity.test.ts` — session 延续性 + 写回校准评估。
+- **结构化写回文档**：`STRUCTURED_WRITEBACK.md` — host 集成写回模式指南。
+- **关系信号审计**：4 个死权重字段标记为 `@deprecated`（`repairFatigue`、`backslidePressure`、`misattunementLoad`、`expectationGap`）。
+
+**测试：1327 个，0 功能性失败**
+
+---
+
+## v9.2.11 — Compact Context Unification
+
+- **行为约束统一**：compact prompt 将底线、镜像、反谄媚和互惠整合为单一 `[行为]` 区块，减少重复指令并保持人格边界一致。
+- **内在状态重构**：新增 `deriveBehavioralBias()`，优先输出”行为倾向”而非情绪叙述，提升提示词可执行性。
+- **写回提示压缩**：新增 `buildWritebackHint()`，仅在算法不确定或新关系高情绪场景下注入 `<psyche_update>` 提示，降低 token 噪音。
+- **跨 turn 因果链**：`observability` 现在增加 `causalChain`，因果链 + 机器可校验证据指针 + 外部 tracing 归一映射。
+
+---
+
 ## v9.2.10 — Observability Side-Channel
 
 - **可观测性侧边信道**：`processInput()` 现在会可选返回 `observability`，但仍严格把它放在 `replyEnvelope` 之外，不让观测和控制混成第二套主接口。

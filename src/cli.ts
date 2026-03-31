@@ -162,7 +162,7 @@ async function cmdInit(dir: string, mbti?: string, name?: string, lang?: string,
     await saveState(absDir, state);
   }
 
-  console.log(`\nPsyche initialized for ${state.meta.agentName} (${state.mbti})\n`);
+  console.log(`\nPsyche initialized for ${state.meta.agentName}${state.mbti ? ` (preset: ${state.mbti})` : ""}\n`);
   printChemistry(state);
   console.log(`\nFiles created:`);
   console.log(`  ${absDir}/psyche-state.json`);
@@ -191,7 +191,12 @@ async function cmdStatus(dir: string, json: boolean, userId?: string): Promise<v
   const hint = getExpressionHint(state.current, locale);
   const elapsed = ((Date.now() - new Date(state.updatedAt).getTime()) / 60000).toFixed(1);
 
-  console.log(`\n${state.meta.agentName} (${state.mbti}) — ${emotion}\n`);
+  const baselineSummary = [
+    state.baseline.DA < 55 ? "introvert" : "extrovert",
+    state.baseline.DA > state.baseline.HT ? "intuitive" : "sensing",
+    state.baseline.OT >= 50 ? "feeling" : "thinking",
+  ].join("/");
+  console.log(`\n${state.meta.agentName} (${baselineSummary}) — ${emotion}\n`);
   printChemistry(state);
 
   console.log();
@@ -308,7 +313,7 @@ async function cmdReset(dir: string, full: boolean): Promise<void> {
   await saveState(absDir, state);
   await generatePsycheMd(absDir, state);
 
-  console.log(`\n${state.meta.agentName} reset to baseline (${state.mbti})${full ? " [full reset including relationships]" : ""}\n`);
+  console.log(`\n${state.meta.agentName} reset to baseline${full ? " [full reset including relationships]" : ""}\n`);
   printChemistry(state);
   console.log();
 }

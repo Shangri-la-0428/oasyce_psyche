@@ -30,9 +30,9 @@ describe("P7+P12 integration in PsycheEngine", () => {
     await engine.initialize();
   });
 
-  it("initialize sets v9 state with autonomicState and sessionStartedAt", async () => {
+  it("initialize sets v10 state with autonomicState and sessionStartedAt", async () => {
     const state = await storage.load() as PsycheState;
-    assert.equal(state.version, 9);
+    assert.equal(state.version, 10);
     assert.equal(state.autonomicState, "ventral-vagal");
     assert.ok(state.sessionStartedAt, "sessionStartedAt should be set");
   });

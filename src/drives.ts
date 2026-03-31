@@ -133,13 +133,13 @@ export function computeMaslowWeights(drives: InnateDrives): Record<DriveType, nu
 
 /**
  * Compute the effective baseline by applying drive-based deltas
- * to the MBTI personality baseline.
+ * to the personality baseline.
  *
- * When drives are satisfied, effective baseline = MBTI baseline.
+ * When drives are satisfied, effective baseline = personality baseline.
  * When drives are unsatisfied, baseline shifts to reflect the unmet need.
  */
 export function computeEffectiveBaseline(
-  mbtiBaseline: ChemicalState,
+  baseline: ChemicalState,
   drives: InnateDrives,
   traitDrift?: TraitDriftState,
 ): ChemicalState {
@@ -197,10 +197,10 @@ export function computeEffectiveBaseline(
     }
   }
 
-  // Apply deltas to MBTI baseline, clamp to [0, 100]
-  const effective = { ...mbtiBaseline };
+  // Apply deltas to personality baseline, clamp to [0, 100]
+  const effective = { ...baseline };
   for (const key of CHEMICAL_KEYS) {
-    effective[key] = Math.max(0, Math.min(100, mbtiBaseline[key] + delta[key]));
+    effective[key] = Math.max(0, Math.min(100, baseline[key] + delta[key]));
   }
   return effective;
 }

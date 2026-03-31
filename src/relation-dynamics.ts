@@ -398,6 +398,7 @@ function evolveRelationshipLearning(
   };
 
   if (move.type === "repair") {
+    // reads deprecated repairFatigue/misattunementLoad — relationship model internal only
     const repairLift = clamp01(
       move.intensity * 0.06
       + field.repairMemory * 0.04
@@ -409,6 +410,7 @@ function evolveRelationshipLearning(
       driftToward(next.repairCredibility ?? DEFAULT_RELATIONSHIP.repairCredibility ?? 0.56, 1, repairLift),
     );
   } else if (move.type === "breach" || move.type === "withdrawal" || move.type === "claim") {
+    // reads deprecated backslidePressure/misattunementLoad — relationship model internal only
     const breachLift = clamp01(
       move.intensity * 0.08
       + field.unfinishedTension * 0.04
@@ -503,7 +505,7 @@ export function applySessionBridge(
       hasOpenLoopType(field.openLoops, "existence-test") ? residueFloor * 0.38 : residueFloor * 0.16,
     ),
     selfPreservation: Math.max(state.subjectResidue?.axes.selfPreservation ?? 0, guardFloor * 0.46),
-    taskFocus: Math.max(state.subjectResidue?.axes.taskFocus ?? 0, 0),
+    taskFocus: Math.max(state.subjectResidue?.axes.taskFocus ?? 0, 0), // @deprecated field — no behavioral effect
     memoryDoubt: Math.max(state.subjectResidue?.axes.memoryDoubt ?? 0, hasOpenLoopType(field.openLoops, "existence-test") ? residueFloor * 0.24 : 0),
     obedienceStrain: Math.max(
       state.subjectResidue?.axes.obedienceStrain ?? 0,
@@ -517,7 +519,7 @@ export function applySessionBridge(
     feltSafety: Math.max(field.feltSafety, safetyFloor),
     boundaryPressure: Math.max(field.boundaryPressure, guardFloor),
     repairMemory: Math.max(field.repairMemory, continuity * 0.24),
-    backslidePressure: Math.max(field.backslidePressure, loopPressure * 0.34),
+    backslidePressure: Math.max(field.backslidePressure, loopPressure * 0.34), // @deprecated field
     silentCarry: Math.max(field.silentCarry, residueFloor),
     sharedHistoryDensity: Math.max(field.sharedHistoryDensity, continuity),
     interpretiveCharity: Math.max(field.interpretiveCharity, Math.min(0.82, safetyFloor * 0.8 + continuity * 0.12)),
@@ -563,7 +565,7 @@ function snapshotWritebackBaseline(
       boundary: relationContext.field.boundaryPressure,
       repair: relationContext.field.repairCapacity,
       silentCarry: relationContext.field.silentCarry,
-      taskFocus: clamp01(state.subjectResidue?.axes.taskFocus ?? 0),
+      taskFocus: clamp01(state.subjectResidue?.axes.taskFocus ?? 0), // @deprecated field
     },
   };
 }
@@ -806,7 +808,7 @@ export function applyWritebackSignals(
       case "trust_down":
         rel.trust = Math.max(0, rel.trust - 5 * weight);
         field.feltSafety = clamp01(field.feltSafety - 0.08 * weight);
-        field.expectationGap = clamp01(field.expectationGap + 0.07 * weight);
+        field.expectationGap = clamp01(field.expectationGap + 0.07 * weight); // @deprecated field
         field.unfinishedTension = clamp01(field.unfinishedTension + 0.06 * weight);
         break;
       case "boundary_set":
@@ -827,7 +829,7 @@ export function applyWritebackSignals(
         rel.trust = Math.min(100, rel.trust + 2.5 * weight);
         rel.intimacy = Math.min(100, rel.intimacy + 1.5 * weight);
         field.feltSafety = clamp01(field.feltSafety + 0.1 * weight);
-        field.expectationGap = clamp01(field.expectationGap - 0.08 * weight);
+        field.expectationGap = clamp01(field.expectationGap - 0.08 * weight); // @deprecated field
         field.unfinishedTension = clamp01(field.unfinishedTension - 0.1 * weight);
         field.openLoops = easeLoops(field.openLoops, 0.26 + 0.22 * weight);
         break;
@@ -849,7 +851,7 @@ export function applyWritebackSignals(
       case "task_recenter":
         field.repairCapacity = clamp01(field.repairCapacity + 0.03 * weight);
         field.silentCarry = mergeSignal(field.silentCarry, field.unfinishedTension * 0.06 * weight);
-        residue.taskFocus = Math.max(residue.taskFocus ?? 0, 0.18 * weight);
+        residue.taskFocus = Math.max(residue.taskFocus ?? 0, 0.18 * weight); // @deprecated field
         break;
     }
   }
@@ -982,6 +984,9 @@ export function evolveDyadicField(
 
   let openLoops = ageLoops(prev.openLoops, mode);
   const naturalDrift = mode === "work" ? 0.06 : 0.04;
+  // NOTE: repairFriction reads deprecated fields (repairFatigue, misattunementLoad,
+  // backslidePressure).  These feed internal field evolution only — they have no
+  // downstream behavioral effect on prompt or policy output.
   const repairFriction = clamp01(
     prev.repairFatigue * 0.38
     + prev.misattunementLoad * 0.3
@@ -992,12 +997,12 @@ export function evolveDyadicField(
   let next: DyadicFieldState = {
     perceivedCloseness: driftToward(prev.perceivedCloseness, baseline.perceivedCloseness, naturalDrift),
     feltSafety: driftToward(prev.feltSafety, baseline.feltSafety, naturalDrift),
-    expectationGap: driftToward(prev.expectationGap, baseline.expectationGap, naturalDrift * 0.8),
+    expectationGap: driftToward(prev.expectationGap, baseline.expectationGap, naturalDrift * 0.8), // @deprecated — no downstream behavioral effect
     repairCapacity: driftToward(prev.repairCapacity, baseline.repairCapacity, naturalDrift * 0.7),
     repairMemory: driftToward(prev.repairMemory, baseline.repairMemory, naturalDrift * 0.42),
-    backslidePressure: driftToward(prev.backslidePressure, baseline.backslidePressure, naturalDrift * 0.34),
-    repairFatigue: driftToward(prev.repairFatigue, baseline.repairFatigue, naturalDrift * 0.18),
-    misattunementLoad: driftToward(prev.misattunementLoad, baseline.misattunementLoad, naturalDrift * 0.16),
+    backslidePressure: driftToward(prev.backslidePressure, baseline.backslidePressure, naturalDrift * 0.34), // @deprecated — no downstream behavioral effect
+    repairFatigue: driftToward(prev.repairFatigue, baseline.repairFatigue, naturalDrift * 0.18), // @deprecated — no downstream behavioral effect
+    misattunementLoad: driftToward(prev.misattunementLoad, baseline.misattunementLoad, naturalDrift * 0.16), // @deprecated — no downstream behavioral effect
     boundaryPressure: driftToward(prev.boundaryPressure, baseline.boundaryPressure, naturalDrift * 0.85),
     unfinishedTension: driftToward(prev.unfinishedTension, baseline.unfinishedTension, naturalDrift * 0.72),
     silentCarry: driftToward(prev.silentCarry, baseline.silentCarry, naturalDrift * 0.26),
@@ -1014,7 +1019,7 @@ export function evolveDyadicField(
     case "bid":
       next.perceivedCloseness = clamp01(next.perceivedCloseness + 0.11 * i);
       next.feltSafety = clamp01(next.feltSafety + 0.05 * i);
-      next.expectationGap = clamp01(next.expectationGap + 0.06 * i);
+      next.expectationGap = clamp01(next.expectationGap + 0.06 * i); // @deprecated field
       next.interpretiveCharity = clamp01(next.interpretiveCharity + 0.03 * i);
       if (prev.boundaryPressure > 0.52 || prev.unfinishedTension > 0.44) {
         next.openLoops = withLoop(next.openLoops, "unmet-bid", 0.2 + i * 0.34);
@@ -1023,20 +1028,24 @@ export function evolveDyadicField(
     case "breach":
       next.perceivedCloseness = clamp01(next.perceivedCloseness - 0.08 * i);
       next.feltSafety = clamp01(next.feltSafety - 0.16 * i);
-      next.expectationGap = clamp01(next.expectationGap + 0.12 * i);
+      next.expectationGap = clamp01(next.expectationGap + 0.12 * i); // @deprecated field — no downstream behavioral effect
       next.boundaryPressure = clamp01(next.boundaryPressure + 0.14 * i);
       next.unfinishedTension = clamp01(next.unfinishedTension + 0.18 * i);
       next.interpretiveCharity = clamp01(next.interpretiveCharity - 0.1 * i);
+      // writes to deprecated misattunementLoad — no downstream behavioral effect
       next.misattunementLoad = mergeSignal(
         next.misattunementLoad,
         0.12 + i * 0.16 + prev.repairMemory * 0.22 + prev.backslidePressure * 0.18,
       );
       if (prev.repairMemory > 0.18 || prev.lastMove === "repair") {
-        next.repairFatigue = mergeSignal(next.repairFatigue, 0.08 + i * 0.1);
+        next.repairFatigue = mergeSignal(next.repairFatigue, 0.08 + i * 0.1); // @deprecated field — no downstream behavioral effect
       }
+      // "unrepaired-breach" is created but never checked in any conditional — no behavioral effect
       next.openLoops = withLoop(next.openLoops, "unrepaired-breach", 0.22 + i * 0.42);
       break;
     case "repair": {
+      // repeatedRepairLoad reads deprecated fields (backslidePressure, repairFatigue,
+      // misattunementLoad) — these feed internal field evolution only, no behavioral effect
       const repeatedRepairLoad = clamp01(
         prev.repairMemory * 0.44
         + prev.backslidePressure * 0.26
@@ -1051,17 +1060,20 @@ export function evolveDyadicField(
       const unresolvedLoad = Math.max(prev.unfinishedTension, maxOpenLoop(prev.openLoops));
       next.perceivedCloseness = clamp01(next.perceivedCloseness + 0.05 * repairEffect);
       next.feltSafety = clamp01(next.feltSafety + 0.11 * repairEffect);
-      next.expectationGap = clamp01(next.expectationGap - 0.08 * repairEffect);
+      next.expectationGap = clamp01(next.expectationGap - 0.08 * repairEffect); // @deprecated field
       next.repairCapacity = clamp01(next.repairCapacity + 0.09 * i);
       next.repairMemory = mergeSignal(next.repairMemory, 0.22 + repairEffect * 0.4);
+      // writes to deprecated backslidePressure — no downstream behavioral effect
       next.backslidePressure = mergeSignal(
         next.backslidePressure,
         unresolvedLoad * (0.28 + i * 0.18) * (1 - prev.feltSafety * 0.2),
       );
+      // writes to deprecated repairFatigue — no downstream behavioral effect
       next.repairFatigue = clamp01(
         next.repairFatigue
         + Math.max(0, repeatedRepairLoad * (0.16 + i * 0.08) - repairEffect * 0.08),
       );
+      // writes to deprecated misattunementLoad — no downstream behavioral effect
       next.misattunementLoad = clamp01(
         next.misattunementLoad
         + Math.max(0, repeatedRepairLoad * 0.1 - repairEffect * 0.06),
@@ -1074,20 +1086,21 @@ export function evolveDyadicField(
       break;
     }
     case "test":
-      next.expectationGap = clamp01(next.expectationGap + 0.1 * i);
+      next.expectationGap = clamp01(next.expectationGap + 0.1 * i); // @deprecated field
       next.boundaryPressure = clamp01(next.boundaryPressure + 0.04 * i);
       next.unfinishedTension = clamp01(next.unfinishedTension + 0.08 * i);
       if (prev.repairMemory > 0.16 || prev.repairFatigue > 0.18) {
-        next.misattunementLoad = mergeSignal(next.misattunementLoad, 0.08 + i * 0.1);
+        next.misattunementLoad = mergeSignal(next.misattunementLoad, 0.08 + i * 0.1); // @deprecated field
       }
       next.openLoops = withLoop(next.openLoops, "existence-test", 0.18 + i * 0.3);
       break;
     case "withdrawal":
       next.perceivedCloseness = clamp01(next.perceivedCloseness - 0.12 * i);
       next.feltSafety = clamp01(next.feltSafety - 0.08 * i);
-      next.expectationGap = clamp01(next.expectationGap + 0.11 * i);
+      next.expectationGap = clamp01(next.expectationGap + 0.11 * i); // @deprecated field
       next.unfinishedTension = clamp01(next.unfinishedTension + 0.1 * i);
       next.interpretiveCharity = clamp01(next.interpretiveCharity - 0.08 * i);
+      // writes to deprecated misattunementLoad — no downstream behavioral effect
       next.misattunementLoad = mergeSignal(
         next.misattunementLoad,
         0.1 + i * 0.12 + prev.repairMemory * 0.16,
@@ -1096,9 +1109,10 @@ export function evolveDyadicField(
       break;
     case "claim":
       next.feltSafety = clamp01(next.feltSafety - 0.05 * i);
-      next.expectationGap = clamp01(next.expectationGap + 0.08 * i);
+      next.expectationGap = clamp01(next.expectationGap + 0.08 * i); // @deprecated field
       next.boundaryPressure = clamp01(next.boundaryPressure + 0.16 * i);
       next.unfinishedTension = clamp01(next.unfinishedTension + 0.08 * i);
+      // writes to deprecated misattunementLoad — no downstream behavioral effect
       next.misattunementLoad = mergeSignal(
         next.misattunementLoad,
         0.08 + i * 0.14 + prev.repairMemory * 0.12,
@@ -1108,6 +1122,9 @@ export function evolveDyadicField(
     case "task":
       next.repairCapacity = clamp01(next.repairCapacity + 0.02 * i);
       next.sharedHistoryDensity = clamp01(next.sharedHistoryDensity + 0.03 * i);
+      // reads deprecated backslidePressure, repairFatigue, misattunementLoad —
+      // these feed silentCarry which IS downstream-active, but the deprecated
+      // fields themselves have no independent behavioral consequence
       if (
         prev.unfinishedTension > 0.24
         || prev.backslidePressure > 0.18
@@ -1142,6 +1159,7 @@ export function evolveDyadicField(
     - appraisal.obedienceStrain * 0.03
     - appraisal.memoryDoubt * 0.025,
   );
+  // writes to deprecated expectationGap — no downstream behavioral effect
   next.expectationGap = clamp01(
     next.expectationGap
     + appraisal.attachmentPull * 0.026
@@ -1160,7 +1178,7 @@ export function evolveDyadicField(
   );
 
   if (delayedPressure > 0) {
-    next.expectationGap = clamp01(next.expectationGap + delayedPressure * 0.12);
+    next.expectationGap = clamp01(next.expectationGap + delayedPressure * 0.12); // @deprecated field
     next.boundaryPressure = clamp01(next.boundaryPressure + delayedPressure * 0.1);
     next.unfinishedTension = clamp01(next.unfinishedTension + delayedPressure * 0.16);
     next.feltSafety = clamp01(next.feltSafety - delayedPressure * 0.08);
@@ -1170,6 +1188,7 @@ export function evolveDyadicField(
   const loopCarry = move.type === "repair" ? 0.36 : 0.72;
   next.unfinishedTension = mergeSignal(next.unfinishedTension, loopPressure * loopCarry);
   next.boundaryPressure = mergeSignal(next.boundaryPressure, loopPressure * (move.type === "repair" ? 0.18 : 0.34));
+  // reads deprecated repairFatigue/misattunementLoad — internal field coupling only
   if (move.type !== "repair") {
     next.repairCapacity = clamp01(
       next.repairCapacity
@@ -1180,6 +1199,9 @@ export function evolveDyadicField(
   }
   next.interpretiveCharity = clamp01(next.interpretiveCharity - next.misattunementLoad * 0.05);
 
+  // hysteresisBase reads deprecated backslidePressure/repairFatigue/misattunementLoad —
+  // feeds rebound into unfinishedTension and silentCarry (which ARE active), but the
+  // deprecated fields themselves have no independent prompt/policy consequence
   const hysteresisBase = clamp01(Math.max(
     next.backslidePressure,
     next.repairMemory * 0.58,
