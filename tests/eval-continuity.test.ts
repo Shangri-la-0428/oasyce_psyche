@@ -61,7 +61,7 @@ function interaction50(): { state: PsycheState; bridge: SessionBridgeState | nul
     current: { DA: 55, HT: 60, CORT: 28, OT: 70, NE: 45, END: 65 },
     relationships: {
       _default: {
-        ...DEFAULT_RELATIONSHIP, closeness: 65, trust: 60,
+        ...DEFAULT_RELATIONSHIP, intimacy: 65, trust: 60,
         memory: ["用户第一次分享了工作压力", "深夜聊了孤独感", "用户说'你是少数让我觉得被理解的'", "一起讨论了意识的本质"],
       },
     },
@@ -84,7 +84,7 @@ function postBreach(): { state: PsycheState; bridge: SessionBridgeState | null }
     current: { DA: 40, HT: 35, CORT: 55, OT: 35, NE: 60, END: 40 },
     relationships: {
       _default: {
-        ...DEFAULT_RELATIONSHIP, closeness: 45, trust: 25,
+        ...DEFAULT_RELATIONSHIP, intimacy: 45, trust: 25,
         memory: ["之前关系不错", "用户突然说了很伤人的话", "我保持了距离"],
       },
     },
@@ -109,7 +109,7 @@ function warmRelationship(): { state: PsycheState; bridge: SessionBridgeState | 
     current: { DA: 65, HT: 58, CORT: 28, OT: 68, NE: 48, END: 64 },
     relationships: {
       _default: {
-        ...DEFAULT_RELATIONSHIP, closeness: 60, trust: 55,
+        ...DEFAULT_RELATIONSHIP, intimacy: 60, trust: 55,
         memory: ["一起经历了很多对话", "彼此都有信任"],
       },
     },

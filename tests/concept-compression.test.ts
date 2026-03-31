@@ -244,9 +244,9 @@ describe("Concept Compression — Admission Test", () => {
     });
 
     it("all 5 containers are represented in PsycheState fields", () => {
-      const used = new Set(Object.values(PSYCHE_STATE_FIELD_CONTAINER));
+      const used = new Set<string>(Object.values(PSYCHE_STATE_FIELD_CONTAINER));
       for (const c of VALID_CONTAINERS) {
-        assert.ok(used.has(c), `Container "${c}" has no PsycheState field`);
+        assert.ok(used.has(c as string), `Container "${c}" has no PsycheState field`);
       }
     });
   });
