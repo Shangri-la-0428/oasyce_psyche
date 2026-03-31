@@ -740,6 +740,13 @@ END: 75 (happy)
       result.throngletsExports?.some((event) => event.kind === "open-loop-anchor" && event.subject === "delegate"),
       `got ${JSON.stringify(result.throngletsExports)}`,
     );
+    for (const event of result.throngletsExports ?? []) {
+      assert.ok(!("current" in event), `thronglets export leaked chemistry: ${JSON.stringify(event)}`);
+      assert.ok(!("baseline" in event), `thronglets export leaked chemistry baseline: ${JSON.stringify(event)}`);
+      assert.ok(!("subjectResidue" in event), `thronglets export leaked residue: ${JSON.stringify(event)}`);
+      assert.ok(!("dyadicFields" in event), `thronglets export leaked raw field state: ${JSON.stringify(event)}`);
+      assert.ok(!("sessionHistory" in event), `thronglets export leaked raw session history: ${JSON.stringify(event)}`);
+    }
   });
 
   it("compact mode routes clear work asks into the task plane", async () => {

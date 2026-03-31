@@ -7,13 +7,17 @@
 // ============================================================
 
 import type {
+  ContinuityAnchorExport,
   OpenLoopType,
+  OpenLoopAnchorExport,
   PsycheState,
+  RelationMilestoneExport,
   RelationshipState,
   ResolvedRelationContext,
   SessionBridgeState,
   ThrongletsExport,
   ThrongletsExportState,
+  WritebackCalibrationExport,
   WritebackCalibrationFeedback,
 } from "./types.js";
 
@@ -66,6 +70,72 @@ function updateExportState(
     ...state,
     throngletsExportState: nextState,
   };
+}
+
+function sanitizeThrongletsExport(event: ThrongletsExport): ThrongletsExport {
+  switch (event.kind) {
+    case "relation-milestone": {
+      const sanitized: RelationMilestoneExport = {
+        kind: "relation-milestone",
+        subject: "delegate",
+        primitive: "signal",
+        userKey: event.userKey,
+        strength: event.strength,
+        ttlTurns: event.ttlTurns,
+        key: event.key,
+        phase: event.phase,
+        trust: event.trust,
+        intimacy: event.intimacy,
+      };
+      return sanitized;
+    }
+    case "open-loop-anchor": {
+      const sanitized: OpenLoopAnchorExport = {
+        kind: "open-loop-anchor",
+        subject: "delegate",
+        primitive: "trace",
+        userKey: event.userKey,
+        strength: event.strength,
+        ttlTurns: event.ttlTurns,
+        key: event.key,
+        loopTypes: [...event.loopTypes],
+        unfinishedTension: event.unfinishedTension,
+        silentCarry: event.silentCarry,
+      };
+      return sanitized;
+    }
+    case "writeback-calibration": {
+      const sanitized: WritebackCalibrationExport = {
+        kind: "writeback-calibration",
+        subject: "delegate",
+        primitive: "signal",
+        userKey: event.userKey,
+        strength: event.strength,
+        ttlTurns: event.ttlTurns,
+        key: event.key,
+        signal: event.signal,
+        effect: event.effect,
+        metric: event.metric,
+        confidence: event.confidence,
+      };
+      return sanitized;
+    }
+    case "continuity-anchor": {
+      const sanitized: ContinuityAnchorExport = {
+        kind: "continuity-anchor",
+        subject: "session",
+        primitive: "trace",
+        userKey: event.userKey,
+        strength: event.strength,
+        ttlTurns: event.ttlTurns,
+        key: event.key,
+        continuityMode: event.continuityMode,
+        activeLoopTypes: [...event.activeLoopTypes],
+        continuityFloor: event.continuityFloor,
+      };
+      return sanitized;
+    }
+  }
 }
 
 export function deriveThrongletsExports(
@@ -162,7 +232,9 @@ export function deriveThrongletsExports(
     .sort((a, b) => b.strength - a.strength)
     .slice(0, 4);
 
-  const exports = deduped.filter((event) => !previousKeys.includes(event.key));
+  const exports = deduped
+    .filter((event) => !previousKeys.includes(event.key))
+    .map((event) => sanitizeThrongletsExport(event));
   const nextState = updateExportState(state, deduped.map((event) => event.key), now);
 
   return { state: nextState, exports };
