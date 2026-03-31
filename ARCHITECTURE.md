@@ -194,6 +194,26 @@ v9.0 把“反向 baseline test”引入主体性方向。v9.2.9 则进一步把
 
 第一性原则是：**控制和观测必须分开**。`replyEnvelope` 继续是唯一规范控制面；`observability` 只负责让别的 agent 和宿主验证“为什么会这样”，而不是参与“下一步该怎么做”。
 
+### 2.5 Frozen Thronglets Runtime Boundary (`thronglets-runtime.ts`)
+
+`Psyche` 不复制 `Thronglets` 的 retention 或 degradation 逻辑。它只负责把低频 external continuity 事件序列化成冻结 payload：
+
+- `provider = "thronglets"`
+- `mode = "optional"`
+- `version = 1`
+- `taxonomy = coordination | continuity | calibration`
+- `event = relation-milestone | writeback-calibration | continuity-anchor | open-loop-anchor`
+- `summary / space / audit_ref`
+
+后续的：
+
+- local retention window
+- stable / auditable evidence
+- trace -> signal degradation
+- summary-candidate promotion
+
+都属于 `Thronglets` runtime，而不是 `Psyche` core。这样边界才保持单一真相源：`Psyche` 产出稀疏外化痕迹，`Thronglets` 决定这些痕迹如何在共享环境里衰减、降级或上升。
+
 ### 3. AI-first ABI + 双回应 profile (`subjectivity.ts`, `response-contract.ts`, `host-controls.ts`)
 
 `processInput()` 现在除了 prompt 文本，还会直接返回：

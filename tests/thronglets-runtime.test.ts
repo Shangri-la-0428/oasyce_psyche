@@ -89,6 +89,11 @@ describe("thronglets runtime adapter", () => {
         audit_ref: "anchor-42",
       },
     });
+
+    assert.deepEqual(
+      Object.keys(payload.external_continuity).sort(),
+      ["audit_ref", "event", "mode", "provider", "space", "summary", "taxonomy", "version"],
+    );
   });
 
   it("serializes all envelope exports as traces even when their psyche primitive is signal", () => {
@@ -159,5 +164,41 @@ describe("thronglets runtime adapter", () => {
       }),
       [],
     );
+  });
+
+  it("keeps the Psyche provider payload limited to the frozen external continuity contract", () => {
+    const payload = serializeThrongletsExportAsTrace({
+      kind: "relation-milestone",
+      subject: "delegate",
+      primitive: "signal",
+      userKey: "alice",
+      strength: 0.82,
+      ttlTurns: 8,
+      key: "milestone:alice:familiar",
+      phase: "familiar",
+      trust: 64,
+      intimacy: 46,
+    }, {
+      sessionId: "psyche-4",
+      model: "psyche",
+      outcome: "succeeded",
+      space: "psyche",
+    });
+
+    assert.deepEqual(payload, {
+      outcome: "succeeded",
+      model: "psyche",
+      session_id: "psyche-4",
+      external_continuity: {
+        provider: "thronglets",
+        mode: "optional",
+        version: 1,
+        taxonomy: "coordination",
+        event: "relation-milestone",
+        summary: "relation milestone shifted to familiar (trust 64, intimacy 46)",
+        space: "psyche",
+        audit_ref: "milestone:alice:familiar",
+      },
+    });
   });
 });

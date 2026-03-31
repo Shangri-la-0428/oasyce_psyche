@@ -184,6 +184,50 @@ Trace taxonomy remains fixed:
 Psyche should default to trace production first.
 Signal production happens only when the external environment truly needs to change another delegate's next move.
 
+## Frozen Thronglets Runtime Contract
+
+Psyche does not own Thronglets runtime policy.
+It only emits low-frequency external continuity traces through the frozen payload:
+
+- `provider = "thronglets"`
+- `mode = "optional"`
+- `version = 1`
+- `taxonomy = coordination | continuity | calibration`
+- `event = relation-milestone | writeback-calibration | continuity-anchor | open-loop-anchor`
+- `summary`
+- `space`
+- `audit_ref`
+
+Thronglets owns the runtime rules layered on top of that payload:
+
+- retention windows
+- stable / auditable evidence thresholds
+- trace -> signal degradation
+- summary-candidate promotion
+
+Current frozen runtime rules:
+
+- `coordination`: local retention `72h`; stable evidence = `>= 2 traces` or `>= 2h`
+- `continuity`: local retention `168h`; stable evidence = `>= 2 traces` or `>= 2h`; auditable only with `audit_ref` or `>= 2 sessions`
+- `calibration`: local retention `168h`; stable evidence = `>= 2 traces` or `>= 2h`; aggregation only when `failed_count >= 2`
+
+Current frozen degradation:
+
+- `relation-milestone` -> `watch` when stable + auditable, else `info` when stable
+- `open-loop-anchor` -> `watch` when `>= 2 traces` or `>= 1h`
+- `continuity-anchor` -> `info` when stable + auditable
+- `writeback-calibration` -> `avoid` when repeated failures (`failed_count >= 2`) and stable
+- `recommend` is never produced directly by Psyche
+
+Current runtime introspection expected from Thronglets write APIs:
+
+- `runtime.state = local-only | derived-signal | summary-candidate`
+- `runtime.local_retention_hours`
+- `runtime.stable_evidence`
+- `runtime.auditable_evidence`
+- `runtime.derived_signal_rule`
+- `runtime.summary_candidate_rule`
+
 ## Layer Invariants
 
 ### Psyche
