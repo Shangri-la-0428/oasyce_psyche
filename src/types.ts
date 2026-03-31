@@ -462,6 +462,8 @@ export interface PsycheState {
   pendingWritebackCalibrations?: PendingWritebackCalibration[];
   /** v9.2.7: latest writeback calibration outcome, for host-facing feedback */
   lastWritebackFeedback?: WritebackCalibrationFeedback[];
+  /** v9.2.8: low-frequency Psyche -> Thronglets export dedupe state */
+  throngletsExportState?: ThrongletsExportState;
   meta: {
     agentName: string;
     createdAt: string;
@@ -711,6 +713,107 @@ export interface SessionBridgeState {
   continuityMode: "warm-resume" | "guarded-resume" | "tense-resume";
   activeLoopTypes: OpenLoopType[];
   sourceMemoryCount: number;
+}
+
+// ── Sparse Psyche → Thronglets Export ABI (v9.2.8) ─────────
+
+export type ThrongletsExportSubject = "delegate" | "session";
+export type ThrongletsExportPrimitive = "signal" | "trace";
+
+export interface ThrongletsExportBase {
+  kind: "relation-milestone" | "open-loop-anchor" | "writeback-calibration" | "continuity-anchor";
+  subject: ThrongletsExportSubject;
+  primitive: ThrongletsExportPrimitive;
+  userKey: string;
+  strength: number; // 0-1, sparse importance score
+  ttlTurns: number;
+  key: string; // stable emission key for dedupe
+}
+
+export interface RelationMilestoneExport extends ThrongletsExportBase {
+  kind: "relation-milestone";
+  subject: "delegate";
+  primitive: "signal";
+  phase: RelationshipState["phase"];
+  trust: number;
+  intimacy: number;
+}
+
+export interface OpenLoopAnchorExport extends ThrongletsExportBase {
+  kind: "open-loop-anchor";
+  subject: "delegate";
+  primitive: "trace";
+  loopTypes: OpenLoopType[];
+  unfinishedTension: number;
+  silentCarry: number;
+}
+
+export interface WritebackCalibrationExport extends ThrongletsExportBase {
+  kind: "writeback-calibration";
+  subject: "delegate";
+  primitive: "signal";
+  signal: WritebackSignalType;
+  effect: WritebackCalibrationEffect;
+  metric: WritebackCalibrationMetric;
+  confidence: number;
+}
+
+export interface ContinuityAnchorExport extends ThrongletsExportBase {
+  kind: "continuity-anchor";
+  subject: "session";
+  primitive: "trace";
+  continuityMode: SessionBridgeState["continuityMode"];
+  activeLoopTypes: OpenLoopType[];
+  continuityFloor: number;
+}
+
+export type ThrongletsExport =
+  | RelationMilestoneExport
+  | OpenLoopAnchorExport
+  | WritebackCalibrationExport
+  | ContinuityAnchorExport;
+
+export interface ThrongletsExportState {
+  lastKeys: string[];
+  lastAt: string;
+}
+
+export type ExternalContinuityEvent = ThrongletsExport;
+
+export interface ExternalContinuityEnvelope<TEvent = ExternalContinuityEvent> {
+  provider: "thronglets";
+  mode: "optional";
+  version: 1;
+  exports: TEvent[];
+  signals: TEvent[];
+  traces: TEvent[];
+}
+
+export type ThrongletsTraceTaxonomy = "coordination" | "continuity" | "calibration";
+
+export interface ThrongletsExternalContinuityRecord {
+  provider: "thronglets";
+  mode: "optional";
+  version: 1;
+  taxonomy: ThrongletsTraceTaxonomy;
+  event: ThrongletsExport["kind"];
+  summary: string;
+  space: string;
+  audit_ref: string;
+}
+
+export interface ThrongletsTracePayload {
+  outcome: string;
+  model: string;
+  session_id: string;
+  external_continuity: ThrongletsExternalContinuityRecord;
+}
+
+export interface ThrongletsTraceSerializationOptions {
+  outcome?: string;
+  model?: string;
+  sessionId?: string;
+  space?: string;
 }
 
 // ── Subjectivity Kernel (v9.3) ──────────────────────────────

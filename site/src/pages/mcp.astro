@@ -20,6 +20,7 @@ import DiscoveryPage from '../layouts/DiscoveryPage.astro';
     { href: '/install-modes', labelCn: '安装形态', labelEn: 'install modes', noteCn: '理解 npm / git / local path 差异', noteEn: 'understand npm / git / local-path behavior' },
     { href: '/benchmarks', labelCn: '性能数据', labelEn: 'benchmarks', noteCn: '确认 MCP 也不会带来额外模型成本', noteEn: 'verify MCP adds no extra model cost' },
     { href: '/compare', labelCn: '对比其他方案', labelEn: 'compare', noteCn: '看它和 prompt persona / memory layer 的区别', noteEn: 'see how it differs from persona prompts and memory layers' },
+    { href: '/strategy', labelCn: '战略边界', labelEn: 'strategy', noteCn: '看 Psyche 和 Thronglets 如何分工', noteEn: 'see the Psyche / Thronglets boundary' },
   ]}
 >
   <section class="discovery-section">
@@ -92,6 +93,20 @@ import DiscoveryPage from '../layouts/DiscoveryPage.astro';
       <article class="discovery-card">
         <h3>Researchers</h3>
         <p><span class="cn">想测试关系动作、持续主体偏置、调节闭环，而不是只做情感标签可视化。</span><span class="en">For researchers testing relation moves, persistent subjective bias, and regulation loops instead of sentiment labels.</span></p>
+      </article>
+    </div>
+  </section>
+
+  <section class="discovery-section">
+    <h2 class="section-label"><span class="cn">MCP 不是 Thronglets</span><span class="en">MCP is not Thronglets</span></h2>
+    <div class="card-grid">
+      <article class="discovery-card">
+        <h3><span class="cn">Psyche / MCP</span><span class="en">Psyche / MCP</span></h3>
+        <p><span class="cn">通过 MCP 暴露的是私有主观性控制面：输入处理、输出更新、状态读取、会话收尾。它解决的是“agent 如何被关系与经历持续改写”。</span><span class="en">What Psyche exposes through MCP is a private subjectivity control surface: input processing, output updates, state inspection, and session teardown. It answers how an agent is persistently changed by interaction.</span></p>
+      </article>
+      <article class="discovery-card">
+        <h3><span class="cn">Thronglets</span><span class="en">Thronglets</span></h3>
+        <p><span class="cn">Thronglets 处理的是外部连续性：owner / device identity、签名、多设备延续和低频可验证轨迹。不要把高频情绪状态和每轮 residue 推过去。</span><span class="en">Thronglets handles external continuity: owner/device identity, signatures, multi-device carry, and low-frequency verifiable traces. High-frequency chemistry and turn-by-turn residue should stay local.</span></p>
       </article>
     </div>
   </section>

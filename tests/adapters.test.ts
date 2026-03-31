@@ -303,9 +303,20 @@ describe("createPsycheServer (HTTP)", () => {
     assert.ok(typeof data.dynamicContext === "string");
     assert.ok(data.dynamicContext.length > 0);
     assert.equal(data.stimulus, "praise");
+    assert.ok(data.replyEnvelope);
     assert.ok(data.subjectivityKernel);
     assert.ok(data.responseContract);
     assert.ok(data.generationControls);
+    assert.equal("policyModifiers" in data.replyEnvelope, false);
+    assert.deepEqual(data.replyEnvelope.subjectivityKernel, data.subjectivityKernel);
+    assert.deepEqual(data.replyEnvelope.responseContract, data.responseContract);
+    assert.deepEqual(data.replyEnvelope.generationControls, data.generationControls);
+    assert.equal(data.externalContinuity?.provider, "thronglets");
+    assert.equal(data.externalContinuity?.mode, "optional");
+    assert.equal(data.externalContinuity?.version, 1);
+    assert.ok(Array.isArray(data.externalContinuity?.exports));
+    assert.ok(Array.isArray(data.externalContinuity?.signals));
+    assert.ok(Array.isArray(data.externalContinuity?.traces));
   });
 
   it("POST /process-output strips tags", async () => {

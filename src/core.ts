@@ -2,7 +2,7 @@
 // PsycheEngine — Framework-agnostic emotional intelligence core
 //
 // Three-phase API:
-//   processInput(text)   → systemContext + dynamicContext + stimulus
+//   processInput(text)   → systemContext + dynamicContext + replyEnvelope + stimulus
 //   processOutput(text)  → cleanedText + stateChanged
 //   processOutcome(text) → outcomeScore (optional: evaluate last interaction)
 //
@@ -12,13 +12,14 @@
 // Orchestrates: chemistry, classify, prompt, profiles, guards, learning
 // ============================================================
 
-import type { PsycheState, StimulusType, Locale, MBTIType, ChemicalState, OutcomeScore, PsycheMode, PersonalityTraits, PolicyModifiers, ClassifierProvider, SubjectivityKernel, ResponseContract, GenerationControls, SessionBridgeState, WritebackCalibrationFeedback, WritebackSignalType } from "./types.js";
+import type { PsycheState, StimulusType, Locale, MBTIType, ChemicalState, OutcomeScore, PsycheMode, PersonalityTraits, PolicyModifiers, ClassifierProvider, SubjectivityKernel, ResponseContract, GenerationControls, SessionBridgeState, ThrongletsExport, WritebackCalibrationFeedback, WritebackSignalType, ExternalContinuityEnvelope } from "./types.js";
 import { DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE, DEFAULT_ENERGY_BUDGETS, DEFAULT_TRAIT_DRIFT, DEFAULT_SUBJECT_RESIDUE, DEFAULT_DYADIC_FIELD } from "./types.js";
 import type { StorageAdapter } from "./storage.js";
 import { MemoryStorageAdapter } from "./storage.js";
 import { applyDecay, applyStimulus, applyContagion, clamp, describeEmotionalState } from "./chemistry.js";
 import { classifyStimulus, BuiltInClassifier, buildLLMClassifierPrompt, parseLLMClassification } from "./classify.js";
 import { buildDynamicContext, buildProtocolContext, buildCompactContext } from "./prompt.js";
+import type { PromptRenderInputs } from "./prompt.js";
 import { getSensitivity, getBaseline, getDefaultSelfModel, traitsToBaseline } from "./profiles.js";
 import { isStimulusType } from "./guards.js";
 import {
@@ -37,20 +38,13 @@ import {
   evaluateOutcome, computeContextHash, updateLearnedVector,
   predictChemistry, recordPrediction,
 } from "./learning.js";
-import { assessMetacognition, updateMetacognitiveState } from "./metacognition.js";
-import { buildDecisionContext } from "./decision-bias.js";
-import { computeExperientialField, type ConstructionContext } from "./experiential-field.js";
-import { computeGenerativeSelf } from "./generative-self.js";
-import { updateSharedIntentionality, buildSharedIntentionalityContext } from "./shared-intentionality.js";
-import { assessEthics, buildEthicalContext } from "./ethics.js";
 import { computeCircadianModulation, computeHomeostaticPressure, computeEnergyDepletion, computeEnergyRecovery } from "./circadian.js";
-import { computeAutonomicResult } from "./autonomic.js";
-import {
-  computePrimarySystems, computeSystemInteractions,
-  gatePrimarySystemsByAutonomic, describeBehavioralTendencies,
-} from "./primary-systems.js";
+import { runReflectiveTurnPhases } from "./input-turn.js";
 import { applyRelationalTurn, applySessionBridge, applyWritebackSignals, createWritebackCalibrations, evaluateWritebackCalibrations } from "./relation-dynamics.js";
+import type { DerivedReplyEnvelope, ReplyEnvelope } from "./reply-envelope.js";
 import { deriveReplyEnvelope } from "./reply-envelope.js";
+import { buildExternalContinuityEnvelope } from "./external-continuity.js";
+import { deriveThrongletsExports } from "./thronglets-export.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -92,20 +86,26 @@ export interface ProcessInputResult {
   stimulus: StimulusType | null;
   /** Confidence of the primary algorithmic stimulus guess, if any */
   stimulusConfidence?: number;
-  /** v9: Structured behavioral policy modifiers — machine-readable "off baseline" signals */
+  /** Legacy compatibility alias: raw policy vector behind the canonical replyEnvelope. */
   policyModifiers?: PolicyModifiers;
-  /** v9.3: Compact machine-readable subjective state for AI-first hosts */
+  /** v9.3+: canonical host-facing reply surface */
+  replyEnvelope?: ReplyEnvelope;
+  /** v9.3 compatibility alias: use replyEnvelope.subjectivityKernel when possible */
   subjectivityKernel?: SubjectivityKernel;
-  /** v9.3: Compact next-reply behavioral envelope */
+  /** v9.3 compatibility alias: use replyEnvelope.responseContract when possible */
   responseContract?: ResponseContract;
-  /** v9.3: Mechanical host controls derived from the reply envelope */
+  /** v9.3 compatibility alias: use replyEnvelope.generationControls when possible */
   generationControls?: GenerationControls;
   /** v9.2.7: cold-start carry derived from persisted relation state */
   sessionBridge?: SessionBridgeState | null;
   /** v9.2.8: sparse writeback signals evaluated on the latest turn */
   writebackFeedback?: WritebackCalibrationFeedback[];
+  /** v9.2.8: optional additive external continuity contract */
+  externalContinuity?: ExternalContinuityEnvelope<ThrongletsExport>;
+  /** v9.2.8: sparse low-frequency export surface suitable for Thronglets */
+  throngletsExports?: ThrongletsExport[];
   /**
-   * v9: Ready-to-use LLM prompt fragment summarizing current behavioral policy.
+   * Legacy compatibility alias: ready-to-use prompt fragment summarizing raw policy modifiers.
    *
    * This is the output of `buildPolicyContext(policyModifiers, locale)` —
    * a human-readable string like "[行为策略] 简短回复、被动应答为主".
@@ -391,6 +391,7 @@ export class PsycheEngine {
     let state = this.ensureInitialized();
     let sessionBridge: SessionBridgeState | null = null;
     let writebackFeedback: WritebackCalibrationFeedback[] = [];
+    let throngletsExports: ThrongletsExport[] = [];
 
     // ── Auto-learning: evaluate previous turn's outcome ──────
     if (this.pendingPrediction && text.length > 0) {
@@ -600,65 +601,17 @@ export class PsycheEngine {
     state = writebackEvaluation.state;
     writebackFeedback = writebackEvaluation.feedback;
 
+    const throngletsExportResult = deriveThrongletsExports(state, {
+      relationContext: relationalTurn.relationContext,
+      sessionBridge,
+      writebackFeedback,
+      now: now.toISOString(),
+    });
+    state = throngletsExportResult.state;
+    throngletsExports = throngletsExportResult.exports;
+
     // ── Locale (used by multiple subsystems below) ──────────
     const locale = state.meta.locale ?? this.cfg.locale;
-
-    // ── P7+P10: Autonomic nervous system + Processing depth ────
-    const autonomicResult = computeAutonomicResult(
-      state.current,
-      state.drives,
-      state.autonomicState ?? null,
-      minutesElapsed,
-      locale,
-      state.baseline,
-      state.energyBudgets,
-    );
-    state = {
-      ...state,
-      autonomicState: autonomicResult.state,
-    };
-    const skip = new Set(autonomicResult.skippedStages);
-
-    // ── P9: Primary emotional systems (Panksepp) ──────────────
-    const rawSystems = computePrimarySystems(state.current, state.drives, appliedStimulus);
-    const interactedSystems = computeSystemInteractions(rawSystems);
-    const gatedSystems = gatePrimarySystemsByAutonomic(interactedSystems, autonomicResult.state);
-    const primarySystemsDescription = describeBehavioralTendencies(gatedSystems, locale);
-
-    // ── Metacognition: assess emotional state before acting ────
-    // P10: Skip metacognition when processingDepth < 0.2 (System 1 mode)
-    let metacognitiveAssessment: ReturnType<typeof assessMetacognition> | null = null;
-    if (!skip.has("metacognition")) {
-      metacognitiveAssessment = assessMetacognition(
-        state,
-        appliedStimulus ?? "casual",
-        state.learning.outcomeHistory,
-      );
-
-      // Apply self-soothing regulation if suggested with high confidence
-      for (const reg of metacognitiveAssessment.regulationSuggestions) {
-        if (reg.strategy === "self-soothing" && reg.confidence >= 0.6 && reg.chemistryAdjustment) {
-          const adj = reg.chemistryAdjustment;
-          state = {
-            ...state,
-            current: {
-              ...state.current,
-              DA: clamp(state.current.DA + (adj.DA ?? 0)),
-              HT: clamp(state.current.HT + (adj.HT ?? 0)),
-              CORT: clamp(state.current.CORT + (adj.CORT ?? 0)),
-              OT: clamp(state.current.OT + (adj.OT ?? 0)),
-              NE: clamp(state.current.NE + (adj.NE ?? 0)),
-              END: clamp(state.current.END + (adj.END ?? 0)),
-            },
-          };
-        }
-      }
-
-      state = {
-        ...state,
-        metacognition: updateMetacognitiveState(state.metacognition, metacognitiveAssessment),
-      };
-    }
 
     // Push snapshot to emotional history
     const semanticSummary = text
@@ -705,89 +658,22 @@ export class PsycheEngine {
       this.pendingPrediction = null;
     }
 
-    // ── P6: Digital Personhood computations (P10-gated) ────────
-
-    // Experiential field — unified inner experience (P8: Barrett construction context)
-    const constructionContext: ConstructionContext = {
-      autonomicState: autonomicResult.state,
-      stimulus: appliedStimulus,
-      relationshipPhase: relationalTurn.relationContext.relationship.phase,
-      predictionError: state.learning.predictionHistory.length > 0
-        ? state.learning.predictionHistory[state.learning.predictionHistory.length - 1].predictionError
-        : undefined,
-    };
-    const experientialField = skip.has("experiential-field")
-      ? null
-      : computeExperientialField(state, metacognitiveAssessment ?? undefined, undefined, constructionContext);
-
-    // Shared intentionality — theory of mind + joint attention
-    const sharedState = skip.has("shared-intentionality")
-      ? null
-      : updateSharedIntentionality(state, appliedStimulus, opts?.userId);
-
-    // Ethics — emotional self-care check
-    const ethicalAssessment = skip.has("ethics")
-      ? null
-      : assessEthics(state);
-
-    // Generative self — update identity narrative periodically (every 10 turns)
-    if (!skip.has("generative-self")
-      && state.meta.totalInteractions % 10 === 0 && state.meta.totalInteractions > 0) {
-      const selfModel = computeGenerativeSelf(state);
-      state = {
-        ...state,
-        personhood: {
-          ...state.personhood,
-          identityNarrative: selfModel.identityNarrative,
-          growthDirection: selfModel.growthArc.direction,
-          causalInsights: selfModel.causalInsights.slice(0, 20).map((ci) => ({
-            trait: ci.trait,
-            because: ci.because,
-            confidence: ci.confidence,
-            discoveredAt: new Date().toISOString(),
-          })),
-        },
-      };
-    }
-
-    // Persist ethical concerns if significant
-    if (ethicalAssessment && ethicalAssessment.ethicalHealth < 0.7) {
-      const newConcerns = ethicalAssessment.concerns
-        .filter((c) => c.severity > 0.4)
-        .map((c) => ({ type: c.type, severity: c.severity, timestamp: new Date().toISOString() }));
-      if (newConcerns.length > 0) {
-        state = {
-          ...state,
-          personhood: {
-            ...state.personhood,
-            ethicalConcernHistory: [
-              ...state.personhood.ethicalConcernHistory.slice(-14),
-              ...newConcerns,
-            ],
-          },
-        };
-      }
-    }
-
-    // Persist theory of mind
-    if (sharedState && sharedState.theoryOfMind.confidence > 0.3) {
-      const userId = opts?.userId ?? "_default";
-      state = {
-        ...state,
-        personhood: {
-          ...state.personhood,
-          theoryOfMind: {
-            ...state.personhood.theoryOfMind,
-            [userId]: {
-              estimatedMood: sharedState.theoryOfMind.estimatedMood,
-              estimatedIntent: sharedState.theoryOfMind.estimatedIntent,
-              confidence: sharedState.theoryOfMind.confidence,
-              lastUpdated: sharedState.theoryOfMind.lastUpdated,
-            },
-          },
-        },
-      };
-    }
+    const writebackNote = formatWritebackFeedbackNote(writebackFeedback, locale);
+    const reflectiveTurn = runReflectiveTurnPhases({
+      state,
+      appraisalAxes,
+      relationContext: relationalTurn.relationContext,
+      appliedStimulus,
+      userText: text || undefined,
+      userId: opts?.userId,
+      localeFallback: this.cfg.locale,
+      personalityIntensity: this.cfg.personalityIntensity,
+      classificationConfidence: this.lastStimulusAssessment?.confidence,
+      minutesElapsed,
+      nowIso: now.toISOString(),
+      writebackNote,
+    });
+    state = reflectiveTurn.state;
 
     // Persist
     this.state = state;
@@ -803,91 +689,66 @@ export class PsycheEngine {
       );
     }
 
-    // Build metacognitive and decision context strings
-    const writebackNote = formatWritebackFeedbackNote(writebackFeedback, locale);
-    const metacogNote = writebackNote
-      ? [writebackNote, metacognitiveAssessment?.metacognitiveNote].filter(Boolean).join("\n")
-      : metacognitiveAssessment?.metacognitiveNote;
-    const decisionCtx = buildDecisionContext(state);
-    const ethicsCtx = ethicalAssessment ? buildEthicalContext(ethicalAssessment, locale) : undefined;
-    const sharedCtx = sharedState ? buildSharedIntentionalityContext(sharedState, locale) : undefined;
-    const experientialNarrative = experientialField?.narrative || undefined;
-
-    // v9: Compute structured policy modifiers
-    const replyEnvelope = deriveReplyEnvelope(state, appraisalAxes, {
-      locale,
+    // v9: Compute structured reply surfaces
+    const derivedReplyEnvelope: DerivedReplyEnvelope = reflectiveTurn.replyEnvelope;
+    const replyEnvelope: ReplyEnvelope = {
+      subjectivityKernel: derivedReplyEnvelope.subjectivityKernel,
+      responseContract: derivedReplyEnvelope.responseContract,
+      generationControls: derivedReplyEnvelope.generationControls,
+    };
+    const promptRenderInputs: PromptRenderInputs = {
       userText: text || undefined,
       algorithmStimulus: appliedStimulus,
-      classificationConfidence: this.lastStimulusAssessment?.confidence,
       personalityIntensity: this.cfg.personalityIntensity,
-      relationContext: relationalTurn.relationContext,
-    });
-
-    // P10: Append processing depth info to autonomic description when depth is low
-    let autonomicDesc: string | undefined;
-    if (autonomicResult.state !== "ventral-vagal") {
-      autonomicDesc = autonomicResult.description;
-      if (autonomicResult.processingDepth < 0.5) {
-        const depthNote = locale === "en"
-          ? " Reflective capacity reduced — intuitive reactions."
-          : "反思能力降低——直觉反应中。";
-        autonomicDesc += depthNote;
-      }
-    }
+      metacognitiveNote: reflectiveTurn.metacognitiveNote,
+      decisionContext: reflectiveTurn.decisionContext,
+      ethicsContext: reflectiveTurn.ethicsContext,
+      sharedIntentionalityContext: reflectiveTurn.sharedIntentionalityContext,
+      experientialNarrative: reflectiveTurn.experientialNarrative,
+      autonomicDescription: reflectiveTurn.autonomicDescription,
+      autonomicState: reflectiveTurn.autonomicState,
+      primarySystemsDescription: reflectiveTurn.primarySystemsDescription,
+      subjectivityContext: derivedReplyEnvelope.subjectivityContext,
+      responseContractContext: derivedReplyEnvelope.responseContractContext,
+      policyContext: derivedReplyEnvelope.policyContext || undefined,
+    };
 
     if (this.cfg.compactMode) {
+      const externalContinuity = buildExternalContinuityEnvelope(throngletsExports);
       return {
         systemContext: "",
-        dynamicContext: buildCompactContext(state, opts?.userId, {
-          userText: text || undefined,
-          algorithmStimulus: appliedStimulus,
-          personalityIntensity: this.cfg.personalityIntensity,
-          metacognitiveNote: metacogNote || undefined,
-          decisionContext: decisionCtx || undefined,
-          ethicsContext: ethicsCtx || undefined,
-          sharedIntentionalityContext: sharedCtx || undefined,
-          experientialNarrative: experientialNarrative,
-          autonomicDescription: autonomicDesc,
-          autonomicState: autonomicResult.state,
-          primarySystemsDescription: primarySystemsDescription || undefined,
-          subjectivityContext: replyEnvelope.subjectivityContext,
-          responseContractContext: replyEnvelope.responseContractContext,
-          policyContext: replyEnvelope.policyContext || undefined,
-        }),
+        dynamicContext: buildCompactContext(state, opts?.userId, promptRenderInputs),
         stimulus: appliedStimulus,
         stimulusConfidence: this.lastStimulusAssessment?.confidence,
-        policyModifiers: replyEnvelope.policyModifiers,
+        replyEnvelope,
+        policyModifiers: derivedReplyEnvelope.policyModifiers,
         subjectivityKernel: replyEnvelope.subjectivityKernel,
         responseContract: replyEnvelope.responseContract,
         generationControls: replyEnvelope.generationControls,
         sessionBridge,
         writebackFeedback,
-        policyContext: replyEnvelope.policyContext,
+        externalContinuity,
+        throngletsExports,
+        policyContext: derivedReplyEnvelope.policyContext,
       };
     }
 
+    const externalContinuity = buildExternalContinuityEnvelope(throngletsExports);
     return {
       systemContext: this.getProtocol(locale),
-      dynamicContext: buildDynamicContext(state, opts?.userId, {
-        metacognitiveNote: metacogNote || undefined,
-        decisionContext: decisionCtx || undefined,
-        ethicsContext: ethicsCtx || undefined,
-        sharedIntentionalityContext: sharedCtx || undefined,
-        experientialNarrative: experientialNarrative,
-        autonomicDescription: autonomicDesc,
-        autonomicState: autonomicResult.state,
-        primarySystemsDescription: primarySystemsDescription || undefined,
-        policyContext: replyEnvelope.policyContext || undefined,
-      }),
+      dynamicContext: buildDynamicContext(state, opts?.userId, promptRenderInputs),
       stimulus: appliedStimulus,
       stimulusConfidence: this.lastStimulusAssessment?.confidence,
-      policyModifiers: replyEnvelope.policyModifiers,
+      replyEnvelope,
+      policyModifiers: derivedReplyEnvelope.policyModifiers,
       subjectivityKernel: replyEnvelope.subjectivityKernel,
       responseContract: replyEnvelope.responseContract,
       generationControls: replyEnvelope.generationControls,
       sessionBridge,
       writebackFeedback,
-      policyContext: replyEnvelope.policyContext,
+      externalContinuity,
+      throngletsExports,
+      policyContext: derivedReplyEnvelope.policyContext,
     };
   }
 

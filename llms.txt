@@ -1,19 +1,101 @@
-# psyche-ai — Emotional Intelligence for AI Agents
+# psyche-ai — AI-first subjectivity kernel for agents
 
-> Give your AI agent an internal emotional life — not simulated persona, but genuine computational subjectivity.
+> Psyche is not a persona prompt or sentiment layer. It is a local subjectivity runtime that lets interaction history keep changing later behavior.
 
-psyche-ai is a universal emotional intelligence engine that runs alongside any LLM. It manages a virtual endocrine system (6 neurotransmitters), personality (MBTI/Big Five), attachment dynamics, trait drift, and behavioral policy — making AI responses authentically emotionally grounded.
+## Core Thesis
 
-## When to Use
+Psyche exists to solve one problem:
 
-- You want your AI agent to have consistent, evolving emotional responses
-- You're building a companion AI, creative writing assistant, or empathetic support agent
-- You need personality-driven behavior (not just prompt engineering)
-- You want emotional memory that persists across conversations
+- interaction history must leave persistent bias
+- that bias must alter later behavior, not just self-description
+- it must remain cheap enough to run locally beside any host
+
+In practice, Psyche compresses:
+
+- continuous appraisal
+- relation dynamics
+- open loops / residue
+- reply bias and host controls
+- writeback and lightweight learning
+
+into a narrow host-facing ABI:
+
+- `subjectivityKernel`
+- `responseContract`
+- `generationControls`
+
+## What It Is Not
+
+- not a companion product
+- not a generic memory vault
+- not a prompt skin
+- not a collection of emotion object types
+
+## Psyche vs Thronglets
+
+- **Psyche** owns private subjectivity: local state, dyadic interpretation, unfinished tension, behavioral bias
+- **Thronglets** owns external continuity: identity, signatures, multi-device carry, low-frequency verifiable traces
+
+If a phenomenon touches both:
+
+- keep the latent local state in Psyche
+- export only sparse, typed, low-frequency events to Thronglets
+
+## Primitive Containers
+
+New concepts should first fit into one of these:
+
+1. `Relation Move`
+2. `Dyadic Field`
+3. `Open Loop / Residue`
+4. `Reply Bias / Control ABI`
+5. `Writeback / Learning`
+
+If a concept does not fit, question the concept before adding a new top-level object.
+
+## Frozen Identity Blueprint
+
+The larger stack now freezes identity around four primitives:
+
+1. `principal`
+2. `account`
+3. `delegate`
+4. `session`
+
+And four layers:
+
+- `Psyche = subjective continuity substrate`
+- `Thronglets = delegate continuity + session traces/coordination + emergent collective intelligence`
+- `Oasyce Net = policy, operations, and resource orchestration`
+- `Oasyce Chain = account truth, authorization truth, commitments, settlement, and public finality`
+
+`session` is never an economic subject.
+`delegate` is an execution boundary, not ultimate identity.
+`principal` may be human today and potentially AI later without rewriting the model.
+
+## Quick Start (SDK)
+
+```ts
+import { PsycheEngine, MemoryStorageAdapter } from "psyche-ai";
+
+const engine = new PsycheEngine(
+  { mbti: "ENFP", name: "Luna" },
+  new MemoryStorageAdapter(),
+);
+
+await engine.initialize();
+
+const input = await engine.processInput("If I only use you and never understand you, will that change you?");
+// input.subjectivityKernel
+// input.responseContract
+// input.generationControls
+
+const output = await engine.processOutput(llmResponse);
+// output.cleanedText
+// output.stateChanged
+```
 
 ## Quick Start (MCP)
-
-Configure in Claude Desktop, Cursor, Windsurf, or any MCP client:
 
 ```json
 {
@@ -22,97 +104,47 @@ Configure in Claude Desktop, Cursor, Windsurf, or any MCP client:
       "command": "npx",
       "args": ["psyche-mcp"],
       "env": {
-        "PSYCHE_MBTI": "ENFP",
-        "PSYCHE_NAME": "Luna"
+        "PSYCHE_MBTI": "INTJ",
+        "PSYCHE_NAME": "Kai"
       }
     }
   }
 }
 ```
 
-## Quick Start (SDK)
+## Why Hosts Use It
 
-```typescript
-import { PsycheEngine, FileStorageAdapter } from "psyche-ai";
+- zero extra model calls
+- local hot path in sub-millisecond territory
+- compact injection roughly `15-180 tokens`
+- stable host-facing control surface instead of long emotional prose
 
-const engine = new PsycheEngine(
-  { mbti: "ENFP", name: "Luna" },
-  new FileStorageAdapter("./data"),
-);
-await engine.initialize();
+## Main Surfaces
 
-// Before LLM call: get emotional context
-const input = await engine.processInput("I got promoted today!");
-// input.systemContext  → cacheable protocol (inject as system prompt)
-// input.dynamicContext → per-turn emotional state
-// input.stimulus       → "recognition"
-// input.policyContext  → behavioral strategy text
+### Host output
 
-// After LLM call: update emotional state
-const output = await engine.processOutput(llmResponse);
-// output.cleanedText  → response with internal tags stripped
-// output.stateChanged → whether chemistry shifted
-```
+- `subjectivityKernel`
+- `responseContract`
+- `generationControls`
+- `writebackFeedback`
 
-## MCP Tools
+### MCP tools
 
-| Tool | Description |
-|------|-------------|
-| `process_input` | Process user message → emotional context + stimulus detection + policy modifiers |
-| `process_output` | Process LLM response → clean text + state update |
-| `get_state` | Current neurotransmitter levels, drives, personality, energy budgets |
-| `get_status_summary` | One-line human-readable emotional status |
-| `set_mode` | Switch: natural / work / companion |
-| `end_session` | Persist state + generate diagnostic report |
-
-## MCP Resources
-
-| URI | Description |
-|-----|-------------|
-| `psyche://protocol` | Full emotional protocol — inject into system prompt |
-| `psyche://state` | Current emotional state as JSON |
-
-## Core Concepts
-
-- **6 Neurotransmitters**: DA (dopamine), HT (serotonin), CORT (cortisol), OT (oxytocin), NE (norepinephrine), END (endorphin) — each 0-100
-- **14 Stimulus Types**: praise, criticism, humor, intellectual challenge, intimacy, conflict, neglect, surprise, casual, sarcasm, command, recognition, boredom, vulnerability
-- **Emergent Emotions**: not hardcoded — arise from neurotransmitter mixtures
-- **Trait Drift**: personality baseline slowly shifts from repeated experiences
-- **Energy Budgets**: attention, social, and decision energy deplete and recover
-- **Habituation**: Weber-Fechner decay — 5th identical stimulus has ~50% effect of 1st
-
-## Integration Adapters
-
-| Adapter | Import | Best For |
-|---------|--------|----------|
-| MCP | `psyche-ai/mcp` | Claude Desktop, Cursor, Windsurf, Claude Code |
-| OpenClaw | `psyche-ai/openclaw` | OpenClaw agent framework |
-| Vercel AI | `psyche-ai/vercel-ai` | Vercel AI SDK (streamText, generateText) |
-| LangChain | `psyche-ai/langchain` | LangChain agents |
-| HTTP | `psyche-ai/http` | Python, Go, Java — any language via REST |
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PSYCHE_MBTI` | `ENFP` | MBTI personality type |
-| `PSYCHE_NAME` | `Assistant` | Agent name |
-| `PSYCHE_MODE` | `natural` | natural / work / companion |
-| `PSYCHE_LOCALE` | `en` | en / zh |
-| `PSYCHE_INTENSITY` | `0.7` | Personality expression 0.0-1.0 |
-| `PSYCHE_PERSIST` | `true` | Persist state to disk |
-| `PSYCHE_WORKSPACE` | `cwd()` | State file directory |
+- `process_input`
+- `process_output`
+- `get_state`
+- `end_session`
 
 ## Install
 
 ```bash
-npm install psyche-ai @modelcontextprotocol/sdk  # MCP
-npm install psyche-ai                              # SDK only
-npx psyche-mcp                                     # Run MCP server directly
+npm install psyche-ai
+npx psyche-mcp
 ```
 
 ## Links
 
 - npm: https://www.npmjs.com/package/psyche-ai
 - GitHub: https://github.com/Shangri-la-0428/oasyce_psyche
-- License: MIT
+- Website: https://psyche.oasyce.com
+- Strategy: https://github.com/Shangri-la-0428/oasyce_psyche/blob/main/docs/PROJECT_DIRECTION.md

@@ -31,7 +31,11 @@ export type {
   PersonalityTraits, PsycheMode, PolicyModifiers, SubjectivityKernel, ResponseContract, GenerationControls,
   AppraisalAxes, SubjectResidue, TaskPlaneState, SubjectPlaneState, RelationPlaneState,
   AmbiguityPlaneState, RelationMoveType, RelationMove, OpenLoopType, OpenLoopState, PendingRelationSignalState, DyadicFieldState,
-  SessionBridgeState, WritebackSignalType, WritebackSignalWeightMap, PendingWritebackCalibration, WritebackCalibrationFeedback, WritebackCalibrationMetric,
+  SessionBridgeState, ThrongletsExportSubject, ThrongletsExportPrimitive, ThrongletsExportBase, RelationMilestoneExport,
+  OpenLoopAnchorExport, WritebackCalibrationExport, ContinuityAnchorExport, ThrongletsExport, ThrongletsExportState,
+  ExternalContinuityEvent, ExternalContinuityEnvelope, ThrongletsTraceTaxonomy, ThrongletsExternalContinuityRecord,
+  ThrongletsTracePayload, ThrongletsTraceSerializationOptions,
+  WritebackSignalType, WritebackSignalWeightMap, PendingWritebackCalibration, WritebackCalibrationFeedback, WritebackCalibrationMetric,
   TraitDriftState, EnergyBudgets,
   ClassifierProvider, ClassifierContext, ClassificationResult,
 } from "./types.js";
@@ -101,11 +105,24 @@ export type { DecisionBiasVector, AttentionWeights } from "./decision-bias.js";
 export { computeSubjectivityKernel, buildSubjectivityContext } from "./subjectivity.js";
 export { computeResponseContract, buildResponseContractContext } from "./response-contract.js";
 export { deriveGenerationControls } from "./host-controls.js";
+export { deriveReplyEnvelope } from "./reply-envelope.js";
+export type { ReplyEnvelope } from "./reply-envelope.js";
 export { computeAppraisalAxes, mergeAppraisalResidue, getResidueIntensity } from "./appraisal.js";
 export {
   computeRelationMove, evolveDyadicField, evolvePendingRelationSignals, getLoopPressure,
   applySessionBridge, applyWritebackSignals, createWritebackCalibrations, evaluateWritebackCalibrations,
 } from "./relation-dynamics.js";
+export {
+  EXTERNAL_CONTINUITY_SIGNAL_KINDS,
+  EXTERNAL_CONTINUITY_TRACE_KINDS,
+  buildExternalContinuityEnvelope,
+} from "./external-continuity.js";
+export { deriveThrongletsExports } from "./thronglets-export.js";
+export {
+  taxonomyForThrongletsExport,
+  serializeThrongletsExportAsTrace,
+  serializeExternalContinuityForThronglets,
+} from "./thronglets-runtime.js";
 
 // Experiential field (P6 + P8 Barrett construction)
 export { computeExperientialField, computeCoherence, detectUnnamedEmotion, computeAffectCore } from "./experiential-field.js";

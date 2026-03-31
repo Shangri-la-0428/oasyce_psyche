@@ -729,8 +729,30 @@ END: 75 (happy)
     assert.ok((result.sessionBridge?.continuityFloor ?? 0) >= 0.5, `got ${JSON.stringify(result.sessionBridge)}`);
     assert.equal(result.sessionBridge?.continuityMode, "tense-resume");
     assert.ok(result.sessionBridge?.activeLoopTypes.includes("existence-test"), `got ${JSON.stringify(result.sessionBridge)}`);
+    assert.equal(result.externalContinuity?.provider, "thronglets");
+    assert.equal(result.externalContinuity?.mode, "optional");
+    assert.equal(result.externalContinuity?.version, 1);
+    assert.ok((result.externalContinuity?.signals.length ?? 0) >= 1, `got ${JSON.stringify(result.externalContinuity)}`);
+    assert.ok((result.externalContinuity?.traces.length ?? 0) >= 1, `got ${JSON.stringify(result.externalContinuity)}`);
     assert.ok((result.subjectivityKernel?.subjectPlane.residue ?? 0) >= 0.28, `got ${result.subjectivityKernel?.subjectPlane.residue}`);
     assert.ok((result.subjectivityKernel?.relationPlane.closeness ?? 0) >= 0.6, `got ${result.subjectivityKernel?.relationPlane.closeness}`);
+    assert.ok(result.throngletsExports && result.throngletsExports.length > 0, "expected sparse thronglets exports");
+    assert.ok(
+      result.throngletsExports?.some((event) => event.kind === "continuity-anchor" && event.subject === "session"),
+      `got ${JSON.stringify(result.throngletsExports)}`,
+    );
+    assert.ok(
+      result.throngletsExports?.some((event) => event.kind === "open-loop-anchor" && event.subject === "delegate"),
+      `got ${JSON.stringify(result.throngletsExports)}`,
+    );
+    for (const event of result.throngletsExports ?? []) {
+      assert.ok(!("current" in event), `thronglets export leaked chemistry: ${JSON.stringify(event)}`);
+      assert.ok(!("baseline" in event), `thronglets export leaked chemistry baseline: ${JSON.stringify(event)}`);
+      assert.ok(!("subjectResidue" in event), `thronglets export leaked residue: ${JSON.stringify(event)}`);
+      assert.ok(!("dyadicFields" in event), `thronglets export leaked raw field state: ${JSON.stringify(event)}`);
+      assert.ok(!("sessionHistory" in event), `thronglets export leaked raw session history: ${JSON.stringify(event)}`);
+    }
+    assert.deepEqual(result.externalContinuity?.exports, result.throngletsExports);
   });
 
   it("compact mode routes clear work asks into the task plane", async () => {
@@ -831,6 +853,15 @@ END: 75 (happy)
     assert.ok(result.writebackFeedback && result.writebackFeedback.length > 0, "expected writeback feedback");
     assert.equal(result.writebackFeedback?.[0].signal, "trust_up");
     assert.equal(result.writebackFeedback?.[0].effect, "converging");
+    assert.ok(
+      result.throngletsExports?.some(
+        (event) => event.kind === "writeback-calibration"
+          && event.subject === "delegate"
+          && event.signal === "trust_up"
+          && event.effect === "converging",
+      ),
+      `got ${JSON.stringify(result.throngletsExports)}`,
+    );
   });
 
   it("low-confidence reads expose a wide override window and accept output-side stimulus correction", async () => {
@@ -1252,13 +1283,18 @@ describe("PsycheEngine — first-meet detection", () => {
 // ── v9.1: Pluggable classifier integration ──────────────────
 
 describe("pluggable classifier in PsycheEngine", () => {
-  it("processInput returns subjectivityKernel in compact mode", async () => {
+  it("processInput returns a canonical replyEnvelope in compact mode", async () => {
     const storage = new MemoryStorageAdapter();
     const engine = new PsycheEngine({ mbti: "INFJ", compactMode: true }, storage);
     await engine.initialize();
     const result = await engine.processInput("你好");
+    assert.ok(result.replyEnvelope, "replyEnvelope should be present");
     assert.ok(result.subjectivityKernel, "subjectivityKernel should be present");
     assert.ok(result.responseContract, "responseContract should be present");
+    assert.equal("policyModifiers" in (result.replyEnvelope ?? {}), false);
+    assert.deepEqual(result.replyEnvelope?.subjectivityKernel, result.subjectivityKernel);
+    assert.deepEqual(result.replyEnvelope?.responseContract, result.responseContract);
+    assert.deepEqual(result.replyEnvelope?.generationControls, result.generationControls);
     assert.equal(typeof result.subjectivityKernel?.tension, "number");
     assert.ok(result.dynamicContext.includes("主观内核"), `Got: ${result.dynamicContext}`);
   });
