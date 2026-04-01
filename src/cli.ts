@@ -16,6 +16,7 @@
 //   psyche probe [--json]
 //   psyche profiles [--json] [--mbti TYPE]
 //   psyche setup [--name NAME] [--mbti TYPE] [--locale LOCALE] [--proxy --target URL] [--dry-run]
+//   psyche mcp [--mbti TYPE] [--name NAME]   Start MCP server (stdio)
 // ============================================================
 
 import { resolve, join } from "node:path";
@@ -601,7 +602,7 @@ async function cmdSetup(opts: {
   let actions = 0;
 
   // ── 1. MCP clients ────────────────────────────────────
-  const mcpEntry = { command: "npx", args: ["-y", "psyche-mcp"], env };
+  const mcpEntry = { command: "npx", args: ["-y", "psyche-ai", "mcp"], env };
   const { execFileSync } = await import("node:child_process");
 
   // Claude Code — use `claude mcp add` for hot-reload (no restart needed)
@@ -615,10 +616,10 @@ async function cmdSetup(opts: {
       console.log("  → Claude Code — would configure via `claude mcp add`");
       claudeCodeDone = true; actions++;
     } else {
-      const addArgs = ["mcp", "add", "psyche", "-e", "PSYCHE_LOCALE=" + (locale || "zh")];
+      const addArgs = ["mcp", "add", "-s", "user", "psyche", "-e", "PSYCHE_LOCALE=" + (locale || "zh")];
       if (name) addArgs.push("-e", "PSYCHE_NAME=" + name);
       if (mbti) addArgs.push("-e", "PSYCHE_MBTI=" + mbti.toUpperCase());
-      addArgs.push("--", "npx", "-y", "psyche-mcp");
+      addArgs.push("--", "npx", "-y", "psyche-ai", "mcp");
       execFileSync("claude", addArgs, { encoding: "utf-8", timeout: 10000 });
       console.log("  ✓ Claude Code — configured (live, no restart needed)");
       claudeCodeDone = true; actions++;
@@ -720,6 +721,7 @@ Usage:
   psyche intensity              Show info about personality intensity config
   psyche reset <dir> [--full]
   psyche diagnose <dir> [--github]   Run health checks & show diagnostic report
+  psyche mcp [--mbti TYPE] [--name NAME]   Start MCP server (stdio)
   psyche setup [--proxy -t URL] [-n NAME] [--mbti TYPE]  Auto-configure MCP + proxy
   psyche upgrade [--check]           Check/apply package updates safely
   psyche probe [--json]              Verify the runtime is truly callable
@@ -923,6 +925,12 @@ async function main(): Promise<void> {
         });
         await cmdProbe(values.json ?? false);
         break;
+      }
+
+      case "mcp": {
+        // Delegate to the MCP adapter — same process, no npx indirection.
+        await import("./adapters/mcp.js");
+        return; // mcp.ts owns the process from here
       }
 
       case "setup": {

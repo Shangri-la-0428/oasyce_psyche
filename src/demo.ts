@@ -5,8 +5,8 @@
 // scenario in 6 rounds, with real PsycheEngine chemistry.
 //
 // Usage:
-//   npx psyche-mcp --demo
-//   npx psyche demo
+//   npx psyche-ai mcp --demo
+//   npx psyche-ai demo
 // ============================================================
 
 import { PsycheEngine } from "./core.js";
@@ -357,7 +357,7 @@ export async function runDemo(opts?: {
   printLine("─");
   process.stdout.write(
     c(C.dim, "  Try it yourself: ") +
-    c(C.cyan, "npx psyche-mcp") +
+    c(C.cyan, "npx psyche-ai mcp") +
     c(C.dim, " (configure in Claude Desktop / Cursor / Claude Code)\n"),
   );
   process.stdout.write(

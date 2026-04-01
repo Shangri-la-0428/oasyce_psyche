@@ -1,5 +1,11 @@
 # 更新日志 / Changelog
 
+## v10.2.5 — MCP Bootstrap Fix
+
+- **修复 MCP 启动失败**：`npx -y psyche-mcp` 查找的是不存在的 npm 包。CLI 新增 `mcp` 子命令，`npx -y psyche-ai mcp` 一个包一个入口。
+- **修复 scope 错误**：`psyche setup` 写入 Claude Code 时默认 local scope（只在当前项目生效），改为 user scope（全局生效）。
+- **新增 FAQ.md**：面向用户、投资人、开发者的 30+ 常见问题。
+
 ## v10.2.4 — Zero-Arg Setup
 
 - **`npx psyche-ai setup`** — 不需要任何参数。MBTI 不再是前置条件，人格从交互中涌现。
