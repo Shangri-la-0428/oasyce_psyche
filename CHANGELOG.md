@@ -1,5 +1,16 @@
 # 更新日志 / Changelog
 
+## v11.3.1 — 代码诚实：un-deprecate 5 个活跃字段
+
+### Fixed
+- Un-deprecate `expectationGap`, `backslidePressure`, `repairFatigue`, `misattunementLoad`, `taskFocus` — 全部 5 个字段活跃于 response contract 数据流
+- 删除 relation-dynamics.ts 中 ~30 处 "no downstream behavioral effect" 虚假注释
+- 删除 `"unrepaired-breach"` OpenLoopType（创建但从未检查），breach 改为创建 `"boundary-strain"`
+
+零行为变更。1418 测试通过。
+
+---
+
 ## v11.3.0 — 术语统一：化学→维度
 
 **全面清除代码中残存的 6 化学模型痕迹。**
