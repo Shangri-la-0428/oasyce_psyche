@@ -16,7 +16,7 @@
 // ============================================================
 
 import type {
-  PsycheState, SelfState, StimulusType, StimulusVector,
+  PsycheState, SelfState, StimulusType, ImpactVector,
   DriveType, Locale, StateSnapshot,
   LearningState, LearnedVectorAdjustment,
 } from "./types.js";
@@ -146,7 +146,7 @@ export function predictSelfReaction(
   const learned = findBestLearnedVector(state.learning, stimulus);
 
   // Build the effective vector: base + learned adjustment
-  const effectiveVector: StimulusVector = { ...base };
+  const effectiveVector: ImpactVector = { ...base };
   let confidence = 0.3; // baseline confidence from profile alone
 
   if (learned) {

@@ -119,7 +119,7 @@ export function perceive(text: string, self: Self): Perception {
 
   const dominant = modulated[0];
   const baseSensitivity = computeEffectiveSensitivity(
-    self.sensitivity, self.drives, dominant.type, self.traitDrift,
+    self.sensitivity, self.current, self.baseline, dominant.type, self.traitDrift,
   );
   const totalSensitivity =
     baseSensitivity * self.personalityIntensity * modeMultiplier * confidenceIntensity;

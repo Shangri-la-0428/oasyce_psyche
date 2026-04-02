@@ -16,7 +16,7 @@
 import type {
   PsycheState,
   SelfState,
-  ChemicalSnapshot,
+  StateSnapshot,
   InnateDrives,
   RelationshipState,
   StimulusType,
@@ -77,7 +77,7 @@ export interface ConstructionContext {
   stimulus?: StimulusType | null;
   relationshipPhase?: string;
   predictionError?: number;
-  coreMemories?: ChemicalSnapshot[];  // uses SelfState snapshots
+  coreMemories?: StateSnapshot[];  // uses SelfState snapshots
 }
 
 // ── Affect Core (Russell Circumplex) ─────────────────────────
@@ -401,7 +401,7 @@ function buildContextKeys(
  * Returns 0-1 where 1 = strong resonance (memories cluster near the concept center).
  */
 function computeMemoryResonance(
-  memories: ChemicalSnapshot[],
+  memories: StateSnapshot[],
   targetValence: number,
   targetArousal: number,
 ): number {

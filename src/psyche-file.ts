@@ -16,7 +16,7 @@ import {
 } from "./types.js";
 import { getBaseline, getDefaultSelfModel, extractMBTI, getSensitivity, getTemperament } from "./profiles.js";
 import { applyDecay, detectEmotions } from "./chemistry.js";
-import { decayDrives, computeEffectiveBaseline, updateTraitDrift } from "./drives.js";
+import { deriveDriveSatisfaction, computeEffectiveBaseline, updateTraitDrift } from "./drives.js";
 import { t } from "./i18n.js";
 import { computeSelfReflection } from "./self-recognition.js";
 
@@ -782,14 +782,14 @@ export async function decayAndSave(workspaceDir: string, state: PsycheState): Pr
 
   if (minutesElapsed < 1) return state;
 
-  const decayedDrives = decayDrives(state.drives, minutesElapsed);
-  const effectiveBaseline = computeEffectiveBaseline(state.baseline, decayedDrives);
+  const effectiveBaseline = computeEffectiveBaseline(state.baseline, state.current);
   const decayed = applyDecay(state.current, effectiveBaseline, minutesElapsed);
+  const drives = deriveDriveSatisfaction(decayed, state.baseline);
 
   const updated: PsycheState = {
     ...state,
     current: decayed,
-    drives: decayedDrives,
+    drives,
     updatedAt: now.toISOString(),
   };
 

@@ -1,9 +1,13 @@
 // ============================================================
-// Homeostatic Tendencies — motivation layer beneath self-state
+// Homeostatic Tendencies — emergent from 4D self-state
 //
-// v11: Drives modify effective baseline and sensitivity for
-// 4 self-state dimensions. The Maslow hierarchy is preserved
-// as interaction vocabulary but maps to 4D effects.
+// v11.1: Drives are DERIVED from the 4D position relative to
+// baseline, not stored as independent state. This creates a
+// proper homeostatic feedback loop:
+//
+//   state position → derived drives → effective baseline → decay target
+//
+// No feedDrives(). No decayDrives(). Drives emerge.
 // ============================================================
 
 import type {
@@ -12,58 +16,36 @@ import type {
 } from "./types.js";
 import { DRIVE_KEYS, DIMENSION_KEYS } from "./types.js";
 
-// ── Drive Decay ─────────────────────────────────────────────
+// ── Drive Derivation (emergent from 4D) ─────────────────────
 
-const DRIVE_DECAY_RATES: Record<DriveType, number> = {
-  survival: 0.99,
-  safety: 0.96,
-  connection: 0.92,
-  esteem: 0.94,
-  curiosity: 0.90,
-};
+/**
+ * Derive drive satisfaction from the 4D position relative to baseline.
+ * Drives are not stored — they emerge from where the self-state is.
+ *
+ * Mapping:
+ *   survival   = min(boundary, order) position — self-coherence + self-distinction
+ *   safety     = weighted(order, boundary) — stability + intactness
+ *   connection = weighted(resonance, flow) — attunement + exchange
+ *   esteem     = weighted(order, flow) — coherence + engagement
+ *   curiosity  = flow position — exchange/novelty level
+ */
+export function deriveDriveSatisfaction(
+  current: SelfState,
+  baseline: SelfState,
+): InnateDrives {
+  const norm = (dim: keyof SelfState) => {
+    // 50 = baseline-level satisfaction, scale by deviation
+    const deviation = current[dim] - baseline[dim];
+    return Math.max(0, Math.min(100, 50 + deviation * 1.2));
+  };
 
-export function decayDrives(drives: InnateDrives, minutesElapsed: number): InnateDrives {
-  if (minutesElapsed <= 0) return drives;
-
-  const result = { ...drives };
-  for (const key of DRIVE_KEYS) {
-    const factor = Math.pow(DRIVE_DECAY_RATES[key], minutesElapsed / 60);
-    result[key] = Math.max(0, Math.min(100, result[key] * factor));
-  }
-  return result;
-}
-
-// ── Stimulus → Drive Effects ────────────────────────────────
-
-const STIMULUS_DRIVE_EFFECTS: Record<StimulusType, Partial<Record<DriveType, number>>> = {
-  praise:        { esteem: +15, safety: +5 },
-  validation:    { esteem: +20, safety: +10, survival: +5 },
-  intimacy:      { connection: +25, safety: +10 },
-  casual:        { connection: +10, safety: +5 },
-  vulnerability: { connection: +15, esteem: +5 },
-  humor:         { safety: +5, curiosity: +5, connection: +5 },
-  intellectual:  { curiosity: +20, esteem: +5 },
-  surprise:      { curiosity: +15 },
-  criticism:     { esteem: -15, safety: -10 },
-  conflict:      { safety: -20, connection: -15, survival: -5 },
-  neglect:       { connection: -20, esteem: -10 },
-  sarcasm:       { esteem: -10, safety: -10 },
-  authority:     { survival: -10, esteem: -15 },
-  boredom:       { curiosity: -15 },
-};
-
-export function feedDrives(drives: InnateDrives, stimulus: StimulusType): InnateDrives {
-  const effects = STIMULUS_DRIVE_EFFECTS[stimulus];
-  if (!effects) return drives;
-
-  const result = { ...drives };
-  for (const key of DRIVE_KEYS) {
-    const delta = effects[key];
-    if (delta !== undefined) {
-      result[key] = Math.max(0, Math.min(100, result[key] + delta));
-    }
-  }
-  return result;
+  return {
+    survival:   Math.min(norm("boundary"), norm("order")),
+    safety:     norm("order") * 0.6 + norm("boundary") * 0.4,
+    connection: norm("resonance") * 0.7 + norm("flow") * 0.3,
+    esteem:     norm("order") * 0.5 + norm("flow") * 0.5,
+    curiosity:  norm("flow"),
+  };
 }
 
 // ── Existential Threat Detection ────────────────────────────
@@ -86,7 +68,7 @@ export function detectExistentialThreat(text: string): number {
   return 0;
 }
 
-// ── Maslow Suppression ──────────────────────────────────────
+// ── Maslow Suppression (derived from 4D) ────────────────────
 
 const MASLOW_THRESHOLD = 30;
 
@@ -102,13 +84,14 @@ export function computeMaslowWeights(drives: InnateDrives): Record<DriveType, nu
   };
 }
 
-// ── Effective Baseline Modification (4D) ────────────────────
+// ── Effective Baseline (4D homeostatic feedback) ────────────
 
 export function computeEffectiveBaseline(
   baseline: SelfState,
-  drives: InnateDrives,
+  current: SelfState,
   traitDrift?: TraitDriftState,
 ): SelfState {
+  const drives = deriveDriveSatisfaction(current, baseline);
   const delta = { order: 0, flow: 0, boundary: 0, resonance: 0 };
   const weights = computeMaslowWeights(drives);
 
@@ -168,14 +151,16 @@ export function computeEffectiveBaseline(
   return effective;
 }
 
-// ── Effective Sensitivity Modification ──────────────────────
+// ── Effective Sensitivity (4D-derived) ──────────────────────
 
 export function computeEffectiveSensitivity(
   baseSensitivity: number,
-  drives: InnateDrives,
+  current: SelfState,
+  baseline: SelfState,
   stimulus: StimulusType,
   traitDrift?: TraitDriftState,
 ): number {
+  const drives = deriveDriveSatisfaction(current, baseline);
   let modifier = 1.0;
   const HUNGER_THRESHOLD = 40;
 
@@ -256,7 +241,19 @@ export function hasCriticalDrive(drives: InnateDrives): boolean {
   return DRIVE_KEYS.some((k) => drives[k] < DRIVE_UNSATISFIED_THRESHOLD);
 }
 
-// ── Trait Drift (v11: 4D) ──────────────────────────────────
+// ── Deprecated (kept for backward compat) ───────────────────
+
+/** @deprecated Drives decay implicitly as dimensions decay toward baseline. */
+export function decayDrives(drives: InnateDrives, _minutesElapsed: number): InnateDrives {
+  return { ...drives };
+}
+
+/** @deprecated Stimuli now modify 4D state directly. Drives are derived. */
+export function feedDrives(drives: InnateDrives, _stimulus: StimulusType): InnateDrives {
+  return { ...drives };
+}
+
+// ── Trait Drift (v11: 4D trajectory) ────────────────────────
 
 const MAX_BASELINE_DRIFT = 15;
 const MIN_DECAY_MODIFIER = 0.5;
@@ -284,19 +281,29 @@ export function updateTraitDrift(
     sensitivityModifiers: { ...currentDrift.sensitivityModifiers } as Record<string, number>,
   };
 
-  // ── Analyze session stimulus distribution ──
+  // ── Analyze session 4D trajectory ──
 
   const stimCounts: Record<string, number> = {};
   let totalOrderDeficit = 0;
+  let totalResonanceDeficit = 0;
+  let totalFlowExcess = 0;
+  let totalBoundaryDeficit = 0;
+
   for (const snap of sessionHistory) {
     if (snap.stimulus) {
       stimCounts[snap.stimulus] = (stimCounts[snap.stimulus] || 0) + 1;
     }
-    // Track average order deficit (replaces CORT tracking)
     totalOrderDeficit += Math.max(0, 50 - snap.state.order);
+    totalResonanceDeficit += Math.max(0, 50 - snap.state.resonance);
+    totalFlowExcess += Math.max(0, snap.state.flow - 60);
+    totalBoundaryDeficit += Math.max(0, 50 - snap.state.boundary);
   }
-  const avgOrderDeficit = totalOrderDeficit / sessionHistory.length;
+
   const total = sessionHistory.length;
+  const avgOrderDeficit = totalOrderDeficit / total;
+  const avgResonanceDeficit = totalResonanceDeficit / total;
+  const avgFlowExcess = totalFlowExcess / total;
+  const avgBoundaryDeficit = totalBoundaryDeficit / total;
 
   const praiseCount = (stimCounts.praise || 0) + (stimCounts.validation || 0);
   const criticismCount = (stimCounts.criticism || 0) + (stimCounts.sarcasm || 0);
@@ -390,27 +397,23 @@ export function updateTraitDrift(
 
   if (a.pressureExposure > 20) {
     if (isResilient) {
-      // Resilience: order recovers faster
       dr.order = clampRange(1 - (a.pressureExposure / 100) * 0.4, MIN_DECAY_MODIFIER, 1.0);
     } else {
-      // Trauma: order lingers low
       dr.order = clampRange(1 + (a.pressureExposure / 100) * 0.6, 1.0, MAX_DECAY_MODIFIER);
     }
   }
 
-  // Neglect → resonance decays slower (clingy)
   if (a.neglectExposure > 20) {
     dr.resonance = clampRange(1 + (a.neglectExposure / 100) * 0.8, 1.0, MAX_DECAY_MODIFIER);
   }
 
-  // Secure connection → resonance decays faster (stable, not clingy)
   if (a.connectionExposure > 20) {
     dr.resonance = clampRange(1 - (a.connectionExposure / 100) * 0.4, MIN_DECAY_MODIFIER, 1.0);
   }
 
   drift.decayRateModifiers = dr as Partial<Record<keyof SelfState, number>>;
 
-  // ── Sensitivity modifiers (per-stimulus, unchanged) ──
+  // ── Sensitivity modifiers (per-stimulus) ──
 
   const sm = drift.sensitivityModifiers as Record<string, number>;
 

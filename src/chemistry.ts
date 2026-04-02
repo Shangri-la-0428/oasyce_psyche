@@ -265,23 +265,17 @@ export function applyMutualInfluence(
 }
 
 /**
- * Apply a stimulus to the current state.
+ * Apply an impact vector to the current state.
+ * Core substrate-independent function — operates on 4D vectors, not labels.
  * Respects inertia (maxDelta), sensitivity, and habituation.
  */
-export function applyStimulus(
+export function applyImpact(
   current: SelfState,
-  stimulus: StimulusType,
+  vector: ImpactVector,
   sensitivity: number,
   maxDelta: number,
-  logger?: { warn: (msg: string) => void },
   recentSameCount?: number,
 ): SelfState {
-  const vector = STIMULUS_VECTORS[stimulus];
-  if (!vector) {
-    logger?.warn(t("log.unknown_stimulus", "zh", { type: stimulus }));
-    return { ...current };
-  }
-
   // Habituation — Weber-Fechner diminishing returns
   let effectiveSensitivity = sensitivity;
   if (recentSameCount !== undefined && recentSameCount > 2) {
@@ -308,7 +302,27 @@ export function applyStimulus(
 }
 
 /**
- * Apply emotional contagion: detected user emotion influences agent state.
+ * Apply a labeled stimulus to the current state.
+ * Perception-layer convenience — looks up the ImpactVector from STIMULUS_VECTORS.
+ */
+export function applyStimulus(
+  current: SelfState,
+  stimulus: StimulusType,
+  sensitivity: number,
+  maxDelta: number,
+  logger?: { warn: (msg: string) => void },
+  recentSameCount?: number,
+): SelfState {
+  const vector = STIMULUS_VECTORS[stimulus];
+  if (!vector) {
+    logger?.warn(t("log.unknown_stimulus", "zh", { type: stimulus }));
+    return { ...current };
+  }
+  return applyImpact(current, vector, sensitivity, maxDelta, recentSameCount);
+}
+
+/**
+ * Apply emotional contagion from a labeled stimulus.
  */
 export function applyContagion(
   agentState: SelfState,
@@ -318,13 +332,42 @@ export function applyContagion(
 ): SelfState {
   const vector = STIMULUS_VECTORS[detectedUserEmotion];
   if (!vector) return { ...agentState };
+  return applyImpactContagion(agentState, vector, contagionRate, sensitivity);
+}
 
+/**
+ * Apply contagion from a raw impact vector.
+ * Core substrate-independent function.
+ */
+export function applyImpactContagion(
+  agentState: SelfState,
+  vector: ImpactVector,
+  contagionRate: number,
+  sensitivity: number,
+): SelfState {
   const result = { ...agentState };
   for (const key of DIMENSION_KEYS) {
     const influence = vector[key] * contagionRate * sensitivity;
     result[key] = clamp(agentState[key] + influence);
   }
   return result;
+}
+
+// ── Impact Vector Classification (substrate-independent) ────
+
+/** True if the net impact across all dimensions is positive. */
+export function isPositiveImpact(v: ImpactVector): boolean {
+  return (v.order + v.flow + v.boundary + v.resonance) > 0;
+}
+
+/** True if the impact has significant resonance magnitude. */
+export function isEmotionalImpact(v: ImpactVector): boolean {
+  return Math.abs(v.resonance) >= 8;
+}
+
+/** True if the impact threatens self-coherence (order or boundary). */
+export function isThreateningImpact(v: ImpactVector): boolean {
+  return v.order < -5 || v.boundary < -5;
 }
 
 /**

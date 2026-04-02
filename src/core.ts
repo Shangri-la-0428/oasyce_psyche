@@ -29,7 +29,7 @@ import {
   type Logger,
 } from "./psyche-file.js";
 import {
-  decayDrives, feedDrives, detectExistentialThreat,
+  detectExistentialThreat, deriveDriveSatisfaction,
   computeEffectiveBaseline, computeEffectiveSensitivity,
 } from "./drives.js";
 import { checkForUpdate, getPackageVersion } from "./update.js";
@@ -350,7 +350,7 @@ export class PsycheEngine {
         loaded.version = 7;
       }
       // Migrate v7 → v8: P8 Barrett construction + P10 processing depth + P11 memory consolidation
-      // No data changes needed — ChemicalSnapshot new fields are optional (backward compatible)
+      // No data changes needed — StateSnapshot new fields are optional (backward compatible)
       if (loaded.version < 8) {
         loaded.version = 8;
       }
@@ -450,15 +450,15 @@ export class PsycheEngine {
     const now = new Date();
     const minutesElapsed = (now.getTime() - new Date(state.updatedAt).getTime()) / 60000;
     if (minutesElapsed >= 1) {
-      // Decay drives first — needs build up over time
-      const decayedDrives = decayDrives(state.drives, minutesElapsed);
-      // Compute effective baseline from drives (unsatisfied drives shift baseline)
-      const effectiveBaseline = computeEffectiveBaseline(state.baseline, decayedDrives, state.traitDrift);
+      // Compute effective baseline from current 4D position (drives are derived, not stored)
+      const effectiveBaseline = computeEffectiveBaseline(state.baseline, state.current, state.traitDrift);
       // P12: Apply circadian rhythm modulation to effective baseline
       const circadianBaseline = computeCircadianModulation(now, effectiveBaseline);
+      // Derive drives from current position for state persistence
+      const drives = deriveDriveSatisfaction(state.current, state.baseline);
       state = {
         ...state,
-        drives: decayedDrives,
+        drives,
         current: applyDecay(state.current, circadianBaseline, minutesElapsed, state.traitDrift?.decayRateModifiers),
         updatedAt: now.toISOString(),
       };
@@ -555,9 +555,10 @@ export class PsycheEngine {
       let current = perception.state;
       if (appliedStimulus) {
         current = applyRepairLag(state.current, current, state.baseline, appliedStimulus);
-        drives = feedDrives(drives, appliedStimulus);
       }
 
+      // Derive drives from updated position
+      drives = deriveDriveSatisfaction(current, state.baseline);
       state = { ...state, drives, current };
       if (appliedStimulus) {
         state = applyRelationshipDrift(state, appliedStimulus, opts?.userId);
@@ -651,7 +652,7 @@ export class PsycheEngine {
     if (appliedStimulus) {
       const ctxHash = computeContextHash(state, opts?.userId);
       const effectiveSensitivity = computeEffectiveSensitivity(
-        (state.sensitivity ?? 1.0), state.drives, appliedStimulus, state.traitDrift,
+        (state.sensitivity ?? 1.0), state.current, state.baseline, appliedStimulus, state.traitDrift,
       );
       const predicted = predictState(
         preInteractionState.current,
@@ -845,21 +846,19 @@ export class PsycheEngine {
         // but LLM classified one, retroactively apply chemistry + drives
         const overrideAllowed = this.lastStimulusAssessment?.overrideWindow !== "narrow";
         if (parseResult.llmStimulus && (!this._lastAlgorithmApplied || overrideAllowed)) {
-          state = {
-            ...state,
-            drives: feedDrives(state.drives, parseResult.llmStimulus),
-          };
           const effectiveSensitivity = computeEffectiveSensitivity(
-            (state.sensitivity ?? 1.0), state.drives, parseResult.llmStimulus, state.traitDrift,
+            (state.sensitivity ?? 1.0), state.current, state.baseline, parseResult.llmStimulus, state.traitDrift,
+          );
+          const newCurrent = applyStimulus(
+            state.current, parseResult.llmStimulus,
+            effectiveSensitivity * (overrideAllowed && this._lastAlgorithmApplied ? 0.8 : 1),
+            this.cfg.maxDimensionDelta,
+            NOOP_LOGGER,
           );
           state = {
             ...state,
-            current: applyStimulus(
-              state.current, parseResult.llmStimulus,
-              effectiveSensitivity * (overrideAllowed && this._lastAlgorithmApplied ? 0.8 : 1),
-              this.cfg.maxDimensionDelta,
-              NOOP_LOGGER,
-            ),
+            current: newCurrent,
+            drives: deriveDriveSatisfaction(newCurrent, state.baseline),
           };
         }
 

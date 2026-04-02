@@ -14,7 +14,7 @@
 // ============================================================
 
 import type {
-  PsycheState, StimulusType, ChemicalState,
+  PsycheState, StimulusType, SelfState,
   OutcomeScore, MetacognitiveState,
   RegulationStrategyType, DefenseMechanismType,
   RegulationTargetMetric, RegulationFeedback,
@@ -50,7 +50,7 @@ export interface RegulationSuggestion {
   /** Initial gap between the current state and the target value */
   gapBefore?: number;
   /** Suggested micro-adjustment to chemistry */
-  chemistryAdjustment?: Partial<ChemicalState>;
+  chemistryAdjustment?: Partial<SelfState>;
   /** 0-1: confidence that this strategy would help */
   confidence: number;
 }
@@ -90,7 +90,7 @@ const MAX_SOOTHING_ADJUSTMENT = 5;
 const MAX_REAPPRAISAL_ADJUSTMENT = 8;
 
 function formatDimensionWindow(
-  key: keyof ChemicalState,
+  key: keyof SelfState,
   state: PsycheState,
 ): string {
   const spec = DIMENSION_SPECS[key];
@@ -101,7 +101,7 @@ function formatDimensionWindow(
 }
 
 function buildRegulationAction(
-  key: keyof ChemicalState,
+  key: keyof SelfState,
   _state: PsycheState,
   direction: "elevated" | "depleted",
 ): string {
@@ -393,7 +393,7 @@ function attemptCognitiveReappraisal(
   if (avgScore >= -0.1) return null; // outcomes aren't bad enough to warrant reappraisal
 
   // Suggest chemistry adjustment: pull extreme values toward moderate range
-  const adjustment: Partial<ChemicalState> = {};
+  const adjustment: Partial<SelfState> = {};
   let hasAdjustment = false;
 
   for (const key of DIMENSION_KEYS) {
@@ -539,10 +539,10 @@ function attemptStrategicExpression(
 function attemptSelfSoothing(state: PsycheState): RegulationSuggestion | null {
   const { current, baseline } = state;
 
-  const adjustment: Partial<ChemicalState> = {};
+  const adjustment: Partial<SelfState> = {};
   let hasAdjustment = false;
   let maxDeviation = 0;
-  let mostDeviatedKey: keyof ChemicalState = "order";
+  let mostDeviatedKey: keyof SelfState = "order";
 
   for (const key of DIMENSION_KEYS) {
     const deviation = current[key] - baseline[key];
