@@ -596,6 +596,8 @@ export interface PsycheState {
     totalInteractions: number;
     locale: Locale;
     mode?: PsycheMode;
+    /** Sigil ID — which Loop this Psyche instance serves */
+    sigilId?: string;
   };
 }
 
@@ -856,7 +858,7 @@ export type ThrongletsExportSubject = "delegate" | "session";
 export type ThrongletsExportPrimitive = "signal" | "trace";
 
 export interface ThrongletsExportBase {
-  kind: "relation-milestone" | "open-loop-anchor" | "writeback-calibration" | "continuity-anchor";
+  kind: "relation-milestone" | "open-loop-anchor" | "writeback-calibration" | "continuity-anchor" | "self-state";
   subject: ThrongletsExportSubject;
   primitive: ThrongletsExportPrimitive;
   userKey: string;
@@ -902,11 +904,23 @@ export interface ContinuityAnchorExport extends ThrongletsExportBase {
   continuityFloor: number;
 }
 
+export interface SelfStateExport extends ThrongletsExportBase {
+  kind: "self-state";
+  subject: "session";
+  primitive: "signal";
+  order: number;
+  flow: number;
+  boundary: number;
+  resonance: number;
+  summary: string;
+}
+
 export type ThrongletsExport =
   | RelationMilestoneExport
   | OpenLoopAnchorExport
   | WritebackCalibrationExport
-  | ContinuityAnchorExport;
+  | ContinuityAnchorExport
+  | SelfStateExport;
 
 export interface ThrongletsExportState {
   lastKeys: string[];
@@ -924,7 +938,7 @@ export interface ExternalContinuityEnvelope<TEvent = ExternalContinuityEvent> {
   traces: TEvent[];
 }
 
-export type ThrongletsTraceTaxonomy = "coordination" | "continuity" | "calibration";
+export type ThrongletsTraceTaxonomy = "coordination" | "continuity" | "calibration" | "state";
 
 export interface ThrongletsExternalContinuityRecord {
   provider: "thronglets";

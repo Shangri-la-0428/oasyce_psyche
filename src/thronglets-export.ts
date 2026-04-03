@@ -14,6 +14,7 @@ import type {
   RelationMilestoneExport,
   RelationshipState,
   ResolvedRelationContext,
+  SelfStateExport,
   SessionBridgeState,
   ThrongletsExport,
   ThrongletsExportState,
@@ -70,6 +71,23 @@ function updateExportState(
     ...state,
     throngletsExportState: nextState,
   };
+}
+
+function quantize(v: number, step: number = 10): number {
+  return Math.round(v / step) * step;
+}
+
+function selfStateSummary(o: number, f: number, b: number, r: number): string {
+  const parts: string[] = [];
+  if (o > 65) parts.push("structured");
+  else if (o < 35) parts.push("chaotic");
+  if (f > 65) parts.push("flowing");
+  else if (f < 35) parts.push("stuck");
+  if (b > 65) parts.push("open");
+  else if (b < 35) parts.push("guarded");
+  if (r > 65) parts.push("attuned");
+  else if (r < 35) parts.push("dissonant");
+  return parts.length > 0 ? parts.join(", ") : "neutral";
 }
 
 function sanitizeThrongletsExport(event: ThrongletsExport): ThrongletsExport {
@@ -132,6 +150,23 @@ function sanitizeThrongletsExport(event: ThrongletsExport): ThrongletsExport {
         continuityMode: event.continuityMode,
         activeLoopTypes: [...event.activeLoopTypes],
         continuityFloor: event.continuityFloor,
+      };
+      return sanitized;
+    }
+    case "self-state": {
+      const sanitized: SelfStateExport = {
+        kind: "self-state",
+        subject: "session",
+        primitive: "signal",
+        userKey: event.userKey,
+        strength: event.strength,
+        ttlTurns: event.ttlTurns,
+        key: event.key,
+        order: event.order,
+        flow: event.flow,
+        boundary: event.boundary,
+        resonance: event.resonance,
+        summary: event.summary,
       };
       return sanitized;
     }
@@ -206,6 +241,21 @@ export function deriveThrongletsExports(
       silentCarry: field.silentCarry,
     });
   }
+
+  // Self-state — sparse, only emits when dimensions shift by ≥10
+  const { order, flow, boundary, resonance } = state.current;
+  const selfKey = `self-state:O${quantize(order)}:F${quantize(flow)}:B${quantize(boundary)}:R${quantize(resonance)}`;
+  candidates.push({
+    kind: "self-state",
+    subject: "session",
+    primitive: "signal",
+    userKey,
+    strength: 0.5,
+    ttlTurns: 12,
+    key: selfKey,
+    order, flow, boundary, resonance,
+    summary: selfStateSummary(order, flow, boundary, resonance),
+  });
 
   for (const feedback of writebackFeedback) {
     if (feedback.effect === "holding") continue;

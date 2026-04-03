@@ -14,6 +14,7 @@ const TAXONOMY_BY_EVENT: Record<ThrongletsExport["kind"], ThrongletsTraceTaxonom
   "open-loop-anchor": "coordination",
   "continuity-anchor": "continuity",
   "writeback-calibration": "calibration",
+  "self-state": "state",
 };
 
 function summarizeLoopTypes(loopTypes: OpenLoopType[]): string {
@@ -32,6 +33,8 @@ function summarizeThrongletsExport(event: ThrongletsExport): string {
       const calibration = event as WritebackCalibrationExport;
       return `writeback calibration ${calibration.signal} ${calibration.effect} on ${calibration.metric}`;
     }
+    case "self-state":
+      return event.summary;
   }
 }
 
