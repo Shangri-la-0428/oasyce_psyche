@@ -44,7 +44,8 @@ const NAME = process.env.PSYCHE_NAME ?? "Assistant";
 const MODE = (process.env.PSYCHE_MODE ?? "natural") as PsycheMode;
 const LOCALE = (process.env.PSYCHE_LOCALE ?? "en") as Locale;
 const PERSIST = process.env.PSYCHE_PERSIST !== "false";
-const WORKSPACE = process.env.PSYCHE_WORKSPACE ?? process.cwd();
+const SIGIL_ID = process.env.PSYCHE_SIGIL_ID ?? undefined;
+const BASE_WORKSPACE = process.env.PSYCHE_WORKSPACE ?? process.cwd();
 const INTENSITY = process.env.PSYCHE_INTENSITY
   ? Number(process.env.PSYCHE_INTENSITY)
   : 0.7;
@@ -62,6 +63,7 @@ function parseCLIArgs(): Partial<PsycheEngineConfig> {
     else if (arg === "--mode" && next) { overrides.mode = next as PsycheMode; i++; }
     else if (arg === "--locale" && next) { overrides.locale = next as Locale; i++; }
     else if (arg === "--intensity" && next) { overrides.personalityIntensity = Number(next); i++; }
+    else if (arg === "--sigil-id" && next) { overrides.sigilId = next; i++; }
     else if (arg === "--no-persist") { overrides.persist = false; }
   }
   return overrides;
@@ -75,11 +77,13 @@ async function getEngine(): Promise<PsycheEngine> {
   if (engine) return engine;
 
   const cliArgs = parseCLIArgs();
+  const sigilId = cliArgs.sigilId ?? SIGIL_ID;
   const cfg: PsycheEngineConfig = {
     mbti: cliArgs.mbti ?? MBTI,
     name: cliArgs.name ?? NAME,
     mode: cliArgs.mode ?? MODE,
     locale: cliArgs.locale ?? LOCALE,
+    sigilId,
     personalityIntensity: cliArgs.personalityIntensity ?? INTENSITY,
     persist: cliArgs.persist ?? PERSIST,
     compactMode: true,
@@ -87,8 +91,10 @@ async function getEngine(): Promise<PsycheEngine> {
   };
 
   const persist = cfg.persist !== false;
+  // Per-Sigil workspace isolation: each Sigil gets its own state directory
+  const workspace = sigilId ? `${BASE_WORKSPACE}/${sigilId}` : BASE_WORKSPACE;
   const storage = persist
-    ? new FileStorageAdapter(WORKSPACE)
+    ? new FileStorageAdapter(workspace)
     : new MemoryStorageAdapter();
 
   engine = new PsycheEngine(cfg, storage);
@@ -100,7 +106,7 @@ async function getEngine(): Promise<PsycheEngine> {
 
 const server = new McpServer({
   name: "psyche",
-  version: "9.2.3",
+  version: "11.4.0",
 }, {
   capabilities: {
     resources: {},

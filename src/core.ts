@@ -54,6 +54,8 @@ export interface PsycheEngineConfig {
   mbti?: MBTIType;
   name?: string;
   locale?: Locale;
+  /** Sigil ID — which Loop this Psyche instance serves. When set, state persists per-Sigil. */
+  sigilId?: string;
   stripUpdateTags?: boolean;
   emotionalContagionRate?: number;
   maxDimensionDelta?: number;
@@ -267,6 +269,7 @@ export class PsycheEngine {
     mbti: MBTIType;
     name: string;
     locale: Locale;
+    sigilId?: string;
     stripUpdateTags: boolean;
     emotionalContagionRate: number;
     maxDimensionDelta: number;
@@ -301,6 +304,7 @@ export class PsycheEngine {
       mbti: config.mbti ?? "INFJ",
       name: config.name ?? "agent",
       locale: config.locale ?? "zh",
+      sigilId: config.sigilId,
       stripUpdateTags: config.stripUpdateTags ?? true,
       emotionalContagionRate: config.emotionalContagionRate ?? 0.2,
       maxDimensionDelta: config.maxDimensionDelta ?? 25,
@@ -379,6 +383,10 @@ export class PsycheEngine {
       }
       if (!loaded.lastWritebackFeedback) {
         loaded.lastWritebackFeedback = [];
+      }
+      // Update sigilId if config provides one (Sigil may be assigned after first run)
+      if (this.cfg.sigilId && loaded.meta.sigilId !== this.cfg.sigilId) {
+        loaded.meta = { ...loaded.meta, sigilId: this.cfg.sigilId };
       }
       this.state = loaded;
     } else {
@@ -1132,6 +1140,7 @@ export class PsycheEngine {
         totalInteractions: 0,
         locale,
         mode: this.cfg.mode,
+        ...(this.cfg.sigilId ? { sigilId: this.cfg.sigilId } : {}),
       },
     };
   }
@@ -1202,6 +1211,7 @@ export class PsycheEngine {
       ? ` | \u26A0\uFE0F${hungryDrives.join(",")}`
       : "";
 
-    return `${emoji} ${emotion} | flow:${Math.round(flow)} order:${Math.round(order)}${driveWarning}`;
+    const sigilTag = state.meta.sigilId ? ` | sigil:${state.meta.sigilId}` : "";
+    return `${emoji} ${emotion} | flow:${Math.round(flow)} order:${Math.round(order)}${driveWarning}${sigilTag}`;
   }
 }
