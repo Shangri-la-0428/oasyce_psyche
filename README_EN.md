@@ -7,7 +7,7 @@ It compresses continuous appraisal, relation dynamics, adaptive reply loops, and
 **One sentence:** Psyche is a subjectivity kernel for agents.
 
 [![npm](https://img.shields.io/npm/v/psyche-ai)](https://www.npmjs.com/package/psyche-ai)
-[![tests](https://img.shields.io/badge/tests-1427%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-1433%20passing-brightgreen)]()
 [![deps](https://img.shields.io/badge/dependencies-0-blue)]()
 [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
@@ -553,7 +553,7 @@ git clone https://github.com/Shangri-la-0428/oasyce_psyche.git
 cd oasyce_psyche
 npm install
 npm run build
-npm test                        # 1427 tests
+npm test                        # 1433 tests
 npm run typecheck               # strict mode
 ```
 

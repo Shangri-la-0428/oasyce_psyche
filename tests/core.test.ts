@@ -1399,4 +1399,68 @@ describe("pluggable classifier in PsycheEngine", () => {
     const result = await engine.processInput("hello");
     assert.ok(result.dynamicContext.length > 0);
   });
+
+  // ── Sigil ID integration ──────────────────────────────────
+
+  it("stores sigilId in state.meta when configured", async () => {
+    const storage = new MemoryStorageAdapter();
+    const engine = new PsycheEngine({
+      mbti: "ENFP",
+      sigilId: "sigil-abc-123",
+    }, storage);
+    await engine.initialize();
+
+    const state = engine.getState();
+    assert.equal(state.meta.sigilId, "sigil-abc-123");
+  });
+
+  it("sigilId appears in status summary", async () => {
+    const storage = new MemoryStorageAdapter();
+    const engine = new PsycheEngine({
+      mbti: "ENFP",
+      sigilId: "sigil-xyz",
+    }, storage);
+    await engine.initialize();
+
+    const summary = engine.getStatusSummary();
+    assert.ok(summary.includes("sigil:sigil-xyz"), `Expected summary to contain sigil ID, got: ${summary}`);
+  });
+
+  it("status summary omits sigil tag when no sigilId", async () => {
+    const storage = new MemoryStorageAdapter();
+    const engine = new PsycheEngine({ mbti: "ENFP" }, storage);
+    await engine.initialize();
+
+    const summary = engine.getStatusSummary();
+    assert.ok(!summary.includes("sigil:"), `Expected no sigil tag, got: ${summary}`);
+  });
+
+  it("updates sigilId in loaded state when config changes", async () => {
+    const storage = new MemoryStorageAdapter();
+    // First run: no sigilId
+    const engine1 = new PsycheEngine({ mbti: "ENFP" }, storage);
+    await engine1.initialize();
+    await engine1.processInput("hello");
+
+    // Second run: sigilId assigned
+    const engine2 = new PsycheEngine({ mbti: "ENFP", sigilId: "sigil-new" }, storage);
+    await engine2.initialize();
+
+    const state = engine2.getState();
+    assert.equal(state.meta.sigilId, "sigil-new");
+  });
+
+  it("preserves sigilId across save/load cycle", async () => {
+    const storage = new MemoryStorageAdapter();
+    const engine1 = new PsycheEngine({ mbti: "ENFP", sigilId: "sigil-persist" }, storage);
+    await engine1.initialize();
+    await engine1.processInput("hello");
+
+    // New engine, same storage, same sigilId
+    const engine2 = new PsycheEngine({ mbti: "ENFP", sigilId: "sigil-persist" }, storage);
+    await engine2.initialize();
+
+    const state = engine2.getState();
+    assert.equal(state.meta.sigilId, "sigil-persist");
+  });
 });
