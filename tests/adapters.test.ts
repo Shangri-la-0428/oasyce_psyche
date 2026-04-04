@@ -390,6 +390,23 @@ describe("createPsycheServer (HTTP)", () => {
     assert.equal(status, 200);
     assert.ok(data.dynamicContext);
   });
+
+  it("POST /process-input accepts runtime ambient priors without persisting them", async () => {
+    const summary = "similar contexts have succeeded before; reuse the proven path first";
+    const withPrior = await req("POST", "/process-input", {
+      text: "login endpoint 500, where do I start?",
+      ambientPriors: [{ summary, confidence: 0.82, provider: "thronglets" }],
+    });
+    assert.equal(withPrior.status, 200);
+    assert.equal(withPrior.data.ambientPriors.length, 1);
+    assert.ok(withPrior.data.ambientPriorContext.includes(summary), `got ${withPrior.data.ambientPriorContext}`);
+    assert.ok(withPrior.data.observability.outputAttribution.renderInputs.includes("ambient-prior"));
+
+    const next = await req("POST", "/process-input", { text: "continue" });
+    assert.equal(next.status, 200);
+    assert.equal(next.data.ambientPriorContext, null);
+    assert.ok(!next.data.dynamicContext.includes(summary), `got ${next.data.dynamicContext}`);
+  });
 });
 
 // ── OpenClaw Adapter ─────────────────────────────────

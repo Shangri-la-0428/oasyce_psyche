@@ -175,6 +175,29 @@ describe("PsycheEngine", () => {
     assert.ok(result.observability?.outputAttribution.runtimeHooks.includes("reply-envelope"));
   });
 
+  it("consumes ambient priors at runtime without persisting them as self-state", async () => {
+    const summary = "similar infra tasks have been successfully crossed before; reuse the verified path first";
+    const result = await engine.processInput("登录接口 500，先查哪里。", {
+      ambientPriors: [{
+        summary,
+        confidence: 0.86,
+        provider: "thronglets",
+        refs: ["space:infra", "trace:deploy-ok"],
+      }],
+    });
+
+    assert.equal(result.ambientPriors?.length, 1);
+    assert.ok(result.ambientPriorContext?.includes(summary), `got ${result.ambientPriorContext}`);
+    assert.ok(result.dynamicContext.includes("环境先验"), `got ${result.dynamicContext}`);
+    assert.ok(result.dynamicContext.includes(summary), `got ${result.dynamicContext}`);
+    assert.ok(result.observability?.outputAttribution.renderInputs.includes("ambient-prior"));
+    assert.equal("ambientPriorContext" in (engine.getState() as unknown as Record<string, unknown>), false);
+
+    const next = await engine.processInput("继续。");
+    assert.ok(!(next.ambientPriorContext ?? "").includes(summary), `got ${next.ambientPriorContext}`);
+    assert.ok(!next.dynamicContext.includes(summary), `got ${next.dynamicContext}`);
+  });
+
   it("processInput updates relationship gradually based on stimulus valence", async () => {
     const before = { ...engine.getState().relationships._default };
 

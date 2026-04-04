@@ -12,14 +12,14 @@
 // Orchestrates: self-state, appraisal, prompt, profiles, guards, learning
 // ============================================================
 
-import type { PsycheState, StimulusType, Locale, MBTIType, SelfState, OutcomeScore, PsycheMode, PersonalityTraits, PolicyModifiers, ClassifierProvider, SubjectivityKernel, ResponseContract, GenerationControls, SessionBridgeState, ThrongletsExport, TurnObservability, WritebackCalibrationFeedback, WritebackSignalType, ExternalContinuityEnvelope, AppraisalAxes } from "./types.js";
+import type { AmbientPriorView, PsycheState, StimulusType, Locale, MBTIType, SelfState, OutcomeScore, PsycheMode, PersonalityTraits, PolicyModifiers, ClassifierProvider, SubjectivityKernel, ResponseContract, GenerationControls, SessionBridgeState, ThrongletsExport, TurnObservability, WritebackCalibrationFeedback, WritebackSignalType, ExternalContinuityEnvelope, AppraisalAxes } from "./types.js";
 import { DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE, DEFAULT_ENERGY_BUDGETS, DEFAULT_TRAIT_DRIFT, DEFAULT_SUBJECT_RESIDUE, DEFAULT_DYADIC_FIELD, MODE_PROFILES } from "./types.js";
 import type { StorageAdapter } from "./storage.js";
 import { MemoryStorageAdapter } from "./storage.js";
 import { applyDecay, applyStimulus, applyContagion, clamp, describeEmotionalState } from "./chemistry.js";
 import { classifyLegacyStimulus, BuiltInClassifier, buildLLMClassifierPrompt, parseLLMClassification } from "./classify.js";
 import { perceive } from "./perceive.js";
-import { buildCompactContext, buildProtocolContext } from "./prompt.js";
+import { buildAmbientPriorContext, buildCompactContext, buildProtocolContext } from "./prompt.js";
 import type { PromptRenderInputs } from "./prompt.js";
 import { getSensitivity, getBaseline, getDefaultSelfModel, traitsToBaseline } from "./profiles.js";
 import { isStimulusType } from "./guards.js";
@@ -88,6 +88,10 @@ export interface ProcessInputResult {
   systemContext: string;
   /** Per-turn emotional state context */
   dynamicContext: string;
+  /** Runtime-only environmental priors consumed this turn */
+  ambientPriors?: AmbientPriorView[];
+  /** Rendered environmental prior context injected into the turn, if any */
+  ambientPriorContext?: string;
   /** Canonical host-facing subjective appraisal for this turn, null if no appraisal fired */
   appraisal: AppraisalAxes | null;
   /** Optional legacy stimulus hint preserved for compatibility only */
@@ -134,6 +138,11 @@ export interface ProcessInputResult {
   policyContext: string;
 }
 
+export interface ProcessInputOptions {
+  userId?: string;
+  ambientPriors?: AmbientPriorView[];
+}
+
 export interface ProcessOutputResult {
   /** LLM output with <psyche_update> tags stripped */
   cleanedText: string;
@@ -160,6 +169,19 @@ interface PendingPrediction {
   preInteractionState: PsycheState;
   appliedStimulus: StimulusType | null;
   contextHash: string;
+}
+
+function sanitizeAmbientPriors(priors?: AmbientPriorView[]): AmbientPriorView[] {
+  return (priors ?? [])
+    .map((prior) => ({
+      summary: prior.summary.trim().replace(/\s+/g, " "),
+      confidence: Math.max(0, Math.min(1, prior.confidence)),
+      provider: prior.provider?.trim() || undefined,
+      refs: prior.refs?.filter((ref) => typeof ref === "string" && ref.trim().length > 0),
+    }))
+    .filter((prior) => prior.summary.length > 0)
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 5);
 }
 
 function formatWritebackFeedbackNote(
@@ -411,7 +433,7 @@ export class PsycheEngine {
    * Computes appraisal, preserves an optional legacy compatibility hint,
    * applies chemistry, and builds context for LLM injection.
    */
-  async processInput(text: string, opts?: { userId?: string }): Promise<ProcessInputResult> {
+  async processInput(text: string, opts?: ProcessInputOptions): Promise<ProcessInputResult> {
     let state = this.ensureInitialized();
     let sessionBridge: SessionBridgeState | null = null;
     let writebackFeedback: WritebackCalibrationFeedback[] = [];
@@ -691,6 +713,8 @@ export class PsycheEngine {
     }
 
     const writebackNote = formatWritebackFeedbackNote(writebackFeedback, locale);
+    const ambientPriors = sanitizeAmbientPriors(opts?.ambientPriors);
+    const ambientPriorContext = buildAmbientPriorContext(ambientPriors, locale);
     const reflectiveTurn = runReflectiveTurnPhases({
       state,
       appraisalAxes,
@@ -731,6 +755,8 @@ export class PsycheEngine {
     const promptRenderInputs: PromptRenderInputs = {
       userText: text || undefined,
       legacyStimulus: appliedStimulus,
+      ambientPriors,
+      ambientPriorContext: ambientPriorContext || undefined,
       personalityIntensity: this.cfg.personalityIntensity,
       metacognitiveNote: reflectiveTurn.metacognitiveNote,
       decisionContext: reflectiveTurn.decisionContext,
@@ -762,6 +788,8 @@ export class PsycheEngine {
     return {
       systemContext: "",
       dynamicContext: buildCompactContext(state, opts?.userId, promptRenderInputs),
+      ambientPriors,
+      ambientPriorContext: ambientPriorContext || undefined,
       appraisal: appraisalAxes,
       legacyStimulus: appliedStimulus,
       stimulus: appliedStimulus,

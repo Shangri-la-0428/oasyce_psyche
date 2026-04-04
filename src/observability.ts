@@ -419,6 +419,7 @@ function buildTraceMapping(
 function listRenderInputs(inputs: PromptRenderInputs): PromptRenderInputName[] {
   const names: PromptRenderInputName[] = [];
   if (inputs.userText) names.push("sensing");
+  if (inputs.ambientPriorContext) names.push("ambient-prior");
   if (inputs.subjectivityContext) names.push("subjectivity");
   if (inputs.responseContractContext) names.push("response-contract");
   if (inputs.metacognitiveNote) names.push("metacognition");

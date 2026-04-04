@@ -7,7 +7,7 @@
 //   const server = createPsycheServer(engine, { port: 3210 });
 //
 // Endpoints:
-//   POST /process-input  { text, userId? }  → { systemContext, dynamicContext, appraisal, legacyStimulus, stimulus, replyEnvelope?, ...compat aliases, sessionBridge?, writebackFeedback?, externalContinuity?, throngletsExports?, policyContext }
+//   POST /process-input  { text, userId?, ambientPriors? }  → { systemContext, dynamicContext, ambientPriors?, ambientPriorContext?, appraisal, legacyStimulus, stimulus, replyEnvelope?, ...compat aliases, sessionBridge?, writebackFeedback?, externalContinuity?, throngletsExports?, policyContext }
 //   POST /process-output { text, userId?, signals?, signalConfidence? }  → { cleanedText, stateChanged }
 //   GET  /state                             → PsycheState + overlay
 //   GET  /overlay                           → PsycheOverlay (arousal/valence/agency/vulnerability)
@@ -18,7 +18,7 @@
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import type { PsycheEngine } from "../core.js";
-import type { WritebackSignalType } from "../types.js";
+import type { AmbientPriorView, WritebackSignalType } from "../types.js";
 import { computeOverlay } from "../overlay.js";
 
 // ── Types ────────────────────────────────────────────────────
@@ -47,6 +47,24 @@ function parseSignals(value: unknown): WritebackSignalType[] | undefined {
     typeof item === "string" && VALID_WRITEBACK_SIGNALS.has(item as WritebackSignalType)
   ));
   return parsed.length > 0 ? [...new Set(parsed)] : undefined;
+}
+
+function parseAmbientPriors(value: unknown): AmbientPriorView[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const parsed = value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const candidate = item as Record<string, unknown>;
+    if (typeof candidate.summary !== "string" || typeof candidate.confidence !== "number") return [];
+    return [{
+      summary: candidate.summary,
+      confidence: candidate.confidence,
+      provider: typeof candidate.provider === "string" ? candidate.provider : undefined,
+      refs: Array.isArray(candidate.refs)
+        ? candidate.refs.filter((ref): ref is string => typeof ref === "string")
+        : undefined,
+    }];
+  });
+  return parsed.length > 0 ? parsed : undefined;
 }
 
 // ── Server ───────────────────────────────────────────────────
@@ -112,11 +130,16 @@ export function createPsycheServer(engine: PsycheEngine, opts?: HttpAdapterOptio
         const body = await readBody(req);
         const result = await engine.processInput(
           (body.text as string) ?? "",
-          { userId: body.userId as string | undefined },
+          {
+            userId: body.userId as string | undefined,
+            ambientPriors: parseAmbientPriors(body.ambientPriors),
+          },
         );
         json(res, 200, {
           systemContext: result.systemContext,
           dynamicContext: result.dynamicContext,
+          ambientPriors: result.ambientPriors ?? [],
+          ambientPriorContext: result.ambientPriorContext ?? null,
           appraisal: result.appraisal,
           legacyStimulus: result.legacyStimulus,
           stimulus: result.stimulus,

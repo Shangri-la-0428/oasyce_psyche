@@ -3,7 +3,7 @@
 // Imperative protocol, behavior guides, i18n
 // ============================================================
 
-import type { PsycheState, SelfModel, Locale, SelfState, StateSnapshot, StimulusType, PsycheMode } from "./types.js";
+import type { AmbientPriorView, PsycheState, SelfModel, Locale, SelfState, StateSnapshot, StimulusType, PsycheMode } from "./types.js";
 import { DIMENSION_KEYS, DIMENSION_NAMES_ZH, DRIVE_KEYS, MODE_PROFILES } from "./types.js";
 import { getExpressionHint, getBehaviorGuide, detectEmotions } from "./chemistry.js";
 import { getRelationship } from "./psyche-file.js";
@@ -23,6 +23,8 @@ import {
 export interface PromptRenderInputs {
   userText?: string;
   legacyStimulus?: string | null;
+  ambientPriors?: AmbientPriorView[];
+  ambientPriorContext?: string;
   personalityIntensity?: number;
   channelType?: ChannelType;
   metacognitiveNote?: string;
@@ -38,6 +40,46 @@ export interface PromptRenderInputs {
   policyContext?: string;
   /** Session bridge from applySessionBridge — makes first-turn continuity visible in prompt */
   sessionBridge?: import("./types.js").SessionBridgeState | null;
+}
+
+export function buildAmbientPriorContext(
+  priors: AmbientPriorView[] | undefined,
+  locale: Locale,
+): string {
+  const normalized = (priors ?? [])
+    .map((prior) => ({
+      summary: prior.summary.trim().replace(/\s+/g, " "),
+      confidence: Math.max(0, Math.min(1, prior.confidence)),
+      provider: prior.provider?.trim(),
+    }))
+    .filter((prior) => prior.summary.length > 0)
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 3);
+
+  if (normalized.length === 0) return "";
+
+  const confidenceLabel = (confidence: number): string => {
+    if (locale === "zh") {
+      if (confidence >= 0.8) return "高可信";
+      if (confidence >= 0.55) return "中可信";
+      return "低可信";
+    }
+    if (confidence >= 0.8) return "high confidence";
+    if (confidence >= 0.55) return "medium confidence";
+    return "low confidence";
+  };
+
+  const title = locale === "zh" ? "环境先验" : "Ambient Prior";
+  const lines = normalized.map((prior) => {
+    const source = prior.provider
+      ? locale === "zh"
+        ? `${prior.provider}: `
+        : `${prior.provider}: `
+      : "";
+    return `- ${source}${prior.summary} (${confidenceLabel(prior.confidence)})`;
+  });
+
+  return `[${title}]\n${lines.join("\n")}`;
 }
 
 function pushLabeledSection(
@@ -1049,6 +1091,9 @@ export function buildCompactContext(
         ? `[${meta.agentName}: 工作模式，专注任务，简洁专业]`
         : `[${meta.agentName}: work mode, task-focused, concise and professional]`);
     }
+    if (opts?.ambientPriorContext) {
+      workParts.push(opts.ambientPriorContext);
+    }
     if (hasCriticalDrive(state.drives)) {
       const driveCtx = buildDriveContext(state.drives, locale);
       if (driveCtx) workParts.push(driveCtx);
@@ -1063,7 +1108,7 @@ export function buildCompactContext(
 
   // ── 2. Neutral one-liner: early exit ──
   const bridge = opts?.sessionBridge;
-  if (isNearBaseline(state) && state.agreementStreak < 3 && !userText && meta.totalInteractions > 1) {
+  if (isNearBaseline(state) && state.agreementStreak < 3 && !userText && meta.totalInteractions > 1 && !opts?.ambientPriorContext) {
     if (bridge) {
       return buildContinuityOneLiner(bridge.continuityMode, meta.agentName, locale);
     }
@@ -1080,7 +1125,12 @@ export function buildCompactContext(
     parts.push(buildContinuitySection(bridge.continuityMode, locale));
   }
 
-  // ── 4. Inner state ──
+  // ── 4.5. Ambient priors ──
+  if (opts?.ambientPriorContext) {
+    parts.push(opts.ambientPriorContext);
+  }
+
+  // ── 5. Inner state ──
   // subjectivityContext (engine v9 path) always wins when provided.
   // First-meet is the default inner state for interaction 1 without engine.
   // deriveBehavioralBias is the default for interactions > 1 without engine.
@@ -1100,7 +1150,7 @@ export function buildCompactContext(
     if (bias) parts.push(bias);
   }
 
-  // ── 5. Sensing ──
+  // ── 6. Sensing ──
   // v10.1: When SubjectivityKernel + ResponseContract are present (engine path),
   // sensing is redundant — the kernel already encodes the *consequence* of the
   // stimulus (pressure, warmth, boundary state). "你终判" is misleading because
@@ -1125,13 +1175,13 @@ export function buildCompactContext(
     }
   }
 
-  // ── 6. Personality-aware constraints (only when chemistry deviated) ──
+  // ── 7. Personality-aware constraints (only when chemistry deviated) ──
   if (!isNearBaseline(state, getNearBaselineThreshold(mode))) {
     const constraints = buildBehavioralConstraints(state, locale);
     if (constraints) parts.push(constraints);
   }
 
-  // ── 7. Memory + unified behavior ──
+  // ── 8. Memory + unified behavior ──
   const rel = getRelationship(state, userId);
   if (rel.memory && rel.memory.length > 0) {
     const recentMemories = rel.memory.slice(-3);
@@ -1154,7 +1204,7 @@ export function buildCompactContext(
     if (unified) parts.push(unified);
   }
 
-  // ── 8. Overlay + channel + writeback ──
+  // ── 9. Overlay + channel + writeback ──
   appendCompactOverlaySections(parts, locale, opts);
 
   if (opts?.channelType) {

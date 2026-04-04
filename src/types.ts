@@ -871,6 +871,20 @@ export interface SessionBridgeState {
   sourceMemoryCount: number;
 }
 
+/**
+ * AmbientPriorView — runtime-only environmental prior.
+ *
+ * This is a view projected into the current turn, not persistent self-state.
+ * It lets hosts surface sparse, task-conditioned priors without turning Psyche
+ * into an operations memory store.
+ */
+export interface AmbientPriorView {
+  summary: string;
+  confidence: number; // 0-1
+  provider?: string;
+  refs?: string[];
+}
+
 // ── Sparse Psyche → Thronglets Export ABI (v9.2.8) ─────────
 
 export type ThrongletsExportSubject = "delegate" | "session";
@@ -1108,6 +1122,7 @@ export interface StateLayerObservation {
 
 export type PromptRenderInputName =
   | "sensing"
+  | "ambient-prior"
   | "subjectivity"
   | "response-contract"
   | "metacognition"

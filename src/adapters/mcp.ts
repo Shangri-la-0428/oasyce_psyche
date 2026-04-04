@@ -35,7 +35,7 @@ import { z } from "zod";
 import { PsycheEngine } from "../core.js";
 import type { PsycheEngineConfig, ProcessInputResult } from "../core.js";
 import { MemoryStorageAdapter, FileStorageAdapter, resolveWorkspaceDir } from "../storage.js";
-import type { MBTIType, Locale, PsycheMode } from "../types.js";
+import type { AmbientPriorView, MBTIType, Locale, PsycheMode } from "../types.js";
 import { runDemo } from "../demo.js";
 
 const require = createRequire(import.meta.url);
@@ -176,7 +176,7 @@ server.tool(
   "process_input",
   "Process user input through the emotional engine. Returns emotional " +
   "context to inject into the LLM system prompt (systemContext + dynamicContext), " +
-  "an appraisal-first semantic reading, an optional legacy stimulus hint, a canonical replyEnvelope, compatibility aliases " +
+  "an appraisal-first semantic reading, optional runtime ambient priors, an optional legacy stimulus hint, a canonical replyEnvelope, compatibility aliases " +
   "(policyModifiers + subjectivityKernel + responseContract + generationControls), an optional " +
   "externalContinuity envelope, and sparse low-frequency throngletsExports " +
   "suitable for additive external continuity layers. " +
@@ -184,16 +184,24 @@ server.tool(
   {
     text: z.string().describe("The user's message text"),
     userId: z.string().optional().describe("Optional user ID for multi-user relationship tracking"),
+    ambientPriors: z.array(z.object({
+      summary: z.string(),
+      confidence: z.number().min(0).max(1),
+      provider: z.string().optional(),
+      refs: z.array(z.string()).optional(),
+    })).optional().describe("Optional runtime ambient priors from the environment; consumed this turn only, not persisted as self-state"),
   },
-  async ({ text, userId }: { text: string; userId?: string }) => {
+  async ({ text, userId, ambientPriors }: { text: string; userId?: string; ambientPriors?: AmbientPriorView[] }) => {
     const eng = await getEngine();
-    const result: ProcessInputResult = await eng.processInput(text, { userId });
+    const result: ProcessInputResult = await eng.processInput(text, { userId, ambientPriors });
     return {
       content: [{
         type: "text" as const,
         text: JSON.stringify({
           systemContext: result.systemContext,
           dynamicContext: result.dynamicContext,
+          ambientPriors: result.ambientPriors ?? [],
+          ambientPriorContext: result.ambientPriorContext ?? null,
           appraisal: result.appraisal,
           legacyStimulus: result.legacyStimulus,
           stimulus: result.stimulus,
