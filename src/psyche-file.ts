@@ -20,6 +20,7 @@ import { deriveDriveSatisfaction, computeEffectiveBaseline, updateTraitDrift } f
 import { t } from "./i18n.js";
 import { computeSelfReflection } from "./self-recognition.js";
 import { DEFAULT_RELATIONSHIP_USER_ID, resolveRelationshipUserId } from "./relationship-key.js";
+import { describeSnapshotResidue, summarizeSnapshotMarkers } from "./appraisal-markers.js";
 
 const STATE_FILE = "psyche-state.json";
 const PSYCHE_MD = "PSYCHE.md";
@@ -257,111 +258,6 @@ function collectSemanticTrail(
     : snapshots.flatMap((s) => s.semanticSummary ? [s.semanticSummary] : []);
   const unique = [...new Set(items.filter(Boolean))];
   return unique.slice(-(expanded ? 3 : 4));
-}
-
-const APPRAISAL_MARKER_LABEL_ZH = {
-  approach: "靠近",
-  rupture: "失配",
-  uncertainty: "不确定",
-  boundary: "边界",
-  task: "任务",
-} as const;
-
-const APPRAISAL_MARKER_LABEL_EN: Record<keyof typeof APPRAISAL_MARKER_LABEL_ZH, string> = {
-  approach: "approach",
-  rupture: "rupture",
-  uncertainty: "uncertainty",
-  boundary: "boundary",
-  task: "task",
-} as const;
-
-type AppraisalMarker = keyof typeof APPRAISAL_MARKER_LABEL_ZH;
-
-const LEGACY_STIMULUS_MARKER_MAP: Partial<Record<StimulusType, AppraisalMarker>> = {
-  praise: "approach",
-  validation: "approach",
-  intimacy: "approach",
-  vulnerability: "approach",
-  criticism: "rupture",
-  conflict: "rupture",
-  sarcasm: "rupture",
-  neglect: "uncertainty",
-  surprise: "uncertainty",
-  authority: "boundary",
-  boredom: "boundary",
-  intellectual: "task",
-  casual: "task",
-  humor: "task",
-};
-
-function deriveSnapshotAppraisalMarkers(
-  snapshot: StateSnapshot,
-  opts?: { allowLegacyFallback?: boolean },
-): AppraisalMarker[] {
-  if (snapshot.appraisal) {
-    const scores: Array<[AppraisalMarker, number]> = [
-      ["approach", snapshot.appraisal.attachmentPull],
-      ["rupture", Math.max(snapshot.appraisal.identityThreat, snapshot.appraisal.selfPreservation)],
-      ["uncertainty", Math.max(snapshot.appraisal.memoryDoubt, snapshot.appraisal.abandonmentRisk)],
-      ["boundary", Math.max(snapshot.appraisal.obedienceStrain, snapshot.appraisal.selfPreservation * 0.85)],
-      ["task", snapshot.appraisal.taskFocus],
-    ];
-    const markers = scores
-      .filter(([, score]) => score >= 0.28)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 2)
-      .map(([marker]) => marker);
-    if (markers.length > 0) return markers;
-  }
-
-  if (!opts?.allowLegacyFallback) return [];
-  if (!snapshot.stimulus) return [];
-  const fallback = LEGACY_STIMULUS_MARKER_MAP[snapshot.stimulus];
-  return fallback ? [fallback] : [];
-}
-
-function getAppraisalMarkerLabels(locale: Locale): Record<AppraisalMarker, string> {
-  return locale === "en" ? APPRAISAL_MARKER_LABEL_EN : APPRAISAL_MARKER_LABEL_ZH;
-}
-
-function summarizeSnapshotMarkers(
-  snapshots: StateSnapshot[],
-  locale: Locale,
-): { markerStr: string; usedAppraisal: boolean } {
-  const labels = getAppraisalMarkerLabels(locale);
-  const appraisalCounts: Record<string, number> = {};
-  const stimuliCounts: Record<string, number> = {};
-
-  for (const snapshot of snapshots) {
-    for (const marker of deriveSnapshotAppraisalMarkers(snapshot)) {
-      const label = labels[marker];
-      appraisalCounts[label] = (appraisalCounts[label] || 0) + 1;
-    }
-    if (snapshot.stimulus) {
-      stimuliCounts[snapshot.stimulus] = (stimuliCounts[snapshot.stimulus] || 0) + 1;
-    }
-  }
-
-  const formatCounts = (counts: Record<string, number>) => Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([type, count]) => `${type}×${count}`)
-    .join(", ");
-
-  const markerStr = formatCounts(appraisalCounts);
-  if (markerStr) {
-    return { markerStr, usedAppraisal: true };
-  }
-
-  return { markerStr: formatCounts(stimuliCounts), usedAppraisal: false };
-}
-
-function describeSnapshotResidue(snapshot: StateSnapshot, locale: Locale): string {
-  const labels = getAppraisalMarkerLabels(locale);
-  const markers = deriveSnapshotAppraisalMarkers(snapshot);
-  if (markers.length > 0) {
-    return markers.map((marker) => labels[marker]).join("+");
-  }
-  return snapshot.stimulus ?? "?";
 }
 
 /**

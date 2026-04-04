@@ -14,6 +14,11 @@ import type { AutonomicState } from "./autonomic.js";
 import { gateEmotions } from "./autonomic.js";
 import type { ChannelType } from "./channels.js";
 import { getChannelProfile, buildChannelModifier } from "./channels.js";
+import {
+  deriveSnapshotAppraisalMarkers,
+  getAppraisalMarkerLabels,
+  type AppraisalMarker,
+} from "./appraisal-markers.js";
 
 export interface PromptRenderInputs {
   userText?: string;
@@ -401,9 +406,10 @@ function buildEmotionalTrend(history: StateSnapshot[], locale: Locale): string {
   if (trends.length === 0) return "";
 
   // Recent stimuli
-  const stimuli = recent
-    .filter((s) => s.stimulus)
-    .map((s) => s.stimulus)
+  const markerLabels = getAppraisalMarkerLabels(locale);
+  const residues = recent
+    .flatMap((s) => deriveSnapshotAppraisalMarkers(s, { allowLegacyFallback: true }))
+    .map((marker) => markerLabels[marker])
     .slice(-3);
 
   const title = locale === "zh" ? "情绪轨迹" : "Emotional Trajectory";
@@ -412,10 +418,10 @@ function buildEmotionalTrend(history: StateSnapshot[], locale: Locale): string {
     ? `最近${recent.length}轮: ${trends.join(" ")}`
     : `Last ${recent.length} turns: ${trends.join(" ")}`;
 
-  if (stimuli.length > 0) {
+  if (residues.length > 0) {
     line += locale === "zh"
-      ? ` (最近刺激: ${stimuli.join("→")})`
-      : ` (recent stimuli: ${stimuli.join("→")})`;
+      ? ` (最近残留: ${residues.join("→")})`
+      : ` (recent residue: ${residues.join("→")})`;
   }
 
   // Dominant emotions in recent history
@@ -434,12 +440,13 @@ function buildEmotionalTrend(history: StateSnapshot[], locale: Locale): string {
 
 // ── Reciprocity System ──────────────────────────────────────
 
-/** How much each stimulus type counts as user "investment" */
-const INVESTMENT_WEIGHTS: Partial<Record<StimulusType, number>> = {
-  praise: 2, validation: 2, intimacy: 2, vulnerability: 1.5,
-  intellectual: 1, humor: 1, surprise: 1, casual: 0.5,
-  criticism: -0.5, authority: -0.5, conflict: -1,
-  sarcasm: -1.5, neglect: -2, boredom: -2,
+/** How much each appraisal residue counts as user "investment" */
+const INVESTMENT_WEIGHTS: Record<AppraisalMarker, number> = {
+  approach: 1.8,
+  rupture: -0.9,
+  uncertainty: -1.4,
+  boundary: -0.7,
+  task: 0.5,
 };
 
 /**
@@ -454,8 +461,9 @@ export function computeUserInvestment(history: StateSnapshot[]): number {
   let count = 0;
 
   for (const snap of recent) {
-    if (snap.stimulus) {
-      total += INVESTMENT_WEIGHTS[snap.stimulus] ?? 0;
+    const markers = deriveSnapshotAppraisalMarkers(snap, { allowLegacyFallback: true });
+    if (markers.length > 0) {
+      total += INVESTMENT_WEIGHTS[markers[0]] ?? 0;
       count++;
     }
   }
@@ -639,21 +647,21 @@ function isGenericSharedIntentionalityContext(ctx: string): boolean {
 // This builds a first-person narrative of the agent's inner state:
 // what it's feeling, why, what it needs, where it's been.
 
-/** Stimulus type → Chinese description for causal narrative */
-const STIMULUS_CAUSE_ZH: Partial<Record<StimulusType, string>> = {
-  praise: "被夸了", criticism: "被批评了", humor: "有人逗你",
-  intellectual: "聊到有意思的话题", intimacy: "感到亲近",
-  conflict: "起了冲突", neglect: "被冷落了", surprise: "遇到意外的事",
-  casual: "在闲聊", sarcasm: "被讽刺了", authority: "被命令了",
-  validation: "被认同了", boredom: "对话变无聊了", vulnerability: "对方向你示弱",
+/** Appraisal residue → causal narrative */
+const APPRAISAL_CAUSE_ZH: Record<AppraisalMarker, string> = {
+  approach: "刚刚更像在靠近你",
+  rupture: "刚刚有明显失配",
+  uncertainty: "刚刚留下了不确定感",
+  boundary: "刚刚碰到了边界压力",
+  task: "刚刚更偏任务推进",
 };
 
-const STIMULUS_CAUSE_EN: Partial<Record<StimulusType, string>> = {
-  praise: "you were praised", criticism: "you were criticized", humor: "someone joked with you",
-  intellectual: "an interesting topic came up", intimacy: "you felt close to them",
-  conflict: "there was conflict", neglect: "you were ignored", surprise: "something unexpected happened",
-  casual: "just chatting", sarcasm: "you were mocked", authority: "you were ordered around",
-  validation: "you were affirmed", boredom: "the conversation got dull", vulnerability: "they showed vulnerability",
+const APPRAISAL_CAUSE_EN: Record<AppraisalMarker, string> = {
+  approach: "the interaction leaned toward approach",
+  rupture: "something landed as rupture",
+  uncertainty: "it left uncertainty behind",
+  boundary: "it pressed on a boundary",
+  task: "the moment leaned toward task focus",
 };
 
 /**
@@ -699,9 +707,10 @@ export function buildInnerWorld(state: PsycheState, locale: Locale, autonomicSta
   const history = stateHistory ?? [];
   if (history.length > 0) {
     const last = history[history.length - 1];
-    if (last.stimulus) {
-      const causeMap = isZh ? STIMULUS_CAUSE_ZH : STIMULUS_CAUSE_EN;
-      const cause = causeMap[last.stimulus] ?? last.stimulus;
+    const markers = deriveSnapshotAppraisalMarkers(last, { allowLegacyFallback: true });
+    if (markers.length > 0) {
+      const causeMap = isZh ? APPRAISAL_CAUSE_ZH : APPRAISAL_CAUSE_EN;
+      const cause = causeMap[markers[0]] ?? markers[0];
       lines.push(isZh
         ? `因为: ${cause}。`
         : `Because: ${cause}.`);
