@@ -30,12 +30,17 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createRequire } from "node:module";
 import { z } from "zod";
 import { PsycheEngine } from "../core.js";
 import type { PsycheEngineConfig, ProcessInputResult } from "../core.js";
 import { MemoryStorageAdapter, FileStorageAdapter } from "../storage.js";
 import type { MBTIType, Locale, PsycheMode } from "../types.js";
 import { runDemo } from "../demo.js";
+
+const require = createRequire(import.meta.url);
+const PACKAGE_VERSION =
+  (require("../../package.json") as { version?: string }).version ?? "0.0.0";
 
 // ── Config from env ────────────────────────────────────────
 
@@ -106,7 +111,7 @@ async function getEngine(): Promise<PsycheEngine> {
 
 const server = new McpServer({
   name: "psyche",
-  version: "11.4.0",
+  version: PACKAGE_VERSION,
 }, {
   capabilities: {
     resources: {},
