@@ -126,7 +126,7 @@ export function runReflectiveTurnPhases(input: {
     : computeExperientialField(state, metacognitiveAssessment ?? undefined, undefined, constructionContext);
   const sharedState = skip.has("shared-intentionality")
     ? null
-    : updateSharedIntentionality(state, input.appliedStimulus, input.userId);
+    : updateSharedIntentionality(state, input.appliedStimulus, input.userId, undefined, input.appraisalAxes);
   const ethicalAssessment = skip.has("ethics")
     ? null
     : assessEthics(state);
