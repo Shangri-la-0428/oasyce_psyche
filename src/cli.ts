@@ -605,15 +605,38 @@ function renderTomlStringArray(values: string[]): string {
   return `[\n${values.map((value) => `  "${escapeTomlString(value)}",`).join("\n")}\n]`;
 }
 
-function renderCodexMcpServer(serverId: string, entry: { command: string; args: string[]; env: Record<string, string> }): string {
+function parseTomlAssignmentKey(line: string): string | null {
+  const match = line.match(/^\s*([A-Za-z0-9_.-]+)\s*=/);
+  return match?.[1] ?? null;
+}
+
+function filterTomlAssignments(lines: string[], blockedKeys: Set<string>): string[] {
+  return lines.filter((line) => {
+    const key = parseTomlAssignmentKey(line);
+    return !key || !blockedKeys.has(key);
+  });
+}
+
+function renderCodexMcpServer(
+  serverId: string,
+  entry: { command: string; args: string[]; env: Record<string, string> },
+  existing?: { serverLines: string[]; envLines: string[] },
+): string {
+  const serverExtras = filterTomlAssignments(existing?.serverLines ?? [], new Set(["command", "args"]));
   const lines = [
     `[mcp_servers.${serverId}]`,
     `command = "${escapeTomlString(entry.command)}"`,
     `args = ${renderTomlStringArray(entry.args)}`,
+    ...serverExtras,
   ];
+  const envExtras = filterTomlAssignments(
+    existing?.envLines ?? [],
+    new Set(Object.keys(entry.env)),
+  );
   const envEntries = Object.entries(entry.env);
-  if (envEntries.length > 0) {
+  if (envEntries.length > 0 || envExtras.length > 0) {
     lines.push("", `[mcp_servers.${serverId}.env]`);
+    lines.push(...envExtras);
     for (const [key, value] of envEntries) {
       lines.push(`${key} = "${escapeTomlString(value)}"`);
     }
@@ -625,22 +648,27 @@ function upsertCodexMcpServer(content: string, serverId: string, entry: { comman
   const normalized = content.replaceAll("\r\n", "\n");
   const lines = normalized === "" ? [] : normalized.split("\n");
   const kept: string[] = [];
+  const existing = { serverLines: [] as string[], envLines: [] as string[] };
 
   for (let i = 0; i < lines.length;) {
     const match = lines[i]?.match(/^\[(.+)\]\s*$/);
     const section = match?.[1];
     if (section === `mcp_servers.${serverId}` || section === `mcp_servers.${serverId}.env`) {
+      let currentSection = section;
       i += 1;
       while (i < lines.length) {
         const nextMatch = lines[i]?.match(/^\[(.+)\]\s*$/);
         const nextSection = nextMatch?.[1];
         if (nextSection) {
           if (nextSection === `mcp_servers.${serverId}` || nextSection === `mcp_servers.${serverId}.env`) {
+            currentSection = nextSection;
             i += 1;
             continue;
           }
           break;
         }
+        const target = currentSection.endsWith(".env") ? existing.envLines : existing.serverLines;
+        target.push(lines[i] ?? "");
         i += 1;
       }
       continue;
@@ -651,7 +679,7 @@ function upsertCodexMcpServer(content: string, serverId: string, entry: { comman
   }
 
   const trimmed = kept.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
-  const block = renderCodexMcpServer(serverId, entry);
+  const block = renderCodexMcpServer(serverId, entry, existing);
   const next = trimmed.length > 0 ? `${trimmed}\n\n${block}\n` : `${block}\n`;
   return { content: next, changed: next !== normalized };
 }

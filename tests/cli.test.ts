@@ -304,4 +304,44 @@ describe("cli setup", () => {
     assert.ok(config.includes('PSYCHE_LOCALE = "en"'));
     await rm(home, { recursive: true, force: true });
   });
+
+  it("preserves existing Codex Psyche MCP options when re-running setup", async () => {
+    const home = await freshDir();
+    const codexDir = join(home, ".codex");
+    await mkdir(codexDir, { recursive: true });
+    const configPath = join(codexDir, "config.toml");
+    await writeFile(
+      configPath,
+      [
+        'approval_policy = "never"',
+        "",
+        "[mcp_servers.psyche]",
+        'command = "old-command"',
+        'cwd = "/tmp/psyche"',
+        'env_vars = ["EXTRA_FLAG"]',
+        "",
+        "[mcp_servers.psyche.env]",
+        'KEEP_ME = "1"',
+        'PSYCHE_LOCALE = "zh"',
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const { stdout, code } = await run(["setup", "--name", "Luna", "--locale", "en"], {
+      HOME: home,
+    });
+
+    assert.equal(code, 0, stdout);
+    const config = await readFile(configPath, "utf-8");
+    assert.ok(config.includes('[mcp_servers.psyche]'));
+    assert.ok(config.includes('command = "npx"'));
+    assert.ok(config.includes('cwd = "/tmp/psyche"'));
+    assert.ok(config.includes('env_vars = ["EXTRA_FLAG"]'));
+    assert.ok(config.includes('[mcp_servers.psyche.env]'));
+    assert.ok(config.includes('KEEP_ME = "1"'));
+    assert.ok(config.includes('PSYCHE_NAME = "Luna"'));
+    assert.ok(config.includes('PSYCHE_LOCALE = "en"'));
+    assert.ok(!config.includes('PSYCHE_LOCALE = "zh"'));
+    await rm(home, { recursive: true, force: true });
+  });
 });
