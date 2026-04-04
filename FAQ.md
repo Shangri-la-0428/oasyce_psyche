@@ -92,9 +92,9 @@ Psyche 负责 agent 的内在状态，Thronglets 负责 agent 之间的共享记
 npx psyche-ai setup
 ```
 
-自动检测本机 Claude Code / Claude Desktop / Cursor / Windsurf，写入配置。不需要知道配置文件在哪。
+自动检测本机 Claude Code / Claude Desktop / Cursor / Windsurf / Codex，写入配置。不需要知道配置文件在哪。
 
-非 MCP 的 agent（Codex、自定义 agent 等）：
+非 MCP 的 agent 或直接 SDK 调用：
 
 ```bash
 npx psyche-ai setup --proxy -t https://api.openai.com/v1

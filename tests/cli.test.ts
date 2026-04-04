@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -10,9 +10,15 @@ const exec = promisify(execFile);
 
 const CLI = join(import.meta.dirname, "..", "..", "dist", "cli.js");
 
-async function run(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
+async function run(
+  args: string[],
+  env?: NodeJS.ProcessEnv,
+): Promise<{ stdout: string; stderr: string; code: number }> {
   try {
-    const { stdout, stderr } = await exec("node", [CLI, ...args], { timeout: 10000 });
+    const { stdout, stderr } = await exec("node", [CLI, ...args], {
+      timeout: 10000,
+      env: env ? { ...process.env, ...env } : process.env,
+    });
     return { stdout, stderr, code: 0 };
   } catch (err: any) {
     return { stdout: err.stdout ?? "", stderr: err.stderr ?? "", code: err.code ?? 1 };
@@ -251,5 +257,51 @@ describe("cli error handling", () => {
   it("reports unknown command", async () => {
     const { stderr, code } = await run(["nonexistent"]);
     assert.ok(code !== 0 || stderr.includes("unknown command"));
+  });
+});
+
+describe("cli setup", () => {
+  it("dry-run mentions Codex when ~/.codex exists", async () => {
+    const home = await freshDir();
+    const codexDir = join(home, ".codex");
+    await mkdir(codexDir, { recursive: true });
+
+    const { stdout } = await run(["setup", "--dry-run"], { HOME: home });
+
+    assert.ok(stdout.includes("Codex"));
+    assert.ok(stdout.includes("would configure"));
+    await rm(home, { recursive: true, force: true });
+  });
+
+  it("writes Codex MCP config in TOML format", async () => {
+    const home = await freshDir();
+    const codexDir = join(home, ".codex");
+    await mkdir(codexDir, { recursive: true });
+    const configPath = join(codexDir, "config.toml");
+    await writeFile(
+      configPath,
+      [
+        'approval_policy = "never"',
+        "",
+        "[mcp_servers.thronglets]",
+        'command = "/tmp/thronglets"',
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const { stdout, code } = await run(["setup", "--name", "Luna", "--locale", "en"], {
+      HOME: home,
+    });
+
+    assert.equal(code, 0, stdout);
+    const config = await readFile(configPath, "utf-8");
+    assert.ok(config.includes("[mcp_servers.thronglets]"));
+    assert.ok(config.includes("[mcp_servers.psyche]"));
+    assert.ok(config.includes('command = "npx"'));
+    assert.ok(config.includes('"psyche-ai"'));
+    assert.ok(config.includes("[mcp_servers.psyche.env]"));
+    assert.ok(config.includes('PSYCHE_NAME = "Luna"'));
+    assert.ok(config.includes('PSYCHE_LOCALE = "en"'));
+    await rm(home, { recursive: true, force: true });
   });
 });
