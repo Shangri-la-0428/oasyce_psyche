@@ -46,6 +46,7 @@ import { DIMENSION_KEYS, DIMENSION_NAMES_ZH, DRIVE_KEYS, DRIVE_NAMES_ZH } from "
 import { isMBTIType, isDimensionKey, isLocale } from "./guards.js";
 import { getPackageVersion, selfUpdate } from "./update.js";
 import { runRuntimeProbe } from "./runtime-probe.js";
+import { defaultWorkspaceRoot } from "./storage.js";
 
 // ── Logger ───────────────────────────────────────────────────
 
@@ -708,6 +709,7 @@ async function cmdSetup(opts: {
 }): Promise<void> {
   const { name, mbti, locale, proxy, target, port, dryRun } = opts;
   const env: Record<string, string> = {};
+  env.PSYCHE_WORKSPACE = defaultWorkspaceRoot("mcp");
   if (name) env.PSYCHE_NAME = name;
   if (mbti) env.PSYCHE_MBTI = mbti.toUpperCase();
   if (locale) env.PSYCHE_LOCALE = locale;
@@ -729,7 +731,17 @@ async function cmdSetup(opts: {
       console.log("  → Claude Code — would configure via `claude mcp add`");
       claudeCodeDone = true; actions++;
     } else {
-      const addArgs = ["mcp", "add", "-s", "user", "psyche", "-e", "PSYCHE_LOCALE=" + (locale || "zh")];
+      const addArgs = [
+        "mcp",
+        "add",
+        "-s",
+        "user",
+        "psyche",
+        "-e",
+        "PSYCHE_WORKSPACE=" + env.PSYCHE_WORKSPACE,
+        "-e",
+        "PSYCHE_LOCALE=" + (locale || "zh"),
+      ];
       if (name) addArgs.push("-e", "PSYCHE_NAME=" + name);
       if (mbti) addArgs.push("-e", "PSYCHE_MBTI=" + mbti.toUpperCase());
       addArgs.push("--", "npx", "-y", "psyche-ai", "mcp");

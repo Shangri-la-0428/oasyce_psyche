@@ -297,11 +297,13 @@ describe("cli setup", () => {
 
     assert.equal(code, 0, stdout);
     const config = await readFile(configPath, "utf-8");
+    const expectedWorkspace = join(home, ".psyche-ai", "mcp");
     assert.ok(config.includes("[mcp_servers.thronglets]"));
     assert.ok(config.includes("[mcp_servers.psyche]"));
     assert.ok(config.includes('command = "npx"'));
     assert.ok(config.includes('"psyche-ai"'));
     assert.ok(config.includes("[mcp_servers.psyche.env]"));
+    assert.ok(config.includes(`PSYCHE_WORKSPACE = "${expectedWorkspace}"`));
     assert.ok(config.includes('PSYCHE_NAME = "Luna"'));
     assert.ok(config.includes('PSYCHE_LOCALE = "en"'));
     await rm(home, { recursive: true, force: true });
@@ -335,12 +337,14 @@ describe("cli setup", () => {
 
     assert.equal(code, 0, stdout);
     const config = await readFile(configPath, "utf-8");
+    const expectedWorkspace = join(home, ".psyche-ai", "mcp");
     assert.ok(config.includes('[mcp_servers.psyche]'));
     assert.ok(config.includes('command = "npx"'));
     assert.ok(config.includes('cwd = "/tmp/psyche"'));
     assert.ok(config.includes('env_vars = ["EXTRA_FLAG"]'));
     assert.ok(config.includes('[mcp_servers.psyche.env]'));
     assert.ok(config.includes('KEEP_ME = "1"'));
+    assert.ok(config.includes(`PSYCHE_WORKSPACE = "${expectedWorkspace}"`));
     assert.ok(config.includes('PSYCHE_NAME = "Luna"'));
     assert.ok(config.includes('PSYCHE_LOCALE = "en"'));
     assert.ok(!config.includes('PSYCHE_LOCALE = "zh"'));

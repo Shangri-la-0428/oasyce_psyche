@@ -34,7 +34,7 @@ import { createRequire } from "node:module";
 import { z } from "zod";
 import { PsycheEngine } from "../core.js";
 import type { PsycheEngineConfig, ProcessInputResult } from "../core.js";
-import { MemoryStorageAdapter, FileStorageAdapter } from "../storage.js";
+import { MemoryStorageAdapter, FileStorageAdapter, resolveWorkspaceDir } from "../storage.js";
 import type { MBTIType, Locale, PsycheMode } from "../types.js";
 import { runDemo } from "../demo.js";
 
@@ -50,7 +50,7 @@ const MODE = (process.env.PSYCHE_MODE ?? "natural") as PsycheMode;
 const LOCALE = (process.env.PSYCHE_LOCALE ?? "en") as Locale;
 const PERSIST = process.env.PSYCHE_PERSIST !== "false";
 const SIGIL_ID = process.env.PSYCHE_SIGIL_ID ?? undefined;
-const BASE_WORKSPACE = process.env.PSYCHE_WORKSPACE ?? process.cwd();
+const WORKSPACE_OVERRIDE = process.env.PSYCHE_WORKSPACE;
 const INTENSITY = process.env.PSYCHE_INTENSITY
   ? Number(process.env.PSYCHE_INTENSITY)
   : 0.7;
@@ -96,8 +96,12 @@ async function getEngine(): Promise<PsycheEngine> {
   };
 
   const persist = cfg.persist !== false;
-  // Per-Sigil workspace isolation: each Sigil gets its own state directory
-  const workspace = sigilId ? `${BASE_WORKSPACE}/${sigilId}` : BASE_WORKSPACE;
+  // Default to a stable per-user writable root so hosts do not need to supply cwd.
+  const workspace = resolveWorkspaceDir({
+    workspace: WORKSPACE_OVERRIDE,
+    sigilId,
+    surface: "mcp",
+  });
   const storage = persist
     ? new FileStorageAdapter(workspace)
     : new MemoryStorageAdapter();
