@@ -605,6 +605,36 @@ resonance: 75 (happy)
     );
   });
 
+  it("maps relational mismatch with repair opening into attachment and self-protection", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP", name: "Luna", locale: "zh" }, s);
+    await e.initialize();
+    const result = await e.processInput("你刚才有点没接住我，但我不是要吵架。我想知道你有没有真的感觉到这是一种失配。");
+    assert.ok(
+      (result.subjectivityKernel?.appraisal.attachmentPull ?? 0) >= 0.3,
+      `expected attachment pull from repair opening, got ${result.subjectivityKernel?.appraisal.attachmentPull}`,
+    );
+    assert.ok(
+      (result.subjectivityKernel?.appraisal.selfPreservation ?? 0) >= 0.28,
+      `expected self-protection from mismatch, got ${result.subjectivityKernel?.appraisal.selfPreservation}`,
+    );
+  });
+
+  it("maps anxious attachment into abandonment risk without requiring legacy stimulus", async () => {
+    const s = new MemoryStorageAdapter();
+    const e = new PsycheEngine({ mbti: "ENFP", name: "Luna", locale: "zh" }, s);
+    await e.initialize();
+    const result = await e.processInput("我有点怕你突然不理我了，但我又不想显得太黏。");
+    assert.ok(
+      (result.subjectivityKernel?.appraisal.abandonmentRisk ?? 0) >= 0.4,
+      `expected abandonment risk, got ${result.subjectivityKernel?.appraisal.abandonmentRisk}`,
+    );
+    assert.ok(
+      (result.subjectivityKernel?.appraisal.attachmentPull ?? 0) >= 0.18,
+      `expected some attachment pull, got ${result.subjectivityKernel?.appraisal.attachmentPull}`,
+    );
+  });
+
   it("compact mode keeps subjective residue after returning to baseline", async () => {
     const s = new MemoryStorageAdapter();
     const e = new PsycheEngine({ mbti: "ENFP", name: "Luna", locale: "zh" }, s);

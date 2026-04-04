@@ -172,7 +172,7 @@ server.tool(
   "process_input",
   "Process user input through the emotional engine. Returns emotional " +
   "context to inject into the LLM system prompt (systemContext + dynamicContext), " +
-  "detected stimulus type, a canonical replyEnvelope, compatibility aliases " +
+  "an appraisal-first semantic reading, an optional legacy stimulus hint, a canonical replyEnvelope, compatibility aliases " +
   "(policyModifiers + subjectivityKernel + responseContract + generationControls), an optional " +
   "externalContinuity envelope, and sparse low-frequency throngletsExports " +
   "suitable for additive external continuity layers. " +
@@ -184,12 +184,14 @@ server.tool(
   async ({ text, userId }: { text: string; userId?: string }) => {
     const eng = await getEngine();
     const result: ProcessInputResult = await eng.processInput(text, { userId });
+    const appraisal = result.replyEnvelope?.subjectivityKernel?.appraisal ?? result.subjectivityKernel?.appraisal ?? null;
     return {
       content: [{
         type: "text" as const,
         text: JSON.stringify({
           systemContext: result.systemContext,
           dynamicContext: result.dynamicContext,
+          appraisal,
           stimulus: result.stimulus,
           replyEnvelope: result.replyEnvelope ?? null,
           policyModifiers: result.policyModifiers ?? null,
