@@ -647,6 +647,7 @@ export class PsycheEngine {
       state,
       appliedStimulus,
       semanticSummary,
+      appraisalAxes,
     );
 
     // Increment interaction count

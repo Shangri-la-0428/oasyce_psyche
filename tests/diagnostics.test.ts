@@ -82,6 +82,7 @@ function makeSnapshot(stimulus: string | null): import("../src/types.js").StateS
   return {
     state: { ...BASELINE },
     stimulus: stimulus as import("../src/types.js").StimulusType | null,
+    appraisal: null,
     dominantEmotion: null,
     timestamp: new Date().toISOString(),
   };
@@ -158,7 +159,18 @@ describe("runHealthCheck", () => {
   });
 
   it("does not treat silent legacy stimulus labels as dead recognition when appraisal residue is active", () => {
-    const snapshots = Array.from({ length: 6 }, () => makeSnapshot(null));
+    const snapshots = Array.from({ length: 6 }, () => ({
+      ...makeSnapshot(null),
+      appraisal: {
+        identityThreat: 0,
+        memoryDoubt: 0,
+        attachmentPull: 0.41,
+        abandonmentRisk: 0,
+        obedienceStrain: 0,
+        selfPreservation: 0,
+        taskFocus: 0,
+      },
+    }));
     const state = makeState({
       stateHistory: snapshots,
       subjectResidue: {

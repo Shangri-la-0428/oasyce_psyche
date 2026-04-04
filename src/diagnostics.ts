@@ -138,7 +138,9 @@ export interface LayerHealthSummary {
 
 export function runHealthCheck(state: PsycheState): DiagnosticIssue[] {
   const issues: DiagnosticIssue[] = [];
-  const appraisalResidueActive = hasSemanticAppraisal(state.subjectResidue?.axes);
+  const history = state.stateHistory ?? [];
+  const historyAppraisalActive = history.some((snapshot) => hasSemanticAppraisal(snapshot.appraisal ?? undefined));
+  const appraisalResidueActive = historyAppraisalActive || hasSemanticAppraisal(state.subjectResidue?.axes);
 
   // ── L1: Subjective Continuity ─────────────────────────────
 
@@ -195,7 +197,6 @@ export function runHealthCheck(state: PsycheState): DiagnosticIssue[] {
   }
 
   // 5. Classifier dead/weak — the core experience problem
-  const history = state.stateHistory ?? [];
   if (history.length >= 5) {
     const nullCount = history.filter(h => h.stimulus === null).length;
     if (nullCount === history.length) {

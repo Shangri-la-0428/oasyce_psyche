@@ -296,6 +296,7 @@ export interface RelationshipState {
 export interface StateSnapshot {
   state: SelfState;
   stimulus: StimulusType | null;
+  appraisal?: AppraisalAxes | null;
   dominantEmotion: string | null;
   timestamp: string;
   semanticSummary?: string;

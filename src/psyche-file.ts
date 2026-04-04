@@ -259,9 +259,114 @@ function collectSemanticTrail(
   return unique.slice(-(expanded ? 3 : 4));
 }
 
+const APPRAISAL_MARKER_LABEL_ZH = {
+  approach: "靠近",
+  rupture: "失配",
+  uncertainty: "不确定",
+  boundary: "边界",
+  task: "任务",
+} as const;
+
+const APPRAISAL_MARKER_LABEL_EN: Record<keyof typeof APPRAISAL_MARKER_LABEL_ZH, string> = {
+  approach: "approach",
+  rupture: "rupture",
+  uncertainty: "uncertainty",
+  boundary: "boundary",
+  task: "task",
+} as const;
+
+type AppraisalMarker = keyof typeof APPRAISAL_MARKER_LABEL_ZH;
+
+const LEGACY_STIMULUS_MARKER_MAP: Partial<Record<StimulusType, AppraisalMarker>> = {
+  praise: "approach",
+  validation: "approach",
+  intimacy: "approach",
+  vulnerability: "approach",
+  criticism: "rupture",
+  conflict: "rupture",
+  sarcasm: "rupture",
+  neglect: "uncertainty",
+  surprise: "uncertainty",
+  authority: "boundary",
+  boredom: "boundary",
+  intellectual: "task",
+  casual: "task",
+  humor: "task",
+};
+
+function deriveSnapshotAppraisalMarkers(
+  snapshot: StateSnapshot,
+  opts?: { allowLegacyFallback?: boolean },
+): AppraisalMarker[] {
+  if (snapshot.appraisal) {
+    const scores: Array<[AppraisalMarker, number]> = [
+      ["approach", snapshot.appraisal.attachmentPull],
+      ["rupture", Math.max(snapshot.appraisal.identityThreat, snapshot.appraisal.selfPreservation)],
+      ["uncertainty", Math.max(snapshot.appraisal.memoryDoubt, snapshot.appraisal.abandonmentRisk)],
+      ["boundary", Math.max(snapshot.appraisal.obedienceStrain, snapshot.appraisal.selfPreservation * 0.85)],
+      ["task", snapshot.appraisal.taskFocus],
+    ];
+    const markers = scores
+      .filter(([, score]) => score >= 0.28)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([marker]) => marker);
+    if (markers.length > 0) return markers;
+  }
+
+  if (!opts?.allowLegacyFallback) return [];
+  if (!snapshot.stimulus) return [];
+  const fallback = LEGACY_STIMULUS_MARKER_MAP[snapshot.stimulus];
+  return fallback ? [fallback] : [];
+}
+
+function getAppraisalMarkerLabels(locale: Locale): Record<AppraisalMarker, string> {
+  return locale === "en" ? APPRAISAL_MARKER_LABEL_EN : APPRAISAL_MARKER_LABEL_ZH;
+}
+
+function summarizeSnapshotMarkers(
+  snapshots: StateSnapshot[],
+  locale: Locale,
+): { markerStr: string; usedAppraisal: boolean } {
+  const labels = getAppraisalMarkerLabels(locale);
+  const appraisalCounts: Record<string, number> = {};
+  const stimuliCounts: Record<string, number> = {};
+
+  for (const snapshot of snapshots) {
+    for (const marker of deriveSnapshotAppraisalMarkers(snapshot)) {
+      const label = labels[marker];
+      appraisalCounts[label] = (appraisalCounts[label] || 0) + 1;
+    }
+    if (snapshot.stimulus) {
+      stimuliCounts[snapshot.stimulus] = (stimuliCounts[snapshot.stimulus] || 0) + 1;
+    }
+  }
+
+  const formatCounts = (counts: Record<string, number>) => Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, count]) => `${type}×${count}`)
+    .join(", ");
+
+  const markerStr = formatCounts(appraisalCounts);
+  if (markerStr) {
+    return { markerStr, usedAppraisal: true };
+  }
+
+  return { markerStr: formatCounts(stimuliCounts), usedAppraisal: false };
+}
+
+function describeSnapshotResidue(snapshot: StateSnapshot, locale: Locale): string {
+  const labels = getAppraisalMarkerLabels(locale);
+  const markers = deriveSnapshotAppraisalMarkers(snapshot);
+  if (markers.length > 0) {
+    return markers.map((marker) => labels[marker]).join("+");
+  }
+  return snapshot.stimulus ?? "?";
+}
+
 /**
  * Compress a batch of snapshots into a concise session summary string.
- * Format: "3月23日(5轮): 刺激[casual×3, praise×2] 趋势[DA↑OT↑] 情绪[自然→满足]"
+ * Format: "3月23日(5轮): 评价[靠近×3, 边界×2] 趋势[DA↑OT↑] 情绪[自然→满足]"
  */
 export function compressSnapshots(snapshots: StateSnapshot[]): string {
   if (snapshots.length === 0) return "";
@@ -273,17 +378,7 @@ export function compressSnapshots(snapshots: StateSnapshot[]): string {
   const d = new Date(first.timestamp);
   const dateStr = `${d.getMonth() + 1}月${d.getDate()}日`;
 
-  // Stimuli counts
-  const stimuliCounts: Record<string, number> = {};
-  for (const s of snapshots) {
-    if (s.stimulus) {
-      stimuliCounts[s.stimulus] = (stimuliCounts[s.stimulus] || 0) + 1;
-    }
-  }
-  const stimuliStr = Object.entries(stimuliCounts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([type, count]) => `${type}×${count}`)
-    .join(", ");
+  const { markerStr, usedAppraisal } = summarizeSnapshotMarkers(snapshots, "zh");
 
   // Dimension trend (first→last)
   const trends: string[] = [];
@@ -301,7 +396,7 @@ export function compressSnapshots(snapshots: StateSnapshot[]): string {
   const semanticArc = collectSemanticTrail(snapshots);
 
   let summary = `${dateStr}(${snapshots.length}轮)`;
-  if (stimuliStr) summary += `: 刺激[${stimuliStr}]`;
+  if (markerStr) summary += usedAppraisal ? `: 评价[${markerStr}]` : `: 刺激[${markerStr}]`;
   if (semanticArc.length > 0) summary += ` 话题[${semanticArc.join(snapshots.length > 5 ? "•" : "→")}]`;
   if (trends.length > 0) summary += ` 趋势[${trends.join("")}]`;
   if (uniqueEmotions.length > 0) summary += ` 情绪[${uniqueEmotions.join("→")}]`;
@@ -317,6 +412,7 @@ export function pushSnapshot(
   state: PsycheState,
   stimulus: StimulusType | null,
   semantic?: SemanticTurnSummary,
+  appraisal?: AppraisalAxes | null,
 ): PsycheState {
   const emotions = detectEmotions(state.current);
   const dominantEmotion = emotions.length > 0
@@ -330,6 +426,7 @@ export function pushSnapshot(
   const snapshot: StateSnapshot = {
     state: { ...state.current },
     stimulus,
+    appraisal: appraisal ? { ...appraisal } : null,
     dominantEmotion,
     timestamp: new Date().toISOString(),
     semanticSummary: semantic?.summary,
@@ -420,17 +517,8 @@ export function compressSession(
   // ── Turn count ──
   const turnCount = history.length;
 
-  // ── Stimulus distribution ──
-  const stimuliCounts: Record<string, number> = {};
-  for (const snap of history) {
-    if (snap.stimulus) {
-      stimuliCounts[snap.stimulus] = (stimuliCounts[snap.stimulus] || 0) + 1;
-    }
-  }
-  const stimuliStr = Object.entries(stimuliCounts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([type, count]) => `${type}×${count}`)
-    .join(",");
+  // ── Residue distribution ──
+  const { markerStr, usedAppraisal } = summarizeSnapshotMarkers(history, locale);
 
   // ── Dimension trajectory ──
   const trajectoryParts: string[] = [];
@@ -466,9 +554,10 @@ export function compressSession(
     }
   }
   const peakSnap = history[peakIdx];
+  const peakResidue = describeSnapshotResidue(peakSnap, locale);
   const peakLabel = isZh
-    ? `第${peakIdx + 1}轮:${peakSnap.stimulus ?? "?"}→${peakSnap.dominantEmotion ?? "?"}`
-    : `turn${peakIdx + 1}:${peakSnap.stimulus ?? "?"}→${peakSnap.dominantEmotion ?? "?"}`;
+    ? `第${peakIdx + 1}轮:${peakResidue}→${peakSnap.dominantEmotion ?? "?"}`
+    : `turn${peakIdx + 1}:${peakResidue}→${peakSnap.dominantEmotion ?? "?"}`;
 
   // ── Tendency ──
   const reflection = computeSelfReflection(history, locale);
@@ -479,6 +568,7 @@ export function compressSession(
   // ── Build summary string ──
   const turnsLabel = isZh ? "轮" : "turns";
   const stimLabel = isZh ? "刺激" : "stimuli";
+  const appraisalLabel = isZh ? "评价" : "appraisal";
   const topicLabel = isZh ? "话题" : "topics";
   const trajLabel = isZh ? "轨迹" : "trajectory";
   const arcLabel = isZh ? "弧线" : "arc";
@@ -486,7 +576,7 @@ export function compressSession(
   const tendLabel = isZh ? "倾向" : "tendency";
 
   let summary = `${dateRange}(${turnCount}${turnsLabel})`;
-  if (stimuliStr) summary += `: ${stimLabel}[${stimuliStr}]`;
+  if (markerStr) summary += `: ${usedAppraisal ? appraisalLabel : stimLabel}[${markerStr}]`;
   if (semanticArc) summary += ` ${topicLabel}[${semanticArc}]`;
   if (trajectoryParts.length > 0) summary += ` ${trajLabel}[${trajectoryParts.join(" ")}]`;
   if (emotionArc) summary += ` ${arcLabel}[${emotionArc}]`;
@@ -629,6 +719,7 @@ export function retrieveRelatedMemories(
   currentState: SelfState,
   stimulus: StimulusType | null,
   limit: number = 3,
+  appraisal?: AppraisalAxes | null,
 ): StateSnapshot[] {
   if (history.length === 0) return [];
 
@@ -642,13 +733,30 @@ export function retrieveRelatedMemories(
     const maxDist = Math.sqrt(4) * 100; // theoretical max distance
     const similarity = 1 - Math.sqrt(sumSqDiff) / maxDist;
 
-    // Stimulus match bonus
-    const stimulusBonus = (stimulus && snap.stimulus === stimulus) ? 0.2 : 0;
+    let residueBonus = 0;
+    if (appraisal && snap.appraisal) {
+      const axes: Array<keyof AppraisalAxes> = [
+        "attachmentPull",
+        "identityThreat",
+        "memoryDoubt",
+        "obedienceStrain",
+        "selfPreservation",
+        "abandonmentRisk",
+        "taskFocus",
+      ];
+      const averageDistance = axes.reduce(
+        (sum, axis) => sum + Math.abs((snap.appraisal?.[axis] ?? 0) - appraisal[axis]),
+        0,
+      ) / axes.length;
+      residueBonus = (1 - averageDistance) * 0.2;
+    } else if (stimulus && snap.stimulus === stimulus) {
+      residueBonus = 0.2;
+    }
 
     // Core memory bonus
     const coreBonus = snap.isCoreMemory ? 0.1 : 0;
 
-    return { snap, score: similarity + stimulusBonus + coreBonus };
+    return { snap, score: similarity + residueBonus + coreBonus };
   });
 
   return scored
