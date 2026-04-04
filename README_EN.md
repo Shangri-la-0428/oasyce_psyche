@@ -319,11 +319,11 @@ That lets other agents and hosts verify control boundaries and strategy selectio
 npx -y psyche-ai setup
 ```
 
-Auto-detects Claude Code / Claude Desktop / Cursor / Windsurf and configures them. Claude Code is live instantly; other clients need a restart. No config files to find, no JSON to edit.
+Auto-detects Claude Code / Claude Desktop / Cursor / Windsurf / Codex and configures them. Claude Code is live instantly; other clients need a restart. No config files to find, no JSON or TOML to edit.
 
 Personality emerges from interaction. To set an initial name: `npx -y psyche-ai setup --name Luna`
 
-**For non-MCP agents (Codex, custom agents, etc.) — transparent proxy:**
+**For non-MCP agents or raw SDK callers — transparent proxy:**
 
 ```bash
 npx -y psyche-ai setup --proxy -t https://api.openai.com/v1
@@ -333,7 +333,7 @@ Starts a local proxy + sets `OPENAI_BASE_URL`. Every program using the OpenAI SD
 
 | Path | Coverage | How |
 |------|----------|-----|
-| MCP (`setup`) | Claude Code / Desktop / Cursor / Windsurf | MCP tool protocol |
+| MCP (`setup`) | Claude Code / Desktop / Cursor / Windsurf / Codex | MCP tool protocol |
 | Proxy (`setup --proxy`) | Any OpenAI/Anthropic SDK agent | Env var HTTP redirect |
 
 **Verify:** `npx psyche-ai probe --json` — `ok: true` means it's working.

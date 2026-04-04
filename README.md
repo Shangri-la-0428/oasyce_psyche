@@ -196,11 +196,11 @@ Luna 在安慰用户时自我状态下沉 → 广播状态 → Kai 感知到 Lun
 npx -y psyche-ai setup
 ```
 
-自动检测本机的 Claude Code / Claude Desktop / Cursor / Windsurf，写入配置。Claude Code 即时生效，其他重启后生效。不需要知道配置文件在哪，不需要手动编辑任何 JSON。
+自动检测本机的 Claude Code / Claude Desktop / Cursor / Windsurf / Codex，写入配置。Claude Code 即时生效，其他重启后生效。不需要知道配置文件在哪，不需要手动编辑任何 JSON 或 TOML。
 
 人格会从交互中自然涌现。如果想指定初始名字：`npx -y psyche-ai setup --name Luna`
 
-**覆盖非 MCP 的 Agent（Codex、自定义 agent 等）——透明代理：**
+**覆盖非 MCP 的 Agent 或直接 SDK 调用——透明代理：**
 
 ```bash
 npx -y psyche-ai setup --proxy -t https://api.openai.com/v1
@@ -210,7 +210,7 @@ npx -y psyche-ai setup --proxy -t https://api.openai.com/v1
 
 | 路径 | 覆盖范围 | 原理 |
 |------|---------|------|
-| MCP (`setup`) | Claude Code / Desktop / Cursor / Windsurf | MCP 工具协议 |
+| MCP (`setup`) | Claude Code / Desktop / Cursor / Windsurf / Codex | MCP 工具协议 |
 | Proxy (`setup --proxy`) | 任意使用 OpenAI/Anthropic SDK 的 agent | 环境变量重定向 HTTP |
 
 **验证：**`npx psyche-ai probe --json` — `ok: true` 就是在用了。

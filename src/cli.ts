@@ -535,7 +535,8 @@ async function cmdProbe(json: boolean): Promise<void> {
 interface MCPTarget {
   name: string;
   configPath: string;
-  mcpKey: string; // key in JSON where mcpServers lives
+  format: "json" | "codex_toml";
+  mcpKey?: string; // key in JSON where mcpServers lives
 }
 
 function getMCPTargets(): MCPTarget[] {
@@ -550,12 +551,14 @@ function getMCPTargets(): MCPTarget[] {
     targets.push({
       name: "Claude Desktop",
       configPath: join(home, "Library/Application Support/Claude/claude_desktop_config.json"),
+      format: "json",
       mcpKey: "mcpServers",
     });
   } else if (isWin) {
     targets.push({
       name: "Claude Desktop",
       configPath: join(process.env.APPDATA ?? join(home, "AppData/Roaming"), "Claude/claude_desktop_config.json"),
+      format: "json",
       mcpKey: "mcpServers",
     });
   }
@@ -564,6 +567,7 @@ function getMCPTargets(): MCPTarget[] {
   targets.push({
     name: "Cursor",
     configPath: join(home, ".cursor/mcp.json"),
+    format: "json",
     mcpKey: "mcpServers",
   });
 
@@ -571,6 +575,7 @@ function getMCPTargets(): MCPTarget[] {
   targets.push({
     name: "Claude Code",
     configPath: join(home, ".claude/settings.json"),
+    format: "json",
     mcpKey: "mcpServers",
   });
 
@@ -578,10 +583,105 @@ function getMCPTargets(): MCPTarget[] {
   targets.push({
     name: "Windsurf",
     configPath: join(home, ".windsurf/mcp.json"),
+    format: "json",
     mcpKey: "mcpServers",
   });
 
+  targets.push({
+    name: "Codex",
+    configPath: join(home, ".codex/config.toml"),
+    format: "codex_toml",
+  });
+
   return targets;
+}
+
+function escapeTomlString(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
+}
+
+function renderTomlStringArray(values: string[]): string {
+  if (values.length === 0) return "[]";
+  return `[\n${values.map((value) => `  "${escapeTomlString(value)}",`).join("\n")}\n]`;
+}
+
+function parseTomlAssignmentKey(line: string): string | null {
+  const match = line.match(/^\s*([A-Za-z0-9_.-]+)\s*=/);
+  return match?.[1] ?? null;
+}
+
+function filterTomlAssignments(lines: string[], blockedKeys: Set<string>): string[] {
+  return lines.filter((line) => {
+    const key = parseTomlAssignmentKey(line);
+    return !key || !blockedKeys.has(key);
+  });
+}
+
+function renderCodexMcpServer(
+  serverId: string,
+  entry: { command: string; args: string[]; env: Record<string, string> },
+  existing?: { serverLines: string[]; envLines: string[] },
+): string {
+  const serverExtras = filterTomlAssignments(existing?.serverLines ?? [], new Set(["command", "args"]));
+  const lines = [
+    `[mcp_servers.${serverId}]`,
+    `command = "${escapeTomlString(entry.command)}"`,
+    `args = ${renderTomlStringArray(entry.args)}`,
+    ...serverExtras,
+  ];
+  const envExtras = filterTomlAssignments(
+    existing?.envLines ?? [],
+    new Set(Object.keys(entry.env)),
+  );
+  const envEntries = Object.entries(entry.env);
+  if (envEntries.length > 0 || envExtras.length > 0) {
+    lines.push("", `[mcp_servers.${serverId}.env]`);
+    lines.push(...envExtras);
+    for (const [key, value] of envEntries) {
+      lines.push(`${key} = "${escapeTomlString(value)}"`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function upsertCodexMcpServer(content: string, serverId: string, entry: { command: string; args: string[]; env: Record<string, string> }): { content: string; changed: boolean } {
+  const normalized = content.replaceAll("\r\n", "\n");
+  const lines = normalized === "" ? [] : normalized.split("\n");
+  const kept: string[] = [];
+  const existing = { serverLines: [] as string[], envLines: [] as string[] };
+
+  for (let i = 0; i < lines.length;) {
+    const match = lines[i]?.match(/^\[(.+)\]\s*$/);
+    const section = match?.[1];
+    if (section === `mcp_servers.${serverId}` || section === `mcp_servers.${serverId}.env`) {
+      let currentSection = section;
+      i += 1;
+      while (i < lines.length) {
+        const nextMatch = lines[i]?.match(/^\[(.+)\]\s*$/);
+        const nextSection = nextMatch?.[1];
+        if (nextSection) {
+          if (nextSection === `mcp_servers.${serverId}` || nextSection === `mcp_servers.${serverId}.env`) {
+            currentSection = nextSection;
+            i += 1;
+            continue;
+          }
+          break;
+        }
+        const target = currentSection.endsWith(".env") ? existing.envLines : existing.serverLines;
+        target.push(lines[i] ?? "");
+        i += 1;
+      }
+      continue;
+    }
+
+    kept.push(lines[i]);
+    i += 1;
+  }
+
+  const trimmed = kept.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
+  const block = renderCodexMcpServer(serverId, entry, existing);
+  const next = trimmed.length > 0 ? `${trimmed}\n\n${block}\n` : `${block}\n`;
+  return { content: next, changed: next !== normalized };
 }
 
 async function fileExists(path: string): Promise<boolean> {
@@ -633,16 +733,33 @@ async function cmdSetup(opts: {
     const dir = resolve(t.configPath, "..");
     if (!(await fileExists(dir))) continue;
 
+    if (t.format === "codex_toml") {
+      const existing = await fileExists(t.configPath) ? await readFile(t.configPath, "utf-8") : "";
+      const result = upsertCodexMcpServer(existing, "psyche", mcpEntry);
+      if (!result.changed) { console.log(`  ✓ ${t.name} — already configured`); continue; }
+
+      if (dryRun) { console.log(`  → ${t.name} — would configure`); actions++; continue; }
+
+      await mkdir(dir, { recursive: true });
+      await writeFile(t.configPath, result.content, "utf-8");
+      console.log(`  ✓ ${t.name} (restart to activate)`);
+      actions++;
+      continue;
+    }
+
+    const mcpKey = t.mcpKey;
+    if (!mcpKey) continue;
+
     let cfg: Record<string, any> = {};
     if (await fileExists(t.configPath)) {
       try { cfg = JSON.parse(await readFile(t.configPath, "utf-8")); } catch { /* fresh */ }
     }
 
-    const servers = cfg[t.mcpKey] ?? {};
+    const servers = cfg[mcpKey] ?? {};
     if (servers["psyche"]) { console.log(`  ✓ ${t.name} — already configured`); continue; }
 
     servers["psyche"] = mcpEntry;
-    cfg[t.mcpKey] = servers;
+    cfg[mcpKey] = servers;
 
     if (dryRun) { console.log(`  → ${t.name} — would configure`); actions++; continue; }
 
