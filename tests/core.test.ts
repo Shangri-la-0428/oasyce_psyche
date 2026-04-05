@@ -204,6 +204,26 @@ describe("PsycheEngine", () => {
     assert.ok(!next.dynamicContext.includes(summary), `got ${next.dynamicContext}`);
   });
 
+  it("keeps explore priors soft so non-consensus probes remain possible", async () => {
+    const summary = "shared success prior: 5 similar sessions crossed this context; treat this as a non-exclusive baseline during exploration";
+    const result = await engine.processInput("试一个和常规方案不同的修复思路。", {
+      ambientPriors: [{
+        summary,
+        confidence: 0.66,
+        kind: "success-prior",
+        goal: "explore",
+        provider: "thronglets",
+        refs: ["space:infra", "trace:stable-path"],
+      }],
+    });
+
+    assert.equal(result.currentGoal, "explore");
+    assert.ok(result.dynamicContext.includes("当前目标: 探索"), `got ${result.dynamicContext}`);
+    assert.ok(result.dynamicContext.includes("软提示"), `got ${result.dynamicContext}`);
+    assert.ok(result.dynamicContext.includes("非共识"), `got ${result.dynamicContext}`);
+    assert.ok(result.dynamicContext.includes(summary), `got ${result.dynamicContext}`);
+  });
+
   it("processInput updates relationship gradually based on stimulus valence", async () => {
     const before = { ...engine.getState().relationships._default };
 

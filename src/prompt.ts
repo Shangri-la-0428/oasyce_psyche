@@ -109,7 +109,12 @@ export function buildAmbientPriorContext(
   });
 
   const heading = goal ? `${title} · ${goalLabel(goal)}` : title;
-  return `[${heading}]\n${lines.join("\n")}`;
+  const guidance = goal === "explore"
+    ? locale === "zh"
+      ? "- 将这些先验只当作软提示；保留可逆的、非共识的试探空间。"
+      : "- Treat these priors as soft hints only; preserve room for reversible non-consensus probes."
+    : "";
+  return `[${heading}]\n${guidance ? `${guidance}\n` : ""}${lines.join("\n")}`;
 }
 
 function pushLabeledSection(
