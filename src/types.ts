@@ -881,6 +881,7 @@ export interface SessionBridgeState {
 export interface AmbientPriorView {
   summary: string;
   confidence: number; // 0-1
+  kind?: "failure-residue" | "mixed-residue" | "success-prior";
   provider?: string;
   refs?: string[];
 }

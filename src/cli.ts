@@ -1070,9 +1070,10 @@ async function main(): Promise<void> {
       }
 
       case "mcp": {
-        // Delegate to the MCP adapter — same process, no npx indirection.
-        await import("./adapters/mcp.js");
-        return; // mcp.ts owns the process from here
+        // Delegate to the MCP adapter through an explicit entrypoint.
+        const { runMcpServer } = await import("./adapters/mcp.js");
+        await runMcpServer();
+        return;
       }
 
       case "setup": {

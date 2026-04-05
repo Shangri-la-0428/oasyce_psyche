@@ -129,7 +129,7 @@ Psyche 要解决的不可压缩问题只有一个：
 不用安装任何东西，一条命令看 Psyche 如何运作：
 
 ```bash
-npx psyche-mcp --demo
+npx psyche-ai mcp --demo
 ```
 
 这会跑一个 6 轮"持续否定 → 修复"的场景。你会看到：
@@ -486,7 +486,7 @@ import { psycheMiddleware } from "psyche-ai/vercel-ai";
 import { PsycheLangChain } from "psyche-ai/langchain";
 
 // MCP（Claude Desktop / Cursor / Windsurf / Claude Code）
-// npx psyche-mcp --mbti ENFP --name Luna
+// npx psyche-ai mcp --mbti ENFP --name Luna
 
 // 任何语言（HTTP API）
 // psyche serve --port 3210

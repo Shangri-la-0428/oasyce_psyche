@@ -1,5 +1,19 @@
 # 更新日志 / Changelog
 
+## v11.5.2 — Appraisal-First Ambient Runtime
+
+### Changed
+- 将 `Psyche` 的 host-facing surface 进一步统一为 appraisal-first，`stimulus` 只保留为兼容层
+- ambient prior intake 统一收束为共享 runtime helper，不再让不同 adapter 各自漂移
+- MCP 入口边界收正：`src/adapters/mcp.ts` 变为纯库模块，CLI 启动落在独立薄壳
+
+### Fixed
+- 修复导入 `mcp.ts` 时仍可能触发入口副作用的问题
+- 修复版本解析只认单一路径的脆弱实现，统一改为共享 package metadata
+- 修复不同 host 下 ambient prior / observability 表面不一致的问题
+
+---
+
 ## v11.5.1 — MCP Package Boot Fix
 
 ### Fixed

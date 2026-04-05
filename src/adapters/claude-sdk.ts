@@ -31,6 +31,7 @@
 
 import type { PsycheEngine, ProcessInputResult } from "../core.js";
 import type {
+  AmbientPriorView,
   SelfState,
   Locale,
   ThrongletsExport,
@@ -40,6 +41,10 @@ import type {
 import { describeEmotionalState } from "../chemistry.js";
 import { serializeThrongletsExportAsTrace } from "../thronglets-runtime.js";
 import { resolveRelationshipUserId } from "../relationship-key.js";
+import {
+  resolveAmbientPriorsForTurn,
+  type ThrongletsAmbientRuntimeOptions,
+} from "../ambient-runtime.js";
 
 // ── Minimal Claude Agent SDK types (inlined to avoid peer dependency) ──
 
@@ -178,6 +183,13 @@ export interface PsycheClaudeSdkOptions {
     agentId?: string;
     sessionId?: string;
   };
+  /**
+   * Optional runtime ambient-prior intake.
+   *
+   * When enabled, sparse environmental priors are fetched at turn time and
+   * passed to `processInput()` as runtime-only context.
+   */
+  ambient?: boolean | ThrongletsAmbientRuntimeOptions;
 }
 
 interface ResolvedPsycheClaudeSdkOptions {
@@ -186,6 +198,7 @@ interface ResolvedPsycheClaudeSdkOptions {
   agentId?: string;
   sessionId?: string;
   locale: "zh" | "en";
+  ambient?: ThrongletsAmbientRuntimeOptions;
 }
 
 interface RuntimeHookContext {
@@ -228,7 +241,20 @@ export class PsycheClaudeSDK {
       agentId: opts?.agentId ?? context?.agentId,
       sessionId: opts?.sessionId ?? context?.sessionId,
       locale: opts?.locale ?? "en",
+      ambient: opts?.ambient === true ? {} : (opts?.ambient || undefined),
     };
+  }
+
+  private async resolveAmbientPriors(userMessage: string): Promise<AmbientPriorView[] | undefined> {
+    return resolveAmbientPriorsForTurn(userMessage, {
+      enabled: Boolean(this.opts.ambient),
+      thronglets: this.opts.ambient
+        ? {
+            ...this.opts.ambient,
+            space: this.opts.ambient.space ?? "psyche",
+          }
+        : undefined,
+    });
   }
 
   private resolveAgentId(runtime?: RuntimeHookContext): string {
@@ -284,8 +310,10 @@ export class PsycheClaudeSDK {
                 sessionId: runtimeContext.sessionId ?? self.lastRuntimeContext.sessionId,
               };
               const userMessage = (input as UserPromptSubmitInput).user_message ?? "";
+              const ambientPriors = await self.resolveAmbientPriors(userMessage);
               const result = await self.engine.processInput(userMessage, {
                 userId: self.opts.userId,
+                ambientPriors,
               });
               self.lastInputResult = result;
 

@@ -1,6 +1,6 @@
 {
   "name": "psyche-ai",
-  "version": "11.5.1",
+  "version": "11.5.2",
   "description": "AI-first subjectivity kernel for agents with continuous appraisal, relation dynamics, and adaptive reply loops",
   "mcpName": "io.github.Shangri-la-0428/psyche-ai",
   "type": "module",
@@ -43,7 +43,7 @@
   "bin": {
     "psyche": "dist/cli.js",
     "psyche-ai": "dist/cli.js",
-    "psyche-mcp": "dist/adapters/mcp.js",
+    "psyche-mcp": "dist/adapters/mcp-cli.js",
     "psyche-proxy": "dist/adapters/proxy.js"
   },
   "scripts": {

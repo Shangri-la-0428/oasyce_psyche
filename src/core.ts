@@ -49,6 +49,7 @@ import { buildExternalContinuityEnvelope } from "./external-continuity.js";
 import { deriveThrongletsExports } from "./thronglets-export.js";
 import { buildTurnObservability } from "./observability.js";
 import { DEFAULT_RELATIONSHIP_USER_ID, resolveRelationshipUserId } from "./relationship-key.js";
+import { normalizeAmbientPriors } from "./ambient-priors.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -169,19 +170,6 @@ interface PendingPrediction {
   preInteractionState: PsycheState;
   appliedStimulus: StimulusType | null;
   contextHash: string;
-}
-
-function sanitizeAmbientPriors(priors?: AmbientPriorView[]): AmbientPriorView[] {
-  return (priors ?? [])
-    .map((prior) => ({
-      summary: prior.summary.trim().replace(/\s+/g, " "),
-      confidence: Math.max(0, Math.min(1, prior.confidence)),
-      provider: prior.provider?.trim() || undefined,
-      refs: prior.refs?.filter((ref) => typeof ref === "string" && ref.trim().length > 0),
-    }))
-    .filter((prior) => prior.summary.length > 0)
-    .sort((a, b) => b.confidence - a.confidence)
-    .slice(0, 5);
 }
 
 function formatWritebackFeedbackNote(
@@ -713,7 +701,7 @@ export class PsycheEngine {
     }
 
     const writebackNote = formatWritebackFeedbackNote(writebackFeedback, locale);
-    const ambientPriors = sanitizeAmbientPriors(opts?.ambientPriors);
+    const ambientPriors = normalizeAmbientPriors(opts?.ambientPriors);
     const ambientPriorContext = buildAmbientPriorContext(ambientPriors, locale);
     const reflectiveTurn = runReflectiveTurnPhases({
       state,

@@ -33,6 +33,40 @@ async function installTarball(appDir: string, tarballPath: string): Promise<void
   });
 }
 
+async function expectMcpBinBoots(appDir: string, binName: string, args: string[]): Promise<void> {
+  const executable = process.platform === "win32" ? `${binName}.cmd` : binName;
+  const binPath = join(appDir, "node_modules", ".bin", executable);
+  const child = spawn(binPath, args, {
+    cwd: appDir,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  let stderr = "";
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  const initialize = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "package-smoke", version: "1.0.0" },
+    },
+  });
+  child.stdin.write(`${initialize}\n`);
+
+  const line = await firstJsonLine(child.stdout, 15000, () => stderr);
+  const response = JSON.parse(line);
+  assert.equal(response.result?.serverInfo?.name, "psyche");
+  assert.equal(response.result?.protocolVersion, "2024-11-05");
+  assert.equal(child.exitCode, null, `MCP process exited early; stderr=${stderr}`);
+
+  child.kill("SIGTERM");
+}
+
 function firstJsonLine(stream: NodeJS.ReadableStream, timeoutMs: number, stderr: () => string): Promise<string> {
   return new Promise((resolve, reject) => {
     let buffer = "";
@@ -71,37 +105,8 @@ describe("package smoke", () => {
       const tarballPath = await packTarball(packDir);
       await installTarball(appDir, tarballPath);
 
-      const binName = process.platform === "win32" ? "psyche-ai.cmd" : "psyche-ai";
-      const binPath = join(appDir, "node_modules", ".bin", binName);
-      const child = spawn(binPath, ["mcp"], {
-        cwd: appDir,
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-
-      let stderr = "";
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk.toString();
-      });
-
-      const initialize = JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "initialize",
-        params: {
-          protocolVersion: "2024-11-05",
-          capabilities: {},
-          clientInfo: { name: "package-smoke", version: "1.0.0" },
-        },
-      });
-      child.stdin.write(`${initialize}\n`);
-
-      const line = await firstJsonLine(child.stdout, 15000, () => stderr);
-      const response = JSON.parse(line);
-      assert.equal(response.result?.serverInfo?.name, "psyche");
-      assert.equal(response.result?.protocolVersion, "2024-11-05");
-      assert.equal(child.exitCode, null, `MCP process exited early; stderr=${stderr}`);
-
-      child.kill("SIGTERM");
+      await expectMcpBinBoots(appDir, "psyche-ai", ["mcp"]);
+      await expectMcpBinBoots(appDir, "psyche-mcp", []);
     } finally {
       await rm(packDir, { recursive: true, force: true });
       await rm(appDir, { recursive: true, force: true });

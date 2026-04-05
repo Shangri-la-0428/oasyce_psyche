@@ -15,6 +15,7 @@ import type { ProcessInputResult } from "../core.js";
 import { FileStorageAdapter, MemoryStorageAdapter } from "../storage.js";
 import { detectMBTI, extractAgentName, loadState } from "../psyche-file.js";
 import type { Logger } from "../psyche-file.js";
+import { resolveAmbientPriorsForTurn } from "../ambient-runtime.js";
 // Diagnostics are handled engine-level — no adapter imports needed
 
 // ── OpenClaw Plugin API Types (matching plugin-sdk) ──────────
@@ -245,9 +246,15 @@ export function register(api: PluginApi) {
         }
 
         const engine = await getEngine(workspaceDir);
+        const ambientPriors = await resolveAmbientPriorsForTurn(inputText, {
+          thronglets: { space: "psyche" },
+        });
         const result = await engine.processInput(
           inputText,
-          { userId: ctx.userId as string | undefined },
+          {
+            userId: ctx.userId as string | undefined,
+            ambientPriors: ambientPriors ?? [],
+          },
         );
         const controls = result.replyEnvelope?.generationControls ?? result.generationControls;
         const dominantAppraisal = getDominantAppraisalLabel(result);
@@ -260,6 +267,7 @@ export function register(api: PluginApi) {
           `order:${Math.round(state.current.order)} flow:${Math.round(state.current.flow)} ` +
           `boundary:${Math.round(state.current.boundary)} resonance:${Math.round(state.current.resonance)} | ` +
           `source=${extractedInput.source} input=${inputText.length}chars | ` +
+          (ambientPriors && ambientPriors.length > 0 ? `ambient=${ambientPriors.length} | ` : "") +
           `context=${result.dynamicContext.length}chars` +
           (controls?.maxTokens ? ` | out<=${controls.maxTokens}t` : "") +
           (controls?.requireConfirmation ? " | confirm" : ""),

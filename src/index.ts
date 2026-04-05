@@ -65,6 +65,18 @@ export type { PsycheOverlay } from "./overlay.js";
 export { computeLayerHealthSummary } from "./diagnostics.js";
 export type { LayerHealthSummary, LayerHealthDetail, LayerStatus, DiagnosticLayer } from "./diagnostics.js";
 
+// ── Ambient runtime intake ──────────────────────────────────
+export {
+  fetchAmbientPriorsFromThronglets,
+  parseAmbientPriorsInput,
+  resolveAmbientPriorsForTurn,
+} from "./ambient-runtime.js";
+export type {
+  AmbientPriorResolutionOptions,
+  ThrongletsAmbientRuntimeOptions,
+} from "./ambient-runtime.js";
+export { normalizeAmbientPriors } from "./ambient-priors.js";
+
 
 // ============================================================
 // INTENTIONALLY REMOVED FROM PUBLIC API (v9.3)

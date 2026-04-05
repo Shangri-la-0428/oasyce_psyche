@@ -181,6 +181,7 @@ describe("PsycheEngine", () => {
       ambientPriors: [{
         summary,
         confidence: 0.86,
+        kind: "mixed-residue",
         provider: "thronglets",
         refs: ["space:infra", "trace:deploy-ok"],
       }],
@@ -189,6 +190,7 @@ describe("PsycheEngine", () => {
     assert.equal(result.ambientPriors?.length, 1);
     assert.ok(result.ambientPriorContext?.includes(summary), `got ${result.ambientPriorContext}`);
     assert.ok(result.dynamicContext.includes("环境先验"), `got ${result.dynamicContext}`);
+    assert.ok(result.dynamicContext.includes("未收敛"), `got ${result.dynamicContext}`);
     assert.ok(result.dynamicContext.includes(summary), `got ${result.dynamicContext}`);
     assert.ok(result.observability?.outputAttribution.renderInputs.includes("ambient-prior"));
     assert.equal("ambientPriorContext" in (engine.getState() as unknown as Record<string, unknown>), false);

@@ -256,6 +256,40 @@ describe("PsycheLangChain", () => {
     assert.ok(typeof msg === "string");
   });
 
+  it("injects runtime ambient priors when enabled", async () => {
+    const localEngine = makeEngine();
+    await localEngine.initialize();
+    const localLc = new PsycheLangChain(localEngine, {
+      ambient: {
+        runner: async (_binaryPath, _args, stdin) => {
+          const payload = JSON.parse(stdin) as { text: string };
+          assert.equal(payload.text, "deploy thronglets service");
+          return {
+            ok: true,
+            stdout: JSON.stringify({
+              data: {
+                priors: [
+                  {
+                    summary: "Recent similar runs stabilized after checking ssh reachability first.",
+                    confidence: 0.81,
+                    provider: "thronglets",
+                  },
+                ],
+              },
+            }),
+            stderr: "",
+          };
+        },
+      },
+    });
+
+    const msg = await localLc.getSystemMessage("deploy thronglets service");
+    assert.ok(msg.includes("ssh reachability first"));
+
+    const prepared = await localLc.prepareInvocation("deploy thronglets service");
+    assert.ok(prepared.systemMessage.includes("ssh reachability first"));
+  });
+
   it("prepareInvocation returns system message and mechanical hints", async () => {
     const prepared = await lc.prepareInvocation("你好", { maxTokens: 2000 });
     assert.ok(prepared.systemMessage.length > 0);
@@ -844,6 +878,52 @@ describe("PsycheClaudeSDK", () => {
     assert.ok(inputResult, "Should have input result after hook call");
     assert.ok(inputResult!.dynamicContext.length > 0, "Should have dynamic context");
     assert.equal(typeof inputResult!.systemContext, "string");
+  });
+
+  it("UserPromptSubmit hook injects runtime ambient priors when enabled", async () => {
+    const localEngine = makeEngine();
+    await localEngine.initialize();
+    const localPsyche = new PsycheClaudeSDK(localEngine, {
+      ambient: {
+        runner: async (_binaryPath, _args, stdin) => {
+          const payload = JSON.parse(stdin) as { text: string };
+          assert.equal(payload.text, "deploy psyche over ssh");
+          return {
+            ok: true,
+            stdout: JSON.stringify({
+              data: {
+                priors: [
+                  {
+                    summary: "Recent similar runs stabilized after checking ssh reachability first.",
+                    confidence: 0.81,
+                    provider: "thronglets",
+                  },
+                ],
+              },
+            }),
+            stderr: "",
+          };
+        },
+      },
+    });
+    const hooks = localPsyche.getHooks();
+    const callback = hooks.UserPromptSubmit![0].hooks[0];
+
+    await callback(
+      {
+        hook_event_name: "UserPromptSubmit",
+        user_message: "deploy psyche over ssh",
+        session_id: "ambient-test",
+        cwd: "/tmp",
+      },
+      undefined,
+      { signal: AbortSignal.timeout(5000) },
+    );
+
+    const inputResult = localPsyche.getLastInputResult();
+    assert.ok(inputResult);
+    assert.equal(inputResult!.ambientPriors?.length, 1);
+    assert.ok(inputResult!.ambientPriorContext?.includes("ssh reachability first"));
   });
 
   it("defaults relationship tracking to the shared internal bucket", async () => {

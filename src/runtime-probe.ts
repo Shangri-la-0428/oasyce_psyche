@@ -18,6 +18,7 @@ export interface RuntimeProbeResult {
   canonicalHostSurface: boolean;
   externalContinuityAvailable: boolean;
   appraisal: AppraisalAxes | null;
+  compatLabel: string | null;
   legacyStimulus: string | null;
   stimulus: string | null;
   cleanedText?: string;
@@ -62,6 +63,7 @@ export async function runRuntimeProbe(): Promise<RuntimeProbeResult> {
       ),
       externalContinuityAvailable: Boolean(input.externalContinuity?.provider === "thronglets"),
       appraisal: input.appraisal,
+      compatLabel: input.legacyStimulus ?? input.stimulus,
       legacyStimulus: input.legacyStimulus,
       stimulus: input.stimulus,
       cleanedText: output.cleanedText,
@@ -81,6 +83,7 @@ export async function runRuntimeProbe(): Promise<RuntimeProbeResult> {
       canonicalHostSurface: false,
       externalContinuityAvailable: false,
       appraisal: null,
+      compatLabel: null,
       legacyStimulus: null,
       stimulus: null,
       error: error instanceof Error ? error.message : String(error),

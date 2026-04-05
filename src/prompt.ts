@@ -50,6 +50,7 @@ export function buildAmbientPriorContext(
     .map((prior) => ({
       summary: prior.summary.trim().replace(/\s+/g, " "),
       confidence: Math.max(0, Math.min(1, prior.confidence)),
+      kind: prior.kind,
       provider: prior.provider?.trim(),
     }))
     .filter((prior) => prior.summary.length > 0)
@@ -70,13 +71,25 @@ export function buildAmbientPriorContext(
   };
 
   const title = locale === "zh" ? "环境先验" : "Ambient Prior";
+  const kindLabel = (kind: AmbientPriorView["kind"]): string => {
+    if (locale === "zh") {
+      if (kind === "failure-residue") return "风险";
+      if (kind === "mixed-residue") return "未收敛";
+      if (kind === "success-prior") return "稳定";
+      return "环境";
+    }
+    if (kind === "failure-residue") return "warning";
+    if (kind === "mixed-residue") return "unsettled";
+    if (kind === "success-prior") return "stable";
+    return "ambient";
+  };
   const lines = normalized.map((prior) => {
     const source = prior.provider
       ? locale === "zh"
         ? `${prior.provider}: `
         : `${prior.provider}: `
       : "";
-    return `- ${source}${prior.summary} (${confidenceLabel(prior.confidence)})`;
+    return `- ${kindLabel(prior.kind)} · ${source}${prior.summary} (${confidenceLabel(prior.confidence)})`;
   });
 
   return `[${title}]\n${lines.join("\n")}`;
@@ -1041,8 +1054,8 @@ function buildWritebackHint(
         : `Appraisal has not fully settled — report appraisal: approach|rupture|uncertainty|boundary in <psyche_update>.`);
     } else {
       parts.push(isZh
-        ? `主观评价尚未收束。请你判断，在 <psyche_update> 中报告 appraisal: approach|rupture|uncertainty|boundary。若确实需要旧兼容标签，再附 legacy stimulus:。`
-        : `Appraisal has not fully settled. Judge and report appraisal: approach|rupture|uncertainty|boundary in <psyche_update>. If legacy compatibility truly needs it, you may additionally include legacy stimulus:.`);
+        ? `主观评价尚未收束。请你判断，在 <psyche_update> 中报告 appraisal: approach|rupture|uncertainty|boundary。若确实需要兼容标签，再附 compat label:。`
+        : `Appraisal has not fully settled. Judge and report appraisal: approach|rupture|uncertainty|boundary in <psyche_update>. If compatibility truly needs it, you may additionally include compat label:.`);
     }
   }
 
@@ -1162,14 +1175,14 @@ export function buildCompactContext(
       parts.push(
         `[情绪感知]\n` +
         `对方刚才说了: "${userText.slice(0, 200)}"\n` +
-        (legacyStimulus ? `旧兼容标签: ${legacyStimulus}（仅供参考，你来终判）\n` : "") +
+        (legacyStimulus ? `兼容标签参考: ${legacyStimulus}（仅供参考，不是定论）\n` : "") +
         `你来感受这句话的情绪基调——是善意、敌意、脆弱、冷漠、还是其他？你的回应应该基于你的真实感受，不是讨好。`,
       );
     } else {
       parts.push(
         `[Emotional Sensing]\n` +
         `User just said: "${userText.slice(0, 200)}"\n` +
-        (legacyStimulus ? `Legacy label hint: ${legacyStimulus} (reference only, you decide)\n` : "") +
+        (legacyStimulus ? `Compatibility label hint: ${legacyStimulus} (reference only, not the truth)\n` : "") +
         `Read the emotional tone — kind, hostile, vulnerable, cold, or something else? Respond from genuine feeling, not people-pleasing.`,
       );
     }

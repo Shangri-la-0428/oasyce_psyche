@@ -19,6 +19,7 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import type { PsycheEngine } from "../core.js";
 import type { AmbientPriorView, WritebackSignalType } from "../types.js";
+import { parseAmbientPriorsInput } from "../ambient-runtime.js";
 import { computeOverlay } from "../overlay.js";
 
 // ── Types ────────────────────────────────────────────────────
@@ -50,21 +51,7 @@ function parseSignals(value: unknown): WritebackSignalType[] | undefined {
 }
 
 function parseAmbientPriors(value: unknown): AmbientPriorView[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const parsed = value.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const candidate = item as Record<string, unknown>;
-    if (typeof candidate.summary !== "string" || typeof candidate.confidence !== "number") return [];
-    return [{
-      summary: candidate.summary,
-      confidence: candidate.confidence,
-      provider: typeof candidate.provider === "string" ? candidate.provider : undefined,
-      refs: Array.isArray(candidate.refs)
-        ? candidate.refs.filter((ref): ref is string => typeof ref === "string")
-        : undefined,
-    }];
-  });
-  return parsed.length > 0 ? parsed : undefined;
+  return parseAmbientPriorsInput(value);
 }
 
 // ── Server ───────────────────────────────────────────────────

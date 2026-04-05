@@ -97,7 +97,7 @@ function summarizeCurrentTurn(
   if (topAxes.length > 0) {
     return `appraisal:${topAxes.map(([axis, value]) => `${axis}=${value.toFixed(2)}`).join(",")}`;
   }
-  if (legacyStimulus) return `legacy-stimulus:${legacyStimulus}`;
+  if (legacyStimulus) return `compat-label:${legacyStimulus}`;
   if (userText && userText.trim().length > 0) return "appraisal:none";
   return "no-user-input";
 }

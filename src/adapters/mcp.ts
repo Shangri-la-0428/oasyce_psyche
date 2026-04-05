@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // ============================================================
 // MCP Adapter — Model Context Protocol server for Psyche
 //
@@ -30,17 +29,20 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createRequire } from "node:module";
 import { z } from "zod";
 import { PsycheEngine } from "../core.js";
 import type { PsycheEngineConfig, ProcessInputResult } from "../core.js";
+import {
+  fetchAmbientPriorsFromThronglets,
+  resolveAmbientPriorsForTurn,
+  type ThrongletsAmbientRuntimeOptions,
+} from "../ambient-runtime.js";
 import { MemoryStorageAdapter, FileStorageAdapter, resolveWorkspaceDir } from "../storage.js";
 import type { AmbientPriorView, MBTIType, Locale, PsycheMode } from "../types.js";
+import { getPackageVersion } from "../update.js";
 import { runDemo } from "../demo.js";
 
-const require = createRequire(import.meta.url);
-const PACKAGE_VERSION =
-  (require("../../package.json") as { version?: string }).version ?? "0.0.0";
+const PACKAGE_VERSION = await getPackageVersion();
 
 // ── Config from env ────────────────────────────────────────
 
@@ -51,9 +53,25 @@ const LOCALE = (process.env.PSYCHE_LOCALE ?? "en") as Locale;
 const PERSIST = process.env.PSYCHE_PERSIST !== "false";
 const SIGIL_ID = process.env.PSYCHE_SIGIL_ID ?? undefined;
 const WORKSPACE_OVERRIDE = process.env.PSYCHE_WORKSPACE;
+const AMBIENT_MODE = process.env.PSYCHE_AMBIENT ?? "auto";
 const INTENSITY = process.env.PSYCHE_INTENSITY
   ? Number(process.env.PSYCHE_INTENSITY)
   : 0.7;
+
+export interface McpAmbientRuntimeOptions {
+  mode?: "auto" | "off";
+  thronglets?: ThrongletsAmbientRuntimeOptions;
+  fetcher?: typeof fetchAmbientPriorsFromThronglets;
+}
+
+const DEFAULT_MCP_AMBIENT_OPTIONS: McpAmbientRuntimeOptions = {
+  mode: AMBIENT_MODE === "off" ? "off" : "auto",
+  thronglets: {
+    binaryPath: process.env.THRONGLETS_BIN,
+    dataDir: process.env.THRONGLETS_DATA_DIR,
+    space: process.env.THRONGLETS_SPACE ?? "psyche",
+  },
+};
 
 // ── Parse CLI args (--mbti, --name, --mode, --locale) ──────
 
@@ -111,9 +129,23 @@ async function getEngine(): Promise<PsycheEngine> {
   return engine;
 }
 
+export async function resolveRuntimeAmbientPriors(
+  text: string,
+  explicit?: AmbientPriorView[],
+  opts: McpAmbientRuntimeOptions = DEFAULT_MCP_AMBIENT_OPTIONS,
+): Promise<AmbientPriorView[] | undefined> {
+  return resolveAmbientPriorsForTurn(text, {
+    explicit,
+    enabled: opts.mode !== "off",
+    thronglets: opts.thronglets,
+    fetcher: opts.fetcher ?? fetchAmbientPriorsFromThronglets,
+  });
+}
+
 // ── MCP Server ─────────────────────────────────────────────
 
-const server = new McpServer({
+function createServer(): McpServer {
+  return new McpServer({
   name: "psyche",
   version: PACKAGE_VERSION,
 }, {
@@ -122,6 +154,9 @@ const server = new McpServer({
     tools: {},
   },
 });
+}
+
+const server = createServer();
 
 // ── Resources ──────────────────────────────────────────────
 
@@ -187,13 +222,18 @@ server.tool(
     ambientPriors: z.array(z.object({
       summary: z.string(),
       confidence: z.number().min(0).max(1),
+      kind: z.enum(["failure-residue", "mixed-residue", "success-prior"]).optional(),
       provider: z.string().optional(),
       refs: z.array(z.string()).optional(),
     })).optional().describe("Optional runtime ambient priors from the environment; consumed this turn only, not persisted as self-state"),
   },
   async ({ text, userId, ambientPriors }: { text: string; userId?: string; ambientPriors?: AmbientPriorView[] }) => {
     const eng = await getEngine();
-    const result: ProcessInputResult = await eng.processInput(text, { userId, ambientPriors });
+    const resolvedAmbientPriors = await resolveRuntimeAmbientPriors(text, ambientPriors);
+    const result: ProcessInputResult = await eng.processInput(text, {
+      userId,
+      ambientPriors: resolvedAmbientPriors,
+    });
     return {
       content: [{
         type: "text" as const,
@@ -344,7 +384,7 @@ server.tool(
 
 // ── Main ───────────────────────────────────────────────────
 
-async function main(): Promise<void> {
+export async function runMcpServer(): Promise<void> {
   // Intercept --demo flag before starting MCP server
   const args = process.argv.slice(2);
   if (args.includes("--demo")) {
@@ -360,10 +400,5 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
-
-main().catch((err) => {
-  process.stderr.write(`psyche-mcp fatal: ${err}\n`);
-  process.exit(1);
-});
 
 export { server, getEngine };
