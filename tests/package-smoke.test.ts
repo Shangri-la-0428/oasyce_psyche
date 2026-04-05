@@ -36,9 +36,11 @@ async function installTarball(appDir: string, tarballPath: string): Promise<void
 async function expectMcpBinBoots(appDir: string, binName: string, args: string[]): Promise<void> {
   const executable = process.platform === "win32" ? `${binName}.cmd` : binName;
   const binPath = join(appDir, "node_modules", ".bin", executable);
+  const needsShell = process.platform === "win32" && executable.endsWith(".cmd");
   const child = spawn(binPath, args, {
     cwd: appDir,
     stdio: ["pipe", "pipe", "pipe"],
+    shell: needsShell,
   });
 
   let stderr = "";
