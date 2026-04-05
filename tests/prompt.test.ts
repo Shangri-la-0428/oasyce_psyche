@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildDynamicContext, buildProtocolContext, buildCompactContext, buildInnerWorld, computeUserInvestment, getNearBaselineThreshold } from "../src/prompt.js";
+import { buildActivePolicyContext, buildDynamicContext, buildProtocolContext, buildCompactContext, buildInnerWorld, computeUserInvestment, getNearBaselineThreshold } from "../src/prompt.js";
 import type { PsycheState, StateSnapshot } from "../src/types.js";
 import { DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE } from "../src/types.js";
 
@@ -283,6 +283,30 @@ describe("buildDynamicContext", () => {
     });
     const ctx = buildDynamicContext(state);
     assert.ok(!ctx.includes("互惠"));
+  });
+});
+
+describe("buildActivePolicyContext", () => {
+  it("renders active method policy as a compact runtime section", () => {
+    const ctx = buildActivePolicyContext([
+      {
+        id: "task:reuse-components",
+        strength: "hard",
+        scope: "task",
+        summary: "reuse existing shared components",
+      },
+      {
+        id: "project:avoid-dup-ui",
+        strength: "soft",
+        scope: "project",
+        summary: "prefer shared components over duplicate page UI",
+      },
+    ], "en");
+
+    assert.ok(ctx.includes("Active Method Policy"));
+    assert.ok(ctx.includes("hard"));
+    assert.ok(ctx.includes("reuse existing shared components"));
+    assert.ok(ctx.includes("prefer shared components over duplicate page UI"));
   });
 });
 

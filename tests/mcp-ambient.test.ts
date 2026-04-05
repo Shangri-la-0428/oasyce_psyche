@@ -8,7 +8,7 @@ describe("resolveRuntimeAmbientPriors", () => {
     const explicit: AmbientPriorView[] = [
       { summary: "explicit prior", confidence: 0.91, provider: "host" },
     ];
-    const resolved = await resolveRuntimeAmbientPriors("deploy", explicit, undefined, {
+    const resolved = await resolveRuntimeAmbientPriors("deploy", explicit, undefined, undefined, {
       mode: "auto",
       fetcher: async () => [{ summary: "fetched prior", confidence: 0.42, provider: "thronglets" }],
     });
@@ -16,7 +16,7 @@ describe("resolveRuntimeAmbientPriors", () => {
   });
 
   it("auto-fetches priors when explicit priors are absent", async () => {
-    const resolved = await resolveRuntimeAmbientPriors("deploy", undefined, undefined, {
+    const resolved = await resolveRuntimeAmbientPriors("deploy", undefined, undefined, undefined, {
       mode: "auto",
       fetcher: async () => [{ summary: "fetched prior", confidence: 0.72, provider: "thronglets" }],
     });
@@ -25,7 +25,7 @@ describe("resolveRuntimeAmbientPriors", () => {
   });
 
   it("stays quiet when ambient auto-fetch is disabled", async () => {
-    const resolved = await resolveRuntimeAmbientPriors("deploy", undefined, undefined, {
+    const resolved = await resolveRuntimeAmbientPriors("deploy", undefined, undefined, undefined, {
       mode: "off",
       fetcher: async () => [{ summary: "fetched prior", confidence: 0.72, provider: "thronglets" }],
     });
@@ -34,9 +34,9 @@ describe("resolveRuntimeAmbientPriors", () => {
 
   it("passes the current goal through to the runtime fetcher", async () => {
     let seenGoal: string | undefined;
-    const resolved = await resolveRuntimeAmbientPriors("repair deploy", undefined, "repair", {
+    const resolved = await resolveRuntimeAmbientPriors("repair deploy", undefined, "repair", undefined, {
       mode: "auto",
-      fetcher: async (_text, opts) => {
+      fetcher: async (_text: string, opts) => {
         seenGoal = opts?.goal;
         return [{
           summary: "recent failure residue",

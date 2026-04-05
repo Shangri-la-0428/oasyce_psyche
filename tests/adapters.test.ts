@@ -444,6 +444,40 @@ describe("createPsycheServer (HTTP)", () => {
     assert.equal(next.data.ambientPriorContext, null);
     assert.ok(!next.data.dynamicContext.includes(summary), `got ${next.data.dynamicContext}`);
   });
+
+  it("POST /process-input accepts active policy as runtime-only context", async () => {
+    const { status, data } = await req("POST", "/process-input", {
+      text: "fix the dashboard layout",
+      currentGoal: "build",
+      activePolicy: [{
+        id: "task:reuse-components",
+        strength: "hard",
+        scope: "task",
+        summary: "reuse existing shared components",
+      }],
+      ambientPriors: [{
+        summary: "stable path: similar fixes succeeded when shared components were reused",
+        confidence: 0.84,
+        provider: "thronglets",
+        kind: "success-prior",
+        goal: "build",
+        policyState: "stable-path",
+      }],
+    });
+
+    assert.equal(status, 200);
+    assert.equal(data.currentGoal, "build");
+    assert.equal(data.activePolicy.length, 1);
+    assert.equal(data.activePolicy[0].id, "task:reuse-components");
+    assert.ok(data.policyContext.includes("reuse existing shared components"), `got ${data.policyContext}`);
+    assert.ok(data.dynamicContext.includes("stable path"), `got ${data.dynamicContext}`);
+    assert.ok(!data.dynamicContext.includes("reuse existing shared components"), `got ${data.dynamicContext}`);
+
+    const next = await req("POST", "/process-input", { text: "continue" });
+    assert.equal(next.status, 200);
+    assert.equal(next.data.activePolicy.length, 0);
+    assert.ok(!(next.data.policyContext ?? "").includes("reuse existing shared components"), `got ${next.data.policyContext}`);
+  });
 });
 
 // ── OpenClaw Adapter ─────────────────────────────────

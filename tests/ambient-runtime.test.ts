@@ -47,6 +47,30 @@ describe("fetchAmbientPriorsFromThronglets", () => {
     assert.deepEqual(priors, []);
   });
 
+  it("rejects incompatible ambient prior schema versions", async () => {
+    const priors = await fetchAmbientPriorsFromThronglets("check deployment", {
+      runner: async () => ({
+        ok: true,
+        stdout: JSON.stringify({
+          schema_version: "thronglets.ambient.v999",
+          command: "ambient-priors",
+          data: {
+            priors: [
+              {
+                summary: "stable path: stale schema should not be trusted",
+                confidence: 0.9,
+                kind: "success-prior",
+              },
+            ],
+          },
+        }),
+        stderr: "",
+      }),
+    });
+
+    assert.deepEqual(priors, []);
+  });
+
   it("returns empty for blank input", async () => {
     const priors = await fetchAmbientPriorsFromThronglets("   ", {
       runner: async () => {

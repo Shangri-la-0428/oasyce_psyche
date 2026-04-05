@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
-import type { AmbientPriorView, CurrentGoal } from "./types.js";
+import type { ActivePolicyRule, AmbientPriorView, CurrentGoal } from "./types.js";
 import { normalizeAmbientPriors } from "./ambient-priors.js";
 
 const DEFAULT_AMBIENT_LIMIT = 3;
 const DEFAULT_TIMEOUT_MS = 800;
+const THRONGLETS_AMBIENT_SCHEMA_VERSION = "thronglets.ambient.v1";
 
 interface CommandResult {
   ok: boolean;
@@ -23,6 +24,7 @@ export interface ThrongletsAmbientRuntimeOptions {
   dataDir?: string;
   space?: string;
   goal?: CurrentGoal;
+  activePolicy?: ActivePolicyRule[];
   limit?: number;
   timeoutMs?: number;
   runner?: CommandRunner;
@@ -31,6 +33,7 @@ export interface ThrongletsAmbientRuntimeOptions {
 export interface AmbientPriorResolutionOptions {
   explicit?: readonly AmbientPriorView[] | unknown;
   enabled?: boolean;
+  activePolicy?: ActivePolicyRule[];
   thronglets?: ThrongletsAmbientRuntimeOptions;
   fetcher?: typeof fetchAmbientPriorsFromThronglets;
 }
@@ -38,6 +41,12 @@ export interface AmbientPriorResolutionOptions {
 function parseAmbientPriorOutput(stdout: string): AmbientPriorView[] {
   if (!stdout.trim()) return [];
   const parsed = JSON.parse(stdout) as Record<string, unknown>;
+  if (
+    typeof parsed.schema_version === "string"
+    && parsed.schema_version !== THRONGLETS_AMBIENT_SCHEMA_VERSION
+  ) {
+    return [];
+  }
   if (Array.isArray(parsed.priors)) {
     return normalizeAmbientPriors(parsed.priors);
   }
@@ -111,7 +120,13 @@ export async function fetchAmbientPriorsFromThronglets(
   }
   args.push("ambient-priors", "--json");
 
-  const payload = JSON.stringify({ text: trimmed, space, goal, limit });
+  const payload = JSON.stringify({
+    text: trimmed,
+    space,
+    goal,
+    limit,
+    active_policy: opts.activePolicy ?? [],
+  });
   try {
     const result = await runner(binaryPath, args, payload, timeoutMs);
     if (!result.ok) return [];
@@ -134,6 +149,9 @@ export async function resolveAmbientPriorsForTurn(
   if (explicit) return explicit;
   if (opts.enabled === false) return undefined;
   const fetcher = opts.fetcher ?? fetchAmbientPriorsFromThronglets;
-  const priors = await fetcher(text, opts.thronglets);
+  const priors = await fetcher(text, {
+    ...(opts.thronglets ?? {}),
+    activePolicy: opts.activePolicy ?? opts.thronglets?.activePolicy,
+  });
   return priors.length > 0 ? priors : undefined;
 }

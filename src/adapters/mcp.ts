@@ -38,7 +38,7 @@ import {
   type ThrongletsAmbientRuntimeOptions,
 } from "../ambient-runtime.js";
 import { MemoryStorageAdapter, FileStorageAdapter, resolveWorkspaceDir } from "../storage.js";
-import { CURRENT_GOALS, type AmbientPriorView, type CurrentGoal, type MBTIType, type Locale, type PsycheMode } from "../types.js";
+import { CURRENT_GOALS, type ActivePolicyRule, type AmbientPriorView, type CurrentGoal, type MBTIType, type Locale, type PsycheMode } from "../types.js";
 import { getPackageVersion } from "../update.js";
 import { runDemo } from "../demo.js";
 
@@ -135,13 +135,15 @@ export async function resolveRuntimeAmbientPriors(
   text: string,
   explicit?: AmbientPriorView[],
   currentGoal?: CurrentGoal,
+  activePolicy?: ActivePolicyRule[],
   opts: McpAmbientRuntimeOptions = DEFAULT_MCP_AMBIENT_OPTIONS,
 ): Promise<AmbientPriorView[] | undefined> {
   const throngletsOptions =
-    opts.thronglets || currentGoal
+    opts.thronglets || currentGoal || activePolicy?.length
       ? {
           ...(opts.thronglets ?? {}),
           goal: currentGoal ?? opts.thronglets?.goal,
+          activePolicy: activePolicy ?? opts.thronglets?.activePolicy,
         }
       : undefined;
   return resolveAmbientPriorsForTurn(text, {
@@ -233,19 +235,27 @@ server.tool(
       summary: z.string(),
       confidence: z.number().min(0).max(1),
       kind: z.enum(["failure-residue", "mixed-residue", "success-prior"]).optional(),
+      policyState: z.enum(["policy-conflict", "method-conflict", "stable-path"]).optional(),
       goal: CURRENT_GOAL_SCHEMA.optional(),
       provider: z.string().optional(),
       refs: z.array(z.string()).optional(),
     })).optional().describe("Optional runtime ambient priors from the environment; consumed this turn only, not persisted as self-state"),
     currentGoal: CURRENT_GOAL_SCHEMA.optional().describe("Optional single current runtime goal for this turn"),
+    activePolicy: z.array(z.object({
+      id: z.string(),
+      strength: z.enum(["hard", "soft"]),
+      scope: z.enum(["task", "project"]),
+      summary: z.string(),
+    })).optional().describe("Optional explicit current-turn method policy view. Runtime-only; not persisted as self-state."),
   },
-  async ({ text, userId, ambientPriors, currentGoal }: { text: string; userId?: string; ambientPriors?: AmbientPriorView[]; currentGoal?: CurrentGoal }) => {
+  async ({ text, userId, ambientPriors, currentGoal, activePolicy }: { text: string; userId?: string; ambientPriors?: AmbientPriorView[]; currentGoal?: CurrentGoal; activePolicy?: ActivePolicyRule[] }) => {
     const eng = await getEngine();
-    const resolvedAmbientPriors = await resolveRuntimeAmbientPriors(text, ambientPriors, currentGoal);
+    const resolvedAmbientPriors = await resolveRuntimeAmbientPriors(text, ambientPriors, currentGoal, activePolicy);
     const result: ProcessInputResult = await eng.processInput(text, {
       userId,
       ambientPriors: resolvedAmbientPriors,
       currentGoal,
+      activePolicy,
     });
     return {
       content: [{
@@ -254,6 +264,7 @@ server.tool(
           systemContext: result.systemContext,
           dynamicContext: result.dynamicContext,
           ambientPriors: result.ambientPriors ?? [],
+          activePolicy: result.activePolicy ?? [],
           currentGoal: result.currentGoal ?? null,
           ambientPriorContext: result.ambientPriorContext ?? null,
           appraisal: result.appraisal,

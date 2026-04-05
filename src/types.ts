@@ -881,10 +881,64 @@ export interface SessionBridgeState {
 export const CURRENT_GOALS = ["explore", "build", "repair", "settle"] as const;
 export type CurrentGoal = (typeof CURRENT_GOALS)[number];
 
+export const ACTIVE_POLICY_STRENGTHS = ["hard", "soft"] as const;
+export type ActivePolicyStrength = (typeof ACTIVE_POLICY_STRENGTHS)[number];
+
+export const ACTIVE_POLICY_SCOPES = ["task", "project"] as const;
+export type ActivePolicyScope = (typeof ACTIVE_POLICY_SCOPES)[number];
+
+export const AMBIENT_POLICY_STATES = [
+  "policy-conflict",
+  "method-conflict",
+  "stable-path",
+] as const;
+export type AmbientPolicyState = (typeof AMBIENT_POLICY_STATES)[number];
+
+export interface ActivePolicyRule {
+  id: string;
+  strength: ActivePolicyStrength;
+  scope: ActivePolicyScope;
+  summary: string;
+}
+
+export function normalizeCurrentGoal(value: unknown): CurrentGoal | undefined {
+  return typeof value === "string" && CURRENT_GOALS.includes(value as CurrentGoal)
+    ? (value as CurrentGoal)
+    : undefined;
+}
+
+export function normalizeActivePolicyRules(
+  value: unknown,
+  limit = 3,
+): ActivePolicyRule[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const normalized = value
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    .map((item) => ({
+      id: typeof item.id === "string" ? item.id.trim() : "",
+      summary: typeof item.summary === "string" ? item.summary.trim().replace(/\s+/g, " ") : "",
+      strength: typeof item.strength === "string" && ACTIVE_POLICY_STRENGTHS.includes(item.strength as ActivePolicyStrength)
+        ? (item.strength as ActivePolicyStrength)
+        : undefined,
+      scope: typeof item.scope === "string" && ACTIVE_POLICY_SCOPES.includes(item.scope as ActivePolicyScope)
+        ? (item.scope as ActivePolicyScope)
+        : undefined,
+    }))
+    .filter((rule): rule is ActivePolicyRule => (
+      rule.id.length > 0
+      && rule.summary.length > 0
+      && rule.strength !== undefined
+      && rule.scope !== undefined
+    ))
+    .slice(0, Math.max(1, limit));
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 export interface AmbientPriorView {
   summary: string;
   confidence: number; // 0-1
   kind?: "failure-residue" | "mixed-residue" | "success-prior";
+  policyState?: AmbientPolicyState;
   goal?: CurrentGoal;
   provider?: string;
   refs?: string[];

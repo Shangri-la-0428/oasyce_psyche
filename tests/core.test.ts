@@ -224,6 +224,37 @@ describe("PsycheEngine", () => {
     assert.ok(result.dynamicContext.includes(summary), `got ${result.dynamicContext}`);
   });
 
+  it("treats active policy as current-turn context, not persistent self-state", async () => {
+    const result = await engine.processInput("修 dashboard 页面。", {
+      currentGoal: "build",
+      activePolicy: [{
+        id: "task:reuse-components",
+        strength: "hard",
+        scope: "task",
+        summary: "reuse existing shared components",
+      }],
+      ambientPriors: [{
+        summary: "stable path: shared component reuse has been the compliant path here",
+        confidence: 0.78,
+        kind: "success-prior",
+        goal: "build",
+        provider: "thronglets",
+        policyState: "stable-path",
+      }],
+    });
+
+    assert.equal(result.currentGoal, "build");
+    assert.equal(result.activePolicy?.length, 1);
+    assert.ok(result.policyContext.includes("reuse existing shared components"), `got ${result.policyContext}`);
+    assert.ok(result.dynamicContext.includes("stable path"), `got ${result.dynamicContext}`);
+    assert.ok(!result.dynamicContext.includes("reuse existing shared components"), `got ${result.dynamicContext}`);
+    assert.equal("activePolicy" in (engine.getState() as unknown as Record<string, unknown>), false);
+
+    const next = await engine.processInput("继续。");
+    assert.equal(next.activePolicy?.length ?? 0, 0);
+    assert.ok(!(next.policyContext ?? "").includes("reuse existing shared components"), `got ${next.policyContext}`);
+  });
+
   it("processInput updates relationship gradually based on stimulus valence", async () => {
     const before = { ...engine.getState().relationships._default };
 

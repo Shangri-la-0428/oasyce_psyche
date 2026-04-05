@@ -12,14 +12,15 @@
 // Orchestrates: self-state, appraisal, prompt, profiles, guards, learning
 // ============================================================
 
-import type { AmbientPriorView, CurrentGoal, PsycheState, StimulusType, Locale, MBTIType, SelfState, OutcomeScore, PsycheMode, PersonalityTraits, PolicyModifiers, ClassifierProvider, SubjectivityKernel, ResponseContract, GenerationControls, SessionBridgeState, ThrongletsExport, TurnObservability, WritebackCalibrationFeedback, WritebackSignalType, ExternalContinuityEnvelope, AppraisalAxes } from "./types.js";
+import type { ActivePolicyRule, AmbientPriorView, CurrentGoal, PsycheState, StimulusType, Locale, MBTIType, SelfState, OutcomeScore, PsycheMode, PersonalityTraits, PolicyModifiers, ClassifierProvider, SubjectivityKernel, ResponseContract, GenerationControls, SessionBridgeState, ThrongletsExport, TurnObservability, WritebackCalibrationFeedback, WritebackSignalType, ExternalContinuityEnvelope, AppraisalAxes } from "./types.js";
+import { normalizeActivePolicyRules, normalizeCurrentGoal } from "./types.js";
 import { DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE, DEFAULT_ENERGY_BUDGETS, DEFAULT_TRAIT_DRIFT, DEFAULT_SUBJECT_RESIDUE, DEFAULT_DYADIC_FIELD, MODE_PROFILES } from "./types.js";
 import type { StorageAdapter } from "./storage.js";
 import { MemoryStorageAdapter } from "./storage.js";
 import { applyDecay, applyStimulus, applyContagion, clamp, describeEmotionalState } from "./chemistry.js";
 import { classifyLegacyStimulus, BuiltInClassifier, buildLLMClassifierPrompt, parseLLMClassification } from "./classify.js";
 import { perceive } from "./perceive.js";
-import { buildAmbientPriorContext, buildCompactContext, buildProtocolContext } from "./prompt.js";
+import { buildActivePolicyContext, buildAmbientPriorContext, buildCompactContext, buildProtocolContext } from "./prompt.js";
 import type { PromptRenderInputs } from "./prompt.js";
 import { getSensitivity, getBaseline, getDefaultSelfModel, traitsToBaseline } from "./profiles.js";
 import { isStimulusType } from "./guards.js";
@@ -91,6 +92,8 @@ export interface ProcessInputResult {
   dynamicContext: string;
   /** Runtime-only environmental priors consumed this turn */
   ambientPriors?: AmbientPriorView[];
+  /** Runtime-only explicit method policy for the current task lineage */
+  activePolicy?: ActivePolicyRule[];
   /** Optional current runtime goal carried through this turn only */
   currentGoal?: CurrentGoal;
   /** Rendered environmental prior context injected into the turn, if any */
@@ -145,6 +148,7 @@ export interface ProcessInputOptions {
   userId?: string;
   ambientPriors?: AmbientPriorView[];
   currentGoal?: CurrentGoal;
+  activePolicy?: ActivePolicyRule[];
 }
 
 export interface ProcessOutputResult {
@@ -705,10 +709,12 @@ export class PsycheEngine {
 
     const writebackNote = formatWritebackFeedbackNote(writebackFeedback, locale);
     const ambientPriors = normalizeAmbientPriors(opts?.ambientPriors);
+    const activePolicy = normalizeActivePolicyRules(opts?.activePolicy) ?? [];
     const currentGoal =
-      opts?.currentGoal
+      normalizeCurrentGoal(opts?.currentGoal)
       ?? ambientPriors.find((prior) => prior.goal)?.goal;
     const ambientPriorContext = buildAmbientPriorContext(ambientPriors, locale);
+    const activePolicyContext = buildActivePolicyContext(activePolicy, locale);
     const reflectiveTurn = runReflectiveTurnPhases({
       state,
       appraisalAxes,
@@ -750,6 +756,7 @@ export class PsycheEngine {
       userText: text || undefined,
       legacyStimulus: appliedStimulus,
       ambientPriors,
+      activePolicy,
       ambientPriorContext: ambientPriorContext || undefined,
       personalityIntensity: this.cfg.personalityIntensity,
       metacognitiveNote: reflectiveTurn.metacognitiveNote,
@@ -762,7 +769,9 @@ export class PsycheEngine {
       primarySystemsDescription: reflectiveTurn.primarySystemsDescription,
       subjectivityContext: derivedReplyEnvelope.subjectivityContext,
       responseContractContext: derivedReplyEnvelope.responseContractContext,
-      policyContext: derivedReplyEnvelope.policyContext || undefined,
+      policyContext: [activePolicyContext, derivedReplyEnvelope.policyContext]
+        .filter((value) => Boolean(value && value.trim().length > 0))
+        .join("\n") || undefined,
       sessionBridge,
     };
     const observability = buildTurnObservability(state, {
@@ -783,6 +792,7 @@ export class PsycheEngine {
       systemContext: "",
       dynamicContext: buildCompactContext(state, opts?.userId, promptRenderInputs),
       ambientPriors,
+      activePolicy,
       currentGoal,
       ambientPriorContext: ambientPriorContext || undefined,
       appraisal: appraisalAxes,
@@ -800,7 +810,9 @@ export class PsycheEngine {
       externalContinuity,
       throngletsExports,
       observability,
-      policyContext: derivedReplyEnvelope.policyContext,
+      policyContext: [activePolicyContext, derivedReplyEnvelope.policyContext]
+        .filter((value) => Boolean(value && value.trim().length > 0))
+        .join("\n"),
     };
   }
 
