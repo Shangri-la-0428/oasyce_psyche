@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, mkdir, rm, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, readFile, writeFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -307,6 +307,7 @@ describe("cli setup", () => {
     assert.ok(config.includes(`PSYCHE_WORKSPACE = "${expectedWorkspace}"`));
     assert.ok(config.includes('PSYCHE_NAME = "Luna"'));
     assert.ok(config.includes('PSYCHE_LOCALE = "en"'));
+    assert.deepEqual(await readdir(codexDir), ["config.toml"]);
     await rm(home, { recursive: true, force: true });
   });
 
@@ -349,6 +350,24 @@ describe("cli setup", () => {
     assert.ok(config.includes('PSYCHE_NAME = "Luna"'));
     assert.ok(config.includes('PSYCHE_LOCALE = "en"'));
     assert.ok(!config.includes('PSYCHE_LOCALE = "zh"'));
+    assert.deepEqual(await readdir(codexDir), ["config.toml"]);
+    await rm(home, { recursive: true, force: true });
+  });
+
+  it("writes JSON MCP configs without leaving temp files behind", async () => {
+    const home = await freshDir();
+    const cursorDir = join(home, ".cursor");
+    await mkdir(cursorDir, { recursive: true });
+
+    const { stdout, code } = await run(["setup", "--locale", "en"], {
+      HOME: home,
+    });
+
+    assert.equal(code, 0, stdout);
+    const files = await readdir(cursorDir);
+    assert.deepEqual(files, ["mcp.json"]);
+    const config = JSON.parse(await readFile(join(cursorDir, "mcp.json"), "utf-8"));
+    assert.ok(config.mcpServers.psyche);
     await rm(home, { recursive: true, force: true });
   });
 });
