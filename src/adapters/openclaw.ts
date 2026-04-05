@@ -15,6 +15,7 @@ import type { ProcessInputResult } from "../core.js";
 import { FileStorageAdapter, MemoryStorageAdapter } from "../storage.js";
 import { detectMBTI, extractAgentName, loadState } from "../psyche-file.js";
 import type { Logger } from "../psyche-file.js";
+import { resolveAmbientPriorsForTurn } from "../ambient-runtime.js";
 // Diagnostics are handled engine-level — no adapter imports needed
 
 // ── OpenClaw Plugin API Types (matching plugin-sdk) ──────────
@@ -98,6 +99,59 @@ export function sanitizeOpenClawInputText(text: string): string {
     .trim();
 }
 
+function extractTextFromContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+
+  return content
+    .map((part) => {
+      if (typeof part === "string") return part;
+      if (!part || typeof part !== "object") return "";
+      const record = part as Record<string, unknown>;
+      if (typeof record.text === "string") return record.text;
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+type OpenClawInputSource = "messages" | "prompt" | "text" | "empty";
+
+interface ExtractedOpenClawInput {
+  text: string;
+  source: OpenClawInputSource;
+}
+
+function extractOpenClawInput(event: Record<string, unknown> | undefined): ExtractedOpenClawInput {
+  const messages = Array.isArray(event?.messages) ? event?.messages as unknown[] : [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!message || typeof message !== "object") continue;
+    const record = message as Record<string, unknown>;
+    const role = typeof record.role === "string" ? record.role.toLowerCase() : "";
+    if (role !== "user" && role !== "human") continue;
+    const text = sanitizeOpenClawInputText(extractTextFromContent(record.content));
+    if (text) return { text, source: "messages" };
+  }
+
+  if (typeof event?.prompt === "string") {
+    const text = sanitizeOpenClawInputText(event.prompt);
+    if (text) return { text, source: "prompt" };
+  }
+
+  if (typeof event?.text === "string") {
+    const text = sanitizeOpenClawInputText(event.text);
+    if (text) return { text, source: "text" };
+  }
+
+  return { text: "", source: "empty" };
+}
+
+export function extractOpenClawInputText(event: Record<string, unknown> | undefined): string {
+  return extractOpenClawInput(event).text;
+}
+
 function getDominantAppraisalLabel(result: ProcessInputResult): string | null {
   const appraisal = result.replyEnvelope?.subjectivityKernel?.appraisal ?? result.subjectivityKernel?.appraisal;
   if (!appraisal) return null;
@@ -133,6 +187,7 @@ export function register(api: PluginApi) {
 
     // Engine cache: one PsycheEngine per workspace
     const engines = new Map<string, PsycheEngine>();
+    const lastInputMeta = new Map<string, { source: OpenClawInputSource; chars: number }>();
 
     async function getEngine(workspaceDir: string): Promise<PsycheEngine> {
       let engine = engines.get(workspaceDir);
@@ -177,9 +232,12 @@ export function register(api: PluginApi) {
       if (!workspaceDir) return {};
 
       try {
-        // Resolve input text — gateway provides event.prompt; fall back to event.text for compat
-        const rawInputText = (event?.prompt as string) ?? (event?.text as string) ?? "";
-        const inputText = sanitizeOpenClawInputText(rawInputText);
+        const extractedInput = extractOpenClawInput(event);
+        const inputText = extractedInput.text;
+        lastInputMeta.set(workspaceDir, {
+          source: extractedInput.source,
+          chars: inputText.length,
+        });
         if (!inputText) {
           logger.warn(
             `Psyche: before_prompt_build received empty input text. ` +
@@ -188,19 +246,28 @@ export function register(api: PluginApi) {
         }
 
         const engine = await getEngine(workspaceDir);
+        const ambientPriors = await resolveAmbientPriorsForTurn(inputText, {
+          thronglets: { space: "psyche" },
+        });
         const result = await engine.processInput(
           inputText,
-          { userId: ctx.userId as string | undefined },
+          {
+            userId: ctx.userId as string | undefined,
+            ambientPriors: ambientPriors ?? [],
+          },
         );
         const controls = result.replyEnvelope?.generationControls ?? result.generationControls;
         const dominantAppraisal = getDominantAppraisalLabel(result);
 
         const state = engine.getState();
         logger.info(
-          `Psyche [input] stimulus=${result.stimulus ?? "none"} | ` +
+          `Psyche [input] ` +
           (dominantAppraisal ? `appraisal=${dominantAppraisal} | ` : "") +
+          (result.stimulus ? `legacy_stimulus=${result.stimulus} | ` : "") +
           `order:${Math.round(state.current.order)} flow:${Math.round(state.current.flow)} ` +
           `boundary:${Math.round(state.current.boundary)} resonance:${Math.round(state.current.resonance)} | ` +
+          `source=${extractedInput.source} input=${inputText.length}chars | ` +
+          (ambientPriors && ambientPriors.length > 0 ? `ambient=${ambientPriors.length} | ` : "") +
           `context=${result.dynamicContext.length}chars` +
           (controls?.maxTokens ? ` | out<=${controls.maxTokens}t` : "") +
           (controls?.requireConfirmation ? " | confirm" : ""),
@@ -337,10 +404,13 @@ export function register(api: PluginApi) {
             );
 
             if (recognitionRate === 0 && metrics.inputCount > 0) {
+              const inputMeta = lastInputMeta.get(workspaceDir);
               logger.warn(
                 `Psyche: recognition 0% — no inputs produced stimulus or appraisal hits this session (${metrics.inputCount} inputs). ` +
-                `This usually means OpenClaw passed wrapped text or empty text. ` +
-                `Check before_prompt_build event shape and input sanitization.`,
+                (inputMeta
+                  ? `Last input source=${inputMeta.source}, chars=${inputMeta.chars}. `
+                  : "") +
+                `This can mean wrapped/empty input, but if the input was non-empty it more likely means the current appraisal basis did not map the turn.`,
               );
             } else if (rate === 0 && recognitionRate > 0) {
               logger.info(
@@ -362,6 +432,7 @@ export function register(api: PluginApi) {
 
         // Clean up
         engines.delete(workspaceDir);
+        lastInputMeta.delete(workspaceDir);
       }
     }, { priority: 50 });
 

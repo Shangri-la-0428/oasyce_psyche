@@ -13,6 +13,7 @@ import type {
   StateLayerKind,
   StateReconciliationObservation,
   StateLayerObservation,
+  AppraisalAxes,
   StimulusType,
   ThrongletsExport,
   TurnControlDriver,
@@ -82,9 +83,22 @@ function pickDominantPlane(
   };
 }
 
-function summarizeCurrentTurn(stimulus: StimulusType | null, userText?: string): string {
-  if (stimulus) return `stimulus:${stimulus}`;
-  if (userText && userText.trim().length > 0) return "stimulus:none";
+function summarizeCurrentTurn(
+  appraisal: AppraisalAxes | null | undefined,
+  legacyStimulus: StimulusType | null,
+  userText?: string,
+): string {
+  const topAxes = appraisal
+    ? Object.entries(appraisal)
+      .filter(([, value]) => value > 0.05)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+    : [];
+  if (topAxes.length > 0) {
+    return `appraisal:${topAxes.map(([axis, value]) => `${axis}=${value.toFixed(2)}`).join(",")}`;
+  }
+  if (legacyStimulus) return `compat-label:${legacyStimulus}`;
+  if (userText && userText.trim().length > 0) return "appraisal:none";
   return "no-user-input";
 }
 
@@ -114,7 +128,8 @@ function summarizeRelationship(
 function buildStateLayers(
   state: PsycheState,
   opts: {
-    stimulus: StimulusType | null;
+    appraisal: AppraisalAxes | null | undefined;
+    legacyStimulus: StimulusType | null;
     userText?: string;
     sessionBridge: SessionBridgeState | null;
     writebackFeedback: WritebackCalibrationFeedback[];
@@ -126,8 +141,8 @@ function buildStateLayers(
       layer: "current-turn",
       precedence: 1,
       scope: "turn",
-      active: Boolean(opts.stimulus) || Boolean(opts.userText?.trim()),
-      summary: summarizeCurrentTurn(opts.stimulus, opts.userText),
+      active: Boolean(opts.legacyStimulus) || Boolean(opts.userText?.trim()),
+      summary: summarizeCurrentTurn(opts.appraisal, opts.legacyStimulus, opts.userText),
     },
     {
       layer: "writeback-feedback",
@@ -404,6 +419,7 @@ function buildTraceMapping(
 function listRenderInputs(inputs: PromptRenderInputs): PromptRenderInputName[] {
   const names: PromptRenderInputName[] = [];
   if (inputs.userText) names.push("sensing");
+  if (inputs.ambientPriorContext) names.push("ambient-prior");
   if (inputs.subjectivityContext) names.push("subjectivity");
   if (inputs.responseContractContext) names.push("response-contract");
   if (inputs.metacognitiveNote) names.push("metacognition");
@@ -435,7 +451,7 @@ export function buildTurnObservability(
     replyEnvelope: ReplyEnvelope;
     promptRenderInputs: PromptRenderInputs;
     compactMode: boolean;
-    stimulus: StimulusType | null;
+    legacyStimulus: StimulusType | null;
     userText?: string;
     sessionBridge: SessionBridgeState | null;
     writebackFeedback: WritebackCalibrationFeedback[];
@@ -444,7 +460,8 @@ export function buildTurnObservability(
   },
 ): TurnObservability {
   const stateLayers = buildStateLayers(state, {
-    stimulus: opts.stimulus,
+    appraisal: opts.replyEnvelope.subjectivityKernel.appraisal,
+    legacyStimulus: opts.legacyStimulus,
     userText: opts.userText,
     sessionBridge: opts.sessionBridge,
     writebackFeedback: opts.writebackFeedback,

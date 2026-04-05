@@ -14,7 +14,15 @@
 // ============================================================
 
 import type { PsycheEngine } from "../core.js";
-import type { WritebackSignalType } from "../types.js";
+import type { AmbientPriorView, WritebackSignalType } from "../types.js";
+import {
+  resolveAmbientPriorsForTurn,
+  type ThrongletsAmbientRuntimeOptions,
+} from "../ambient-runtime.js";
+
+export interface PsycheLangChainOptions {
+  ambient?: boolean | ThrongletsAmbientRuntimeOptions;
+}
 
 /**
  * LangChain integration helper for PsycheEngine.
@@ -43,7 +51,10 @@ import type { WritebackSignalType } from "../types.js";
  * ```
  */
 export class PsycheLangChain {
-  constructor(private readonly engine: PsycheEngine) {}
+  constructor(
+    private readonly engine: PsycheEngine,
+    private readonly opts: PsycheLangChainOptions = {},
+  ) {}
 
   private readonly validSignals = new Set<WritebackSignalType>([
     "trust_up",
@@ -64,6 +75,19 @@ export class PsycheLangChain {
     return parsed.length > 0 ? [...new Set(parsed)] : undefined;
   }
 
+  private async resolveAmbientPriors(userText: string): Promise<AmbientPriorView[] | undefined> {
+    const ambient = this.opts.ambient;
+    return resolveAmbientPriorsForTurn(userText, {
+      enabled: Boolean(ambient),
+      thronglets: ambient
+        ? {
+            ...(ambient === true ? {} : ambient),
+            space: ambient === true ? "psyche" : (ambient.space ?? "psyche"),
+          }
+        : undefined,
+    });
+  }
+
   /**
    * Get the system message to inject into the LLM call.
    * Combines the protocol (cacheable) and dynamic context (per-turn).
@@ -71,7 +95,10 @@ export class PsycheLangChain {
    * Call this BEFORE the LLM invocation.
    */
   async getSystemMessage(userText: string, opts?: { userId?: string }): Promise<string> {
-    const result = await this.engine.processInput(userText, opts);
+    const result = await this.engine.processInput(userText, {
+      ...opts,
+      ambientPriors: await this.resolveAmbientPriors(userText),
+    });
     return result.systemContext + "\n\n" + result.dynamicContext;
   }
 
@@ -85,7 +112,10 @@ export class PsycheLangChain {
     userText: string,
     opts?: { userId?: string; maxTokens?: number },
   ): Promise<{ systemMessage: string; maxTokens?: number; requireConfirmation: boolean }> {
-    const result = await this.engine.processInput(userText, opts);
+    const result = await this.engine.processInput(userText, {
+      ...opts,
+      ambientPriors: await this.resolveAmbientPriors(userText),
+    });
     const generationControls = result.replyEnvelope?.generationControls ?? result.generationControls;
     const controls = {
       ...(generationControls ?? {}),

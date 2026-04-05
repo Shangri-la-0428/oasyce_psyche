@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // ============================================================
 // MCP Adapter — Model Context Protocol server for Psyche
 //
@@ -33,9 +32,17 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { PsycheEngine } from "../core.js";
 import type { PsycheEngineConfig, ProcessInputResult } from "../core.js";
-import { MemoryStorageAdapter, FileStorageAdapter } from "../storage.js";
-import type { MBTIType, Locale, PsycheMode } from "../types.js";
+import {
+  fetchAmbientPriorsFromThronglets,
+  resolveAmbientPriorsForTurn,
+  type ThrongletsAmbientRuntimeOptions,
+} from "../ambient-runtime.js";
+import { MemoryStorageAdapter, FileStorageAdapter, resolveWorkspaceDir } from "../storage.js";
+import type { AmbientPriorView, MBTIType, Locale, PsycheMode } from "../types.js";
+import { getPackageVersion } from "../update.js";
 import { runDemo } from "../demo.js";
+
+const PACKAGE_VERSION = await getPackageVersion();
 
 // ── Config from env ────────────────────────────────────────
 
@@ -45,10 +52,26 @@ const MODE = (process.env.PSYCHE_MODE ?? "natural") as PsycheMode;
 const LOCALE = (process.env.PSYCHE_LOCALE ?? "en") as Locale;
 const PERSIST = process.env.PSYCHE_PERSIST !== "false";
 const SIGIL_ID = process.env.PSYCHE_SIGIL_ID ?? undefined;
-const BASE_WORKSPACE = process.env.PSYCHE_WORKSPACE ?? process.cwd();
+const WORKSPACE_OVERRIDE = process.env.PSYCHE_WORKSPACE;
+const AMBIENT_MODE = process.env.PSYCHE_AMBIENT ?? "auto";
 const INTENSITY = process.env.PSYCHE_INTENSITY
   ? Number(process.env.PSYCHE_INTENSITY)
   : 0.7;
+
+export interface McpAmbientRuntimeOptions {
+  mode?: "auto" | "off";
+  thronglets?: ThrongletsAmbientRuntimeOptions;
+  fetcher?: typeof fetchAmbientPriorsFromThronglets;
+}
+
+const DEFAULT_MCP_AMBIENT_OPTIONS: McpAmbientRuntimeOptions = {
+  mode: AMBIENT_MODE === "off" ? "off" : "auto",
+  thronglets: {
+    binaryPath: process.env.THRONGLETS_BIN,
+    dataDir: process.env.THRONGLETS_DATA_DIR,
+    space: process.env.THRONGLETS_SPACE ?? "psyche",
+  },
+};
 
 // ── Parse CLI args (--mbti, --name, --mode, --locale) ──────
 
@@ -91,8 +114,12 @@ async function getEngine(): Promise<PsycheEngine> {
   };
 
   const persist = cfg.persist !== false;
-  // Per-Sigil workspace isolation: each Sigil gets its own state directory
-  const workspace = sigilId ? `${BASE_WORKSPACE}/${sigilId}` : BASE_WORKSPACE;
+  // Default to a stable per-user writable root so hosts do not need to supply cwd.
+  const workspace = resolveWorkspaceDir({
+    workspace: WORKSPACE_OVERRIDE,
+    sigilId,
+    surface: "mcp",
+  });
   const storage = persist
     ? new FileStorageAdapter(workspace)
     : new MemoryStorageAdapter();
@@ -102,17 +129,34 @@ async function getEngine(): Promise<PsycheEngine> {
   return engine;
 }
 
+export async function resolveRuntimeAmbientPriors(
+  text: string,
+  explicit?: AmbientPriorView[],
+  opts: McpAmbientRuntimeOptions = DEFAULT_MCP_AMBIENT_OPTIONS,
+): Promise<AmbientPriorView[] | undefined> {
+  return resolveAmbientPriorsForTurn(text, {
+    explicit,
+    enabled: opts.mode !== "off",
+    thronglets: opts.thronglets,
+    fetcher: opts.fetcher ?? fetchAmbientPriorsFromThronglets,
+  });
+}
+
 // ── MCP Server ─────────────────────────────────────────────
 
-const server = new McpServer({
+function createServer(): McpServer {
+  return new McpServer({
   name: "psyche",
-  version: "11.4.0",
+  version: PACKAGE_VERSION,
 }, {
   capabilities: {
     resources: {},
     tools: {},
   },
 });
+}
+
+const server = createServer();
 
 // ── Resources ──────────────────────────────────────────────
 
@@ -167,7 +211,7 @@ server.tool(
   "process_input",
   "Process user input through the emotional engine. Returns emotional " +
   "context to inject into the LLM system prompt (systemContext + dynamicContext), " +
-  "detected stimulus type, a canonical replyEnvelope, compatibility aliases " +
+  "an appraisal-first semantic reading, optional runtime ambient priors, an optional legacy stimulus hint, a canonical replyEnvelope, compatibility aliases " +
   "(policyModifiers + subjectivityKernel + responseContract + generationControls), an optional " +
   "externalContinuity envelope, and sparse low-frequency throngletsExports " +
   "suitable for additive external continuity layers. " +
@@ -175,16 +219,31 @@ server.tool(
   {
     text: z.string().describe("The user's message text"),
     userId: z.string().optional().describe("Optional user ID for multi-user relationship tracking"),
+    ambientPriors: z.array(z.object({
+      summary: z.string(),
+      confidence: z.number().min(0).max(1),
+      kind: z.enum(["failure-residue", "mixed-residue", "success-prior"]).optional(),
+      provider: z.string().optional(),
+      refs: z.array(z.string()).optional(),
+    })).optional().describe("Optional runtime ambient priors from the environment; consumed this turn only, not persisted as self-state"),
   },
-  async ({ text, userId }: { text: string; userId?: string }) => {
+  async ({ text, userId, ambientPriors }: { text: string; userId?: string; ambientPriors?: AmbientPriorView[] }) => {
     const eng = await getEngine();
-    const result: ProcessInputResult = await eng.processInput(text, { userId });
+    const resolvedAmbientPriors = await resolveRuntimeAmbientPriors(text, ambientPriors);
+    const result: ProcessInputResult = await eng.processInput(text, {
+      userId,
+      ambientPriors: resolvedAmbientPriors,
+    });
     return {
       content: [{
         type: "text" as const,
         text: JSON.stringify({
           systemContext: result.systemContext,
           dynamicContext: result.dynamicContext,
+          ambientPriors: result.ambientPriors ?? [],
+          ambientPriorContext: result.ambientPriorContext ?? null,
+          appraisal: result.appraisal,
+          legacyStimulus: result.legacyStimulus,
           stimulus: result.stimulus,
           replyEnvelope: result.replyEnvelope ?? null,
           policyModifiers: result.policyModifiers ?? null,
@@ -325,7 +384,7 @@ server.tool(
 
 // ── Main ───────────────────────────────────────────────────
 
-async function main(): Promise<void> {
+export async function runMcpServer(): Promise<void> {
   // Intercept --demo flag before starting MCP server
   const args = process.argv.slice(2);
   if (args.includes("--demo")) {
@@ -341,10 +400,5 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
-
-main().catch((err) => {
-  process.stderr.write(`psyche-mcp fatal: ${err}\n`);
-  process.exit(1);
-});
 
 export { server, getEngine };

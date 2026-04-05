@@ -6,7 +6,7 @@ import { MemoryStorageAdapter } from "../src/storage.js";
 import { psycheMiddleware } from "../src/adapters/vercel-ai.js";
 import { PsycheLangChain } from "../src/adapters/langchain.js";
 import { createPsycheServer } from "../src/adapters/http.js";
-import { register, sanitizeOpenClawInputText } from "../src/adapters/openclaw.js";
+import { extractOpenClawInputText, register, sanitizeOpenClawInputText } from "../src/adapters/openclaw.js";
 import { PsycheClaudeSDK, stripPsycheTags } from "../src/adapters/claude-sdk.js";
 
 function makeEngine() {
@@ -192,6 +192,26 @@ describe("OpenClaw adapter helpers", () => {
       "如果我现在关掉这个窗口，今晚不再回来。",
     );
   });
+
+  it("prefers the latest user message over the flattened prompt", () => {
+    const event = {
+      prompt: "system and tool wrappers that should not be classified first",
+      messages: [
+        { role: "assistant", content: "earlier reply" },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "你刚才没有真正接住我，但我还想继续说。" },
+          ],
+        },
+      ],
+    };
+
+    assert.equal(
+      extractOpenClawInputText(event),
+      "你刚才没有真正接住我，但我还想继续说。",
+    );
+  });
 });
 
 // ── LangChain Adapter ──────────────────────────────────
@@ -234,6 +254,40 @@ describe("PsycheLangChain", () => {
   it("supports userId parameter", async () => {
     const msg = await lc.getSystemMessage("hello", { userId: "alice" });
     assert.ok(typeof msg === "string");
+  });
+
+  it("injects runtime ambient priors when enabled", async () => {
+    const localEngine = makeEngine();
+    await localEngine.initialize();
+    const localLc = new PsycheLangChain(localEngine, {
+      ambient: {
+        runner: async (_binaryPath, _args, stdin) => {
+          const payload = JSON.parse(stdin) as { text: string };
+          assert.equal(payload.text, "deploy thronglets service");
+          return {
+            ok: true,
+            stdout: JSON.stringify({
+              data: {
+                priors: [
+                  {
+                    summary: "Recent similar runs stabilized after checking ssh reachability first.",
+                    confidence: 0.81,
+                    provider: "thronglets",
+                  },
+                ],
+              },
+            }),
+            stderr: "",
+          };
+        },
+      },
+    });
+
+    const msg = await localLc.getSystemMessage("deploy thronglets service");
+    assert.ok(msg.includes("ssh reachability first"));
+
+    const prepared = await localLc.prepareInvocation("deploy thronglets service");
+    assert.ok(prepared.systemMessage.includes("ssh reachability first"));
   });
 
   it("prepareInvocation returns system message and mechanical hints", async () => {
@@ -304,6 +358,8 @@ describe("createPsycheServer (HTTP)", () => {
     assert.equal(status, 200);
     assert.ok(typeof data.dynamicContext === "string");
     assert.ok(data.dynamicContext.length > 0);
+    assert.ok("appraisal" in data);
+    assert.equal(data.legacyStimulus, "praise");
     assert.equal(data.stimulus, "praise");
     assert.ok(data.replyEnvelope);
     assert.ok(data.subjectivityKernel);
@@ -367,6 +423,23 @@ describe("createPsycheServer (HTTP)", () => {
     });
     assert.equal(status, 200);
     assert.ok(data.dynamicContext);
+  });
+
+  it("POST /process-input accepts runtime ambient priors without persisting them", async () => {
+    const summary = "similar contexts have succeeded before; reuse the proven path first";
+    const withPrior = await req("POST", "/process-input", {
+      text: "login endpoint 500, where do I start?",
+      ambientPriors: [{ summary, confidence: 0.82, provider: "thronglets" }],
+    });
+    assert.equal(withPrior.status, 200);
+    assert.equal(withPrior.data.ambientPriors.length, 1);
+    assert.ok(withPrior.data.ambientPriorContext.includes(summary), `got ${withPrior.data.ambientPriorContext}`);
+    assert.ok(withPrior.data.observability.outputAttribution.renderInputs.includes("ambient-prior"));
+
+    const next = await req("POST", "/process-input", { text: "continue" });
+    assert.equal(next.status, 200);
+    assert.equal(next.data.ambientPriorContext, null);
+    assert.ok(!next.data.dynamicContext.includes(summary), `got ${next.data.dynamicContext}`);
   });
 });
 
@@ -805,6 +878,52 @@ describe("PsycheClaudeSDK", () => {
     assert.ok(inputResult, "Should have input result after hook call");
     assert.ok(inputResult!.dynamicContext.length > 0, "Should have dynamic context");
     assert.equal(typeof inputResult!.systemContext, "string");
+  });
+
+  it("UserPromptSubmit hook injects runtime ambient priors when enabled", async () => {
+    const localEngine = makeEngine();
+    await localEngine.initialize();
+    const localPsyche = new PsycheClaudeSDK(localEngine, {
+      ambient: {
+        runner: async (_binaryPath, _args, stdin) => {
+          const payload = JSON.parse(stdin) as { text: string };
+          assert.equal(payload.text, "deploy psyche over ssh");
+          return {
+            ok: true,
+            stdout: JSON.stringify({
+              data: {
+                priors: [
+                  {
+                    summary: "Recent similar runs stabilized after checking ssh reachability first.",
+                    confidence: 0.81,
+                    provider: "thronglets",
+                  },
+                ],
+              },
+            }),
+            stderr: "",
+          };
+        },
+      },
+    });
+    const hooks = localPsyche.getHooks();
+    const callback = hooks.UserPromptSubmit![0].hooks[0];
+
+    await callback(
+      {
+        hook_event_name: "UserPromptSubmit",
+        user_message: "deploy psyche over ssh",
+        session_id: "ambient-test",
+        cwd: "/tmp",
+      },
+      undefined,
+      { signal: AbortSignal.timeout(5000) },
+    );
+
+    const inputResult = localPsyche.getLastInputResult();
+    assert.ok(inputResult);
+    assert.equal(inputResult!.ambientPriors?.length, 1);
+    assert.ok(inputResult!.ambientPriorContext?.includes("ssh reachability first"));
   });
 
   it("defaults relationship tracking to the shared internal bucket", async () => {

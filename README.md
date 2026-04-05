@@ -129,7 +129,7 @@ Psyche 要解决的不可压缩问题只有一个：
 不用安装任何东西，一条命令看 Psyche 如何运作：
 
 ```bash
-npx psyche-mcp --demo
+npx psyche-ai mcp --demo
 ```
 
 这会跑一个 6 轮"持续否定 → 修复"的场景。你会看到：
@@ -138,7 +138,8 @@ npx psyche-mcp --demo
   Round 1/6 │ User
   > "This report is terrible. Completely unacceptable."
 
-  stimulus: criticism
+  appraisal: identityThreat:0.64
+  legacy stimulus: criticism
 
   序   ########............  38  -12     ← coherence drops
   流   ##############......  72   +5     ← exchange increases
@@ -152,7 +153,8 @@ npx psyche-mcp --demo
   Round 3/6 │ User
   > "You don't understand me at all. Stop adding your opinion."
 
-  stimulus: conflict
+  appraisal: identityThreat:0.82
+  legacy stimulus: conflict
 
   序   ####................  22  -15     ← order collapse
   流   ################....  80  +15     ← high exchange (conflict is flow)
@@ -167,7 +169,8 @@ npx psyche-mcp --demo
   Round 6/6 │ User
   > "I'm sorry. Are you okay? I shouldn't have said that."
 
-  stimulus: validation
+  appraisal: attachmentPull:0.71
+  legacy stimulus: validation
 
   序   #############.......  65  +15     ← coherence restored
   振   ##############......  70  +12     ← resonance repair
@@ -483,7 +486,7 @@ import { psycheMiddleware } from "psyche-ai/vercel-ai";
 import { PsycheLangChain } from "psyche-ai/langchain";
 
 // MCP（Claude Desktop / Cursor / Windsurf / Claude Code）
-// npx psyche-mcp --mbti ENFP --name Luna
+// npx psyche-ai mcp --mbti ENFP --name Luna
 
 // 任何语言（HTTP API）
 // psyche serve --port 3210

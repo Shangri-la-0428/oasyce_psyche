@@ -16,7 +16,7 @@
 
 // ── Core engine ─────────────────────────────────────────────
 export { PsycheEngine } from "./core.js";
-export type { PsycheEngineConfig, ProcessInputResult, ProcessOutputResult, ProcessOutcomeResult } from "./core.js";
+export type { PsycheEngineConfig, ProcessInputOptions, ProcessInputResult, ProcessOutputResult, ProcessOutcomeResult } from "./core.js";
 
 // ── Storage ─────────────────────────────────────────────────
 export { FileStorageAdapter, MemoryStorageAdapter } from "./storage.js";
@@ -31,6 +31,7 @@ export type {
   ModeProfile,
   WeightedStimulus,
   StateSnapshot,
+  AmbientPriorView,
 } from "./types.js";
 export { MODE_PROFILES, DIMENSION_KEYS, DIMENSION_NAMES, DIMENSION_NAMES_ZH, DIMENSION_SPECS } from "./types.js";
 
@@ -63,6 +64,18 @@ export type { PsycheOverlay } from "./overlay.js";
 // ── Diagnostics ─────────────────────────────────────────────
 export { computeLayerHealthSummary } from "./diagnostics.js";
 export type { LayerHealthSummary, LayerHealthDetail, LayerStatus, DiagnosticLayer } from "./diagnostics.js";
+
+// ── Ambient runtime intake ──────────────────────────────────
+export {
+  fetchAmbientPriorsFromThronglets,
+  parseAmbientPriorsInput,
+  resolveAmbientPriorsForTurn,
+} from "./ambient-runtime.js";
+export type {
+  AmbientPriorResolutionOptions,
+  ThrongletsAmbientRuntimeOptions,
+} from "./ambient-runtime.js";
+export { normalizeAmbientPriors } from "./ambient-priors.js";
 
 
 // ============================================================

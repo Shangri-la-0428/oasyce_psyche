@@ -2,6 +2,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PsycheEngine } from "./core.js";
 import { MemoryStorageAdapter } from "./storage.js";
+import type { AppraisalAxes } from "./types.js";
 import { getPackageVersion } from "./update.js";
 
 export interface RuntimeProbeResult {
@@ -16,6 +17,9 @@ export interface RuntimeProbeResult {
   processOutputCalled: boolean;
   canonicalHostSurface: boolean;
   externalContinuityAvailable: boolean;
+  appraisal: AppraisalAxes | null;
+  compatLabel: string | null;
+  legacyStimulus: string | null;
   stimulus: string | null;
   cleanedText?: string;
   stateChanged?: boolean;
@@ -42,7 +46,6 @@ export async function runRuntimeProbe(): Promise<RuntimeProbeResult> {
 
     const input = await engine.processInput("Runtime probe: verify the SDK is actually callable.");
     const output = await engine.processOutput("Probe output acknowledged.");
-
     return {
       ok: true,
       packageName: "psyche-ai",
@@ -59,6 +62,9 @@ export async function runRuntimeProbe(): Promise<RuntimeProbeResult> {
         && input.replyEnvelope?.generationControls,
       ),
       externalContinuityAvailable: Boolean(input.externalContinuity?.provider === "thronglets"),
+      appraisal: input.appraisal,
+      compatLabel: input.legacyStimulus ?? input.stimulus,
+      legacyStimulus: input.legacyStimulus,
       stimulus: input.stimulus,
       cleanedText: output.cleanedText,
       stateChanged: output.stateChanged,
@@ -76,6 +82,9 @@ export async function runRuntimeProbe(): Promise<RuntimeProbeResult> {
       processOutputCalled: false,
       canonicalHostSurface: false,
       externalContinuityAvailable: false,
+      appraisal: null,
+      compatLabel: null,
+      legacyStimulus: null,
       stimulus: null,
       error: error instanceof Error ? error.message : String(error),
     };

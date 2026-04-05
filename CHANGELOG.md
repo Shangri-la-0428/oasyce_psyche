@@ -1,5 +1,28 @@
 # 更新日志 / Changelog
 
+## v11.5.2 — Appraisal-First Ambient Runtime
+
+### Changed
+- 将 `Psyche` 的 host-facing surface 进一步统一为 appraisal-first，`stimulus` 只保留为兼容层
+- ambient prior intake 统一收束为共享 runtime helper，不再让不同 adapter 各自漂移
+- MCP 入口边界收正：`src/adapters/mcp.ts` 变为纯库模块，CLI 启动落在独立薄壳
+
+### Fixed
+- 修复导入 `mcp.ts` 时仍可能触发入口副作用的问题
+- 修复版本解析只认单一路径的脆弱实现，统一改为共享 package metadata
+- 修复不同 host 下 ambient prior / observability 表面不一致的问题
+
+---
+
+## v11.5.1 — MCP Package Boot Fix
+
+### Fixed
+- 将 MCP 运行时必需依赖 `@modelcontextprotocol/sdk` 和 `zod` 移入 `dependencies`，修复 `npx psyche-ai mcp` 在干净环境下启动失败
+- 新增打包级 smoke test：真实 `npm pack` + 临时安装 + MCP initialize 握手，防止“本地能跑、发布后坏掉”的回归
+- MCP server 版本号从 `package.json` 动态读取，避免 adapter 内部版本漂移
+
+---
+
 ## v11.5.0 — Self-State Export to Thronglets
 
 ### Added

@@ -7,7 +7,7 @@
 //   const server = createPsycheServer(engine, { port: 3210 });
 //
 // Endpoints:
-//   POST /process-input  { text, userId? }  → { systemContext, dynamicContext, stimulus, replyEnvelope?, ...compat aliases, sessionBridge?, writebackFeedback?, externalContinuity?, throngletsExports?, policyContext }
+//   POST /process-input  { text, userId?, ambientPriors? }  → { systemContext, dynamicContext, ambientPriors?, ambientPriorContext?, appraisal, legacyStimulus, stimulus, replyEnvelope?, ...compat aliases, sessionBridge?, writebackFeedback?, externalContinuity?, throngletsExports?, policyContext }
 //   POST /process-output { text, userId?, signals?, signalConfidence? }  → { cleanedText, stateChanged }
 //   GET  /state                             → PsycheState + overlay
 //   GET  /overlay                           → PsycheOverlay (arousal/valence/agency/vulnerability)
@@ -18,7 +18,8 @@
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import type { PsycheEngine } from "../core.js";
-import type { WritebackSignalType } from "../types.js";
+import type { AmbientPriorView, WritebackSignalType } from "../types.js";
+import { parseAmbientPriorsInput } from "../ambient-runtime.js";
 import { computeOverlay } from "../overlay.js";
 
 // ── Types ────────────────────────────────────────────────────
@@ -47,6 +48,10 @@ function parseSignals(value: unknown): WritebackSignalType[] | undefined {
     typeof item === "string" && VALID_WRITEBACK_SIGNALS.has(item as WritebackSignalType)
   ));
   return parsed.length > 0 ? [...new Set(parsed)] : undefined;
+}
+
+function parseAmbientPriors(value: unknown): AmbientPriorView[] | undefined {
+  return parseAmbientPriorsInput(value);
 }
 
 // ── Server ───────────────────────────────────────────────────
@@ -112,9 +117,31 @@ export function createPsycheServer(engine: PsycheEngine, opts?: HttpAdapterOptio
         const body = await readBody(req);
         const result = await engine.processInput(
           (body.text as string) ?? "",
-          { userId: body.userId as string | undefined },
+          {
+            userId: body.userId as string | undefined,
+            ambientPriors: parseAmbientPriors(body.ambientPriors),
+          },
         );
-        json(res, 200, result);
+        json(res, 200, {
+          systemContext: result.systemContext,
+          dynamicContext: result.dynamicContext,
+          ambientPriors: result.ambientPriors ?? [],
+          ambientPriorContext: result.ambientPriorContext ?? null,
+          appraisal: result.appraisal,
+          legacyStimulus: result.legacyStimulus,
+          stimulus: result.stimulus,
+          replyEnvelope: result.replyEnvelope ?? null,
+          policyModifiers: result.policyModifiers ?? null,
+          subjectivityKernel: result.subjectivityKernel ?? null,
+          responseContract: result.responseContract ?? null,
+          generationControls: result.generationControls ?? null,
+          sessionBridge: result.sessionBridge ?? null,
+          writebackFeedback: result.writebackFeedback ?? null,
+          externalContinuity: result.externalContinuity ?? null,
+          throngletsExports: result.throngletsExports ?? null,
+          policyContext: result.policyContext,
+          observability: result.observability ?? null,
+        });
         return;
       }
 
