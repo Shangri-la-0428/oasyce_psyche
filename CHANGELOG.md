@@ -1,5 +1,12 @@
 # 更新日志 / Changelog
 
+## v11.5.6 — Fail-Open Writeback Contract
+
+- Centralize `processOutput()` writeback signal validation in a single core-owned contract instead of letting adapters drift.
+- Ignore invalid host-provided `signals` as structured validation residue rather than crashing on runtime property access.
+- Keep fail-open output fallback honest: preserve untouched text by default, and only strip `<psyche_update>` tags when tag stripping is actually enabled.
+- Document the structured writeback validation and fail-open behavior so hosts know which parameter combinations are safe to use by default.
+
 ## v11.5.5 — Runtime Current-Turn Correction
 
 - Add a thinner runtime correction path across MCP, HTTP, LangChain, and Claude SDK surfaces.
