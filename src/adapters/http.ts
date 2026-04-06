@@ -19,8 +19,9 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import type { PsycheEngine } from "../core.js";
 import {
-  normalizeActivePolicyRules,
   normalizeCurrentGoal,
+  normalizeCurrentTurnCorrection,
+  resolveRuntimeActivePolicy,
   type AmbientPriorView,
   type WritebackSignalType,
 } from "../types.js";
@@ -57,6 +58,17 @@ function parseSignals(value: unknown): WritebackSignalType[] | undefined {
 
 function parseAmbientPriors(value: unknown): AmbientPriorView[] | undefined {
   return parseAmbientPriorsInput(value);
+}
+
+function parseCurrentTurnCorrection(body: Record<string, unknown>): string | undefined {
+  return normalizeCurrentTurnCorrection(
+    body.currentTurnCorrection
+      ?? body.current_turn_correction
+      ?? body.taskCorrection
+      ?? body.task_correction
+      ?? body.explicitInstruction
+      ?? body.explicit_instruction,
+  );
 }
 
 // ── Server ───────────────────────────────────────────────────
@@ -120,13 +132,15 @@ export function createPsycheServer(engine: PsycheEngine, opts?: HttpAdapterOptio
       // POST /process-input
       if (req.method === "POST" && url.pathname === "/process-input") {
         const body = await readBody(req);
+        const currentTurnCorrection = parseCurrentTurnCorrection(body);
         const result = await engine.processInput(
           (body.text as string) ?? "",
           {
             userId: body.userId as string | undefined,
             ambientPriors: parseAmbientPriors(body.ambientPriors),
             currentGoal: normalizeCurrentGoal(body.currentGoal),
-            activePolicy: normalizeActivePolicyRules(body.activePolicy),
+            activePolicy: resolveRuntimeActivePolicy(body.activePolicy, currentTurnCorrection),
+            currentTurnCorrection,
           },
         );
         json(res, 200, {

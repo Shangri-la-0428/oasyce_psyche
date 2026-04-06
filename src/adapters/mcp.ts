@@ -38,7 +38,17 @@ import {
   type ThrongletsAmbientRuntimeOptions,
 } from "../ambient-runtime.js";
 import { MemoryStorageAdapter, FileStorageAdapter, resolveWorkspaceDir } from "../storage.js";
-import { CURRENT_GOALS, type ActivePolicyRule, type AmbientPriorView, type CurrentGoal, type MBTIType, type Locale, type PsycheMode } from "../types.js";
+import {
+  CURRENT_GOALS,
+  normalizeCurrentTurnCorrection,
+  resolveRuntimeActivePolicy,
+  type ActivePolicyRule,
+  type AmbientPriorView,
+  type CurrentGoal,
+  type MBTIType,
+  type Locale,
+  type PsycheMode,
+} from "../types.js";
 import { getPackageVersion } from "../update.js";
 import { runDemo } from "../demo.js";
 
@@ -136,21 +146,37 @@ export async function resolveRuntimeAmbientPriors(
   explicit?: AmbientPriorView[],
   currentGoal?: CurrentGoal,
   activePolicy?: ActivePolicyRule[],
+  currentTurnCorrectionOrOpts?: string | McpAmbientRuntimeOptions,
   opts: McpAmbientRuntimeOptions = DEFAULT_MCP_AMBIENT_OPTIONS,
 ): Promise<AmbientPriorView[] | undefined> {
+  const currentTurnCorrection = typeof currentTurnCorrectionOrOpts === "string"
+    ? currentTurnCorrectionOrOpts
+    : undefined;
+  const resolvedOpts = (
+    typeof currentTurnCorrectionOrOpts === "object"
+    && currentTurnCorrectionOrOpts !== null
+  )
+    ? currentTurnCorrectionOrOpts
+    : opts;
+  const normalizedCorrection = normalizeCurrentTurnCorrection(currentTurnCorrection);
+  const resolvedActivePolicy = resolveRuntimeActivePolicy(activePolicy, normalizedCorrection);
   const throngletsOptions =
-    opts.thronglets || currentGoal || activePolicy?.length
+    resolvedOpts.thronglets || currentGoal || resolvedActivePolicy?.length || normalizedCorrection
       ? {
-          ...(opts.thronglets ?? {}),
-          goal: currentGoal ?? opts.thronglets?.goal,
-          activePolicy: activePolicy ?? opts.thronglets?.activePolicy,
+          ...(resolvedOpts.thronglets ?? {}),
+          goal: currentGoal ?? resolvedOpts.thronglets?.goal,
+          activePolicy: resolvedActivePolicy ?? resolvedOpts.thronglets?.activePolicy,
+          currentTurnCorrection: normalizedCorrection ?? resolvedOpts.thronglets?.currentTurnCorrection,
         }
       : undefined;
   return resolveAmbientPriorsForTurn(text, {
     explicit,
-    enabled: opts.mode !== "off",
+    enabled: resolvedOpts.mode !== "off",
+    currentGoal,
+    currentTurnCorrection: normalizedCorrection,
+    activePolicy: resolvedActivePolicy,
     thronglets: throngletsOptions,
-    fetcher: opts.fetcher ?? fetchAmbientPriorsFromThronglets,
+    fetcher: resolvedOpts.fetcher ?? fetchAmbientPriorsFromThronglets,
   });
 }
 
@@ -247,15 +273,31 @@ server.tool(
       scope: z.enum(["task", "project"]),
       summary: z.string(),
     })).optional().describe("Optional explicit current-turn method policy view. Runtime-only; not persisted as self-state."),
+    currentTurnCorrection: z.string().optional().describe("Optional explicit current-turn correction. Compiles into a task-scoped hard policy for this turn only."),
   },
-  async ({ text, userId, ambientPriors, currentGoal, activePolicy }: { text: string; userId?: string; ambientPriors?: AmbientPriorView[]; currentGoal?: CurrentGoal; activePolicy?: ActivePolicyRule[] }) => {
+  async ({ text, userId, ambientPriors, currentGoal, activePolicy, currentTurnCorrection }: {
+    text: string;
+    userId?: string;
+    ambientPriors?: AmbientPriorView[];
+    currentGoal?: CurrentGoal;
+    activePolicy?: ActivePolicyRule[];
+    currentTurnCorrection?: string;
+  }) => {
     const eng = await getEngine();
-    const resolvedAmbientPriors = await resolveRuntimeAmbientPriors(text, ambientPriors, currentGoal, activePolicy);
+    const resolvedActivePolicy = resolveRuntimeActivePolicy(activePolicy, currentTurnCorrection);
+    const resolvedAmbientPriors = await resolveRuntimeAmbientPriors(
+      text,
+      ambientPriors,
+      currentGoal,
+      resolvedActivePolicy,
+      currentTurnCorrection,
+    );
     const result: ProcessInputResult = await eng.processInput(text, {
       userId,
       ambientPriors: resolvedAmbientPriors,
       currentGoal,
-      activePolicy,
+      activePolicy: resolvedActivePolicy,
+      currentTurnCorrection,
     });
     return {
       content: [{

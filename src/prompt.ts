@@ -1269,6 +1269,11 @@ export function buildCompactContext(
     if (unified) parts.push(unified);
   }
 
+  const activePolicyContext = buildActivePolicyContext(opts?.activePolicy, locale);
+  if (activePolicyContext) {
+    parts.push(activePolicyContext);
+  }
+
   // ── 9. Overlay + channel + writeback ──
   appendCompactOverlaySections(parts, locale, opts);
 
