@@ -1,5 +1,11 @@
 import { spawn } from "node:child_process";
-import type { ActivePolicyRule, AmbientPriorView, CurrentGoal } from "./types.js";
+import {
+  normalizeCurrentTurnCorrection,
+  resolveRuntimeActivePolicy,
+  type ActivePolicyRule,
+  type AmbientPriorView,
+  type CurrentGoal,
+} from "./types.js";
 import { normalizeAmbientPriors } from "./ambient-priors.js";
 
 const DEFAULT_AMBIENT_LIMIT = 3;
@@ -25,6 +31,7 @@ export interface ThrongletsAmbientRuntimeOptions {
   space?: string;
   goal?: CurrentGoal;
   activePolicy?: ActivePolicyRule[];
+  currentTurnCorrection?: string;
   limit?: number;
   timeoutMs?: number;
   runner?: CommandRunner;
@@ -33,7 +40,9 @@ export interface ThrongletsAmbientRuntimeOptions {
 export interface AmbientPriorResolutionOptions {
   explicit?: readonly AmbientPriorView[] | unknown;
   enabled?: boolean;
+  currentGoal?: CurrentGoal;
   activePolicy?: ActivePolicyRule[];
+  currentTurnCorrection?: string;
   thronglets?: ThrongletsAmbientRuntimeOptions;
   fetcher?: typeof fetchAmbientPriorsFromThronglets;
 }
@@ -113,6 +122,8 @@ export async function fetchAmbientPriorsFromThronglets(
   const limit = Math.max(1, Math.min(5, opts.limit ?? DEFAULT_AMBIENT_LIMIT));
   const timeoutMs = Math.max(100, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const runner = opts.runner ?? defaultRunner;
+  const currentTurnCorrection = normalizeCurrentTurnCorrection(opts.currentTurnCorrection);
+  const activePolicy = resolveRuntimeActivePolicy(opts.activePolicy, currentTurnCorrection) ?? [];
 
   const args: string[] = [];
   if (dataDir && dataDir.trim()) {
@@ -125,7 +136,8 @@ export async function fetchAmbientPriorsFromThronglets(
     space,
     goal,
     limit,
-    active_policy: opts.activePolicy ?? [],
+    active_policy: activePolicy,
+    current_turn_correction: currentTurnCorrection,
   });
   try {
     const result = await runner(binaryPath, args, payload, timeoutMs);
@@ -151,7 +163,13 @@ export async function resolveAmbientPriorsForTurn(
   const fetcher = opts.fetcher ?? fetchAmbientPriorsFromThronglets;
   const priors = await fetcher(text, {
     ...(opts.thronglets ?? {}),
-    activePolicy: opts.activePolicy ?? opts.thronglets?.activePolicy,
+    activePolicy: resolveRuntimeActivePolicy(
+      opts.activePolicy ?? opts.thronglets?.activePolicy,
+      opts.currentTurnCorrection ?? opts.thronglets?.currentTurnCorrection,
+    ),
+    currentTurnCorrection: normalizeCurrentTurnCorrection(
+      opts.currentTurnCorrection ?? opts.thronglets?.currentTurnCorrection,
+    ),
   });
   return priors.length > 0 ? priors : undefined;
 }

@@ -31,12 +31,19 @@
 
 import type { PsycheEngine, ProcessInputResult } from "../core.js";
 import type {
+  ActivePolicyRule,
   AmbientPriorView,
+  CurrentGoal,
   SelfState,
   Locale,
   ThrongletsExport,
   ThrongletsTracePayload,
   WritebackSignalType,
+} from "../types.js";
+import {
+  normalizeCurrentGoal,
+  normalizeCurrentTurnCorrection,
+  resolveRuntimeActivePolicy,
 } from "../types.js";
 import { describeEmotionalState } from "../chemistry.js";
 import { serializeThrongletsExportAsTrace } from "../thronglets-runtime.js";
@@ -245,9 +252,17 @@ export class PsycheClaudeSDK {
     };
   }
 
-  private async resolveAmbientPriors(userMessage: string): Promise<AmbientPriorView[] | undefined> {
+  private async resolveAmbientPriors(
+    userMessage: string,
+    currentGoal?: CurrentGoal,
+    activePolicy?: ActivePolicyRule[],
+    currentTurnCorrection?: string,
+  ): Promise<AmbientPriorView[] | undefined> {
     return resolveAmbientPriorsForTurn(userMessage, {
       enabled: Boolean(this.opts.ambient),
+      currentGoal,
+      activePolicy,
+      currentTurnCorrection,
       thronglets: this.opts.ambient
         ? {
             ...this.opts.ambient,
@@ -310,10 +325,28 @@ export class PsycheClaudeSDK {
                 sessionId: runtimeContext.sessionId ?? self.lastRuntimeContext.sessionId,
               };
               const userMessage = (input as UserPromptSubmitInput).user_message ?? "";
-              const ambientPriors = await self.resolveAmbientPriors(userMessage);
+              const currentTurnCorrection = normalizeCurrentTurnCorrection(
+                input.current_turn_correction
+                  ?? input.currentTurnCorrection
+                  ?? input.task_correction
+                  ?? input.taskCorrection
+                  ?? input.explicit_instruction
+                  ?? input.explicitInstruction,
+              );
+              const currentGoal = normalizeCurrentGoal(input.current_goal ?? input.currentGoal);
+              const activePolicy = resolveRuntimeActivePolicy(input.active_policy ?? input.activePolicy, currentTurnCorrection);
+              const ambientPriors = await self.resolveAmbientPriors(
+                userMessage,
+                currentGoal,
+                activePolicy,
+                currentTurnCorrection,
+              );
               const result = await self.engine.processInput(userMessage, {
                 userId: self.opts.userId,
                 ambientPriors,
+                currentGoal,
+                activePolicy,
+                currentTurnCorrection,
               });
               self.lastInputResult = result;
 

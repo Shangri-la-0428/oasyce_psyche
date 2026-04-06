@@ -247,7 +247,33 @@ describe("PsycheEngine", () => {
     assert.equal(result.activePolicy?.length, 1);
     assert.ok(result.policyContext.includes("reuse existing shared components"), `got ${result.policyContext}`);
     assert.ok(result.dynamicContext.includes("stable path"), `got ${result.dynamicContext}`);
-    assert.ok(!result.dynamicContext.includes("reuse existing shared components"), `got ${result.dynamicContext}`);
+    assert.ok(result.dynamicContext.includes("reuse existing shared components"), `got ${result.dynamicContext}`);
+    assert.equal("activePolicy" in (engine.getState() as unknown as Record<string, unknown>), false);
+
+    const next = await engine.processInput("继续。");
+    assert.equal(next.activePolicy?.length ?? 0, 0);
+    assert.ok(!(next.policyContext ?? "").includes("reuse existing shared components"), `got ${next.policyContext}`);
+  });
+
+  it("compiles current-turn correction into runtime active policy without persisting it", async () => {
+    const result = await engine.processInput("修 dashboard 页面。", {
+      currentGoal: "build",
+      currentTurnCorrection: "reuse existing shared components",
+      ambientPriors: [{
+        summary: "policy conflict: duplicate UI edits are still unsettled under the current correction",
+        confidence: 0.8,
+        kind: "mixed-residue",
+        goal: "build",
+        provider: "thronglets",
+        policyState: "policy-conflict",
+      }],
+    });
+
+    assert.equal(result.currentGoal, "build");
+    assert.equal(result.activePolicy?.length, 1);
+    assert.equal(result.activePolicy?.[0].id, "task:current-turn-correction");
+    assert.ok(result.policyContext.includes("reuse existing shared components"), `got ${result.policyContext}`);
+    assert.ok(result.dynamicContext.includes("策略冲突"), `got ${result.dynamicContext}`);
     assert.equal("activePolicy" in (engine.getState() as unknown as Record<string, unknown>), false);
 
     const next = await engine.processInput("继续。");

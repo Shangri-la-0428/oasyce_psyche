@@ -901,6 +901,12 @@ export interface ActivePolicyRule {
   summary: string;
 }
 
+export function normalizeCurrentTurnCorrection(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const summary = value.trim().replace(/\s+/g, " ");
+  return summary.length > 0 ? summary : undefined;
+}
+
 export function normalizeCurrentGoal(value: unknown): CurrentGoal | undefined {
   return typeof value === "string" && CURRENT_GOALS.includes(value as CurrentGoal)
     ? (value as CurrentGoal)
@@ -932,6 +938,28 @@ export function normalizeActivePolicyRules(
     ))
     .slice(0, Math.max(1, limit));
   return normalized.length > 0 ? normalized : undefined;
+}
+
+export function resolveRuntimeActivePolicy(
+  activePolicy: unknown,
+  currentTurnCorrection?: unknown,
+  limit = 3,
+): ActivePolicyRule[] | undefined {
+  const explicit = normalizeActivePolicyRules(activePolicy, limit) ?? [];
+  const correction = normalizeCurrentTurnCorrection(currentTurnCorrection);
+  if (!correction) return explicit.length > 0 ? explicit : undefined;
+
+  const merged: ActivePolicyRule[] = [{
+    id: "task:current-turn-correction",
+    strength: "hard",
+    scope: "task",
+    summary: correction,
+  }];
+  for (const rule of explicit) {
+    if (rule.summary === correction) continue;
+    merged.push(rule);
+  }
+  return merged.slice(0, Math.max(1, limit));
 }
 
 export interface AmbientPriorView {
