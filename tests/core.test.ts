@@ -182,22 +182,77 @@ describe("PsycheEngine", () => {
         summary,
         confidence: 0.86,
         kind: "mixed-residue",
+        goal: "repair",
         provider: "thronglets",
         refs: ["space:infra", "trace:deploy-ok"],
       }],
     });
 
     assert.equal(result.ambientPriors?.length, 1);
+    assert.equal(result.currentGoal, "repair");
     assert.ok(result.ambientPriorContext?.includes(summary), `got ${result.ambientPriorContext}`);
     assert.ok(result.dynamicContext.includes("环境先验"), `got ${result.dynamicContext}`);
     assert.ok(result.dynamicContext.includes("未收敛"), `got ${result.dynamicContext}`);
+    assert.ok(result.dynamicContext.includes("当前目标: 修复"), `got ${result.dynamicContext}`);
     assert.ok(result.dynamicContext.includes(summary), `got ${result.dynamicContext}`);
     assert.ok(result.observability?.outputAttribution.renderInputs.includes("ambient-prior"));
     assert.equal("ambientPriorContext" in (engine.getState() as unknown as Record<string, unknown>), false);
 
     const next = await engine.processInput("继续。");
+    assert.equal(next.currentGoal, undefined);
     assert.ok(!(next.ambientPriorContext ?? "").includes(summary), `got ${next.ambientPriorContext}`);
     assert.ok(!next.dynamicContext.includes(summary), `got ${next.dynamicContext}`);
+  });
+
+  it("keeps explore priors soft so non-consensus probes remain possible", async () => {
+    const summary = "shared success prior: 5 similar sessions crossed this context; treat this as a non-exclusive baseline during exploration";
+    const result = await engine.processInput("试一个和常规方案不同的修复思路。", {
+      ambientPriors: [{
+        summary,
+        confidence: 0.66,
+        kind: "success-prior",
+        goal: "explore",
+        provider: "thronglets",
+        refs: ["space:infra", "trace:stable-path"],
+      }],
+    });
+
+    assert.equal(result.currentGoal, "explore");
+    assert.ok(result.dynamicContext.includes("当前目标: 探索"), `got ${result.dynamicContext}`);
+    assert.ok(result.dynamicContext.includes("软提示"), `got ${result.dynamicContext}`);
+    assert.ok(result.dynamicContext.includes("非共识"), `got ${result.dynamicContext}`);
+    assert.ok(result.dynamicContext.includes(summary), `got ${result.dynamicContext}`);
+  });
+
+  it("treats active policy as current-turn context, not persistent self-state", async () => {
+    const result = await engine.processInput("修 dashboard 页面。", {
+      currentGoal: "build",
+      activePolicy: [{
+        id: "task:reuse-components",
+        strength: "hard",
+        scope: "task",
+        summary: "reuse existing shared components",
+      }],
+      ambientPriors: [{
+        summary: "stable path: shared component reuse has been the compliant path here",
+        confidence: 0.78,
+        kind: "success-prior",
+        goal: "build",
+        provider: "thronglets",
+        policyState: "stable-path",
+      }],
+    });
+
+    assert.equal(result.currentGoal, "build");
+    assert.equal(result.activePolicy?.length, 1);
+    assert.ok(result.policyContext.includes("reuse existing shared components"), `got ${result.policyContext}`);
+    assert.ok(result.dynamicContext.includes("stable path"), `got ${result.dynamicContext}`);
+    assert.ok(!result.dynamicContext.includes("reuse existing shared components"), `got ${result.dynamicContext}`);
+    assert.equal("activePolicy" in (engine.getState() as unknown as Record<string, unknown>), false);
+
+    const next = await engine.processInput("继续。");
+    assert.equal(next.activePolicy?.length ?? 0, 0);
+    assert.ok(!(next.policyContext ?? "").includes("reuse existing shared components"), `got ${next.policyContext}`);
   });
 
   it("processInput updates relationship gradually based on stimulus valence", async () => {

@@ -22,7 +22,7 @@
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { parseArgs } from "node:util";
-import { readFile, writeFile, mkdir, access } from "node:fs/promises";
+import { readFile, writeFile, mkdir, access, rename, rm } from "node:fs/promises";
 import {
   loadState,
   saveState,
@@ -702,6 +702,28 @@ async function fileExists(path: string): Promise<boolean> {
   try { await access(path); return true; } catch { return false; }
 }
 
+async function writeTextAtomic(path: string, content: string): Promise<void> {
+  const absPath = resolve(path);
+  const dir = resolve(absPath, "..");
+  await mkdir(dir, { recursive: true });
+  const base = absPath.split("/").pop() ?? "file";
+  const tmpPath = join(
+    dir,
+    `.${base}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`,
+  );
+  await writeFile(tmpPath, content, "utf-8");
+  try {
+    await rename(tmpPath, absPath);
+  } catch (error: any) {
+    if (error?.code !== "EEXIST" && error?.code !== "EPERM") {
+      try { await rm(tmpPath, { force: true }); } catch { /* noop */ }
+      throw error;
+    }
+    await rm(absPath, { force: true });
+    await rename(tmpPath, absPath);
+  }
+}
+
 async function cmdSetup(opts: {
   name: string; mbti: string; locale: string;
   proxy: boolean; target: string; port: number;
@@ -765,8 +787,7 @@ async function cmdSetup(opts: {
 
       if (dryRun) { console.log(`  → ${t.name} — would configure`); actions++; continue; }
 
-      await mkdir(dir, { recursive: true });
-      await writeFile(t.configPath, result.content, "utf-8");
+      await writeTextAtomic(t.configPath, result.content);
       console.log(`  ✓ ${t.name} (restart to activate)`);
       actions++;
       continue;
@@ -788,8 +809,7 @@ async function cmdSetup(opts: {
 
     if (dryRun) { console.log(`  → ${t.name} — would configure`); actions++; continue; }
 
-    await mkdir(dir, { recursive: true });
-    await writeFile(t.configPath, JSON.stringify(cfg, null, 2) + "\n", "utf-8");
+    await writeTextAtomic(t.configPath, JSON.stringify(cfg, null, 2) + "\n");
     console.log(`  ✓ ${t.name} (restart to activate)`);
     actions++;
   }
@@ -822,7 +842,7 @@ async function cmdSetup(opts: {
       if (rcFile) {
         const rc = await fileExists(rcFile) ? await readFile(rcFile, "utf-8") : "";
         if (!rc.includes("# psyche-proxy")) {
-          await writeFile(rcFile, rc + (rc.endsWith("\n") ? "" : "\n") + exportLine + "\n", "utf-8");
+          await writeTextAtomic(rcFile, rc + (rc.endsWith("\n") ? "" : "\n") + exportLine + "\n");
           console.log(`  ✓ ${envVar} → ${proxyUrl} (${rcFile})`);
         } else {
           console.log(`  ✓ shell env — already configured`);

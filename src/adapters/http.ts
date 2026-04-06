@@ -18,7 +18,12 @@
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import type { PsycheEngine } from "../core.js";
-import type { AmbientPriorView, WritebackSignalType } from "../types.js";
+import {
+  normalizeActivePolicyRules,
+  normalizeCurrentGoal,
+  type AmbientPriorView,
+  type WritebackSignalType,
+} from "../types.js";
 import { parseAmbientPriorsInput } from "../ambient-runtime.js";
 import { computeOverlay } from "../overlay.js";
 
@@ -120,12 +125,16 @@ export function createPsycheServer(engine: PsycheEngine, opts?: HttpAdapterOptio
           {
             userId: body.userId as string | undefined,
             ambientPriors: parseAmbientPriors(body.ambientPriors),
+            currentGoal: normalizeCurrentGoal(body.currentGoal),
+            activePolicy: normalizeActivePolicyRules(body.activePolicy),
           },
         );
         json(res, 200, {
           systemContext: result.systemContext,
           dynamicContext: result.dynamicContext,
           ambientPriors: result.ambientPriors ?? [],
+          currentGoal: result.currentGoal ?? null,
+          activePolicy: result.activePolicy ?? [],
           ambientPriorContext: result.ambientPriorContext ?? null,
           appraisal: result.appraisal,
           legacyStimulus: result.legacyStimulus,

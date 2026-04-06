@@ -3,7 +3,7 @@
 // Imperative protocol, behavior guides, i18n
 // ============================================================
 
-import type { AmbientPriorView, PsycheState, SelfModel, Locale, SelfState, StateSnapshot, StimulusType, PsycheMode } from "./types.js";
+import type { ActivePolicyRule, AmbientPriorView, PsycheState, SelfModel, Locale, SelfState, StateSnapshot, StimulusType, PsycheMode } from "./types.js";
 import { DIMENSION_KEYS, DIMENSION_NAMES_ZH, DRIVE_KEYS, MODE_PROFILES } from "./types.js";
 import { getExpressionHint, getBehaviorGuide, detectEmotions } from "./chemistry.js";
 import { getRelationship } from "./psyche-file.js";
@@ -24,6 +24,7 @@ export interface PromptRenderInputs {
   userText?: string;
   legacyStimulus?: string | null;
   ambientPriors?: AmbientPriorView[];
+  activePolicy?: ActivePolicyRule[];
   ambientPriorContext?: string;
   personalityIntensity?: number;
   channelType?: ChannelType;
@@ -51,6 +52,8 @@ export function buildAmbientPriorContext(
       summary: prior.summary.trim().replace(/\s+/g, " "),
       confidence: Math.max(0, Math.min(1, prior.confidence)),
       kind: prior.kind,
+      goal: prior.goal,
+      policyState: prior.policyState,
       provider: prior.provider?.trim(),
     }))
     .filter((prior) => prior.summary.length > 0)
@@ -71,6 +74,21 @@ export function buildAmbientPriorContext(
   };
 
   const title = locale === "zh" ? "环境先验" : "Ambient Prior";
+  const goal = normalized
+    .map((prior) => prior.goal)
+    .find((value): value is NonNullable<AmbientPriorView["goal"]> => Boolean(value));
+  const goalLabel = (value: NonNullable<AmbientPriorView["goal"]>): string => {
+    if (locale === "zh") {
+      if (value === "explore") return "当前目标: 探索";
+      if (value === "build") return "当前目标: 构建";
+      if (value === "repair") return "当前目标: 修复";
+      return "当前目标: 结算";
+    }
+    if (value === "explore") return "Current goal: explore";
+    if (value === "build") return "Current goal: build";
+    if (value === "repair") return "Current goal: repair";
+    return "Current goal: settle";
+  };
   const kindLabel = (kind: AmbientPriorView["kind"]): string => {
     if (locale === "zh") {
       if (kind === "failure-residue") return "风险";
@@ -84,14 +102,48 @@ export function buildAmbientPriorContext(
     return "ambient";
   };
   const lines = normalized.map((prior) => {
+    const statePrefix = prior.policyState === "policy-conflict"
+      ? locale === "zh" ? "策略冲突 · " : "policy conflict · "
+      : prior.policyState === "method-conflict"
+        ? locale === "zh" ? "方法冲突 · " : "method conflict · "
+        : "";
     const source = prior.provider
       ? locale === "zh"
         ? `${prior.provider}: `
         : `${prior.provider}: `
       : "";
-    return `- ${kindLabel(prior.kind)} · ${source}${prior.summary} (${confidenceLabel(prior.confidence)})`;
+    return `- ${statePrefix}${kindLabel(prior.kind)} · ${source}${prior.summary} (${confidenceLabel(prior.confidence)})`;
   });
 
+  const heading = goal ? `${title} · ${goalLabel(goal)}` : title;
+  const guidance = goal === "explore"
+    ? locale === "zh"
+      ? "- 将这些先验只当作软提示；保留可逆的、非共识的试探空间。"
+      : "- Treat these priors as soft hints only; preserve room for reversible non-consensus probes."
+    : "";
+  return `[${heading}]\n${guidance ? `${guidance}\n` : ""}${lines.join("\n")}`;
+}
+
+export function buildActivePolicyContext(
+  activePolicy: ActivePolicyRule[] | undefined,
+  locale: Locale,
+): string {
+  const rules = (activePolicy ?? [])
+    .map((rule) => ({
+      ...rule,
+      summary: rule.summary.trim().replace(/\s+/g, " "),
+    }))
+    .filter((rule) => rule.summary.length > 0)
+    .slice(0, 3);
+  if (rules.length === 0) return "";
+
+  const title = locale === "zh" ? "当前方法约束" : "Active Method Policy";
+  const lines = rules.map((rule) => {
+    const strength = rule.strength === "hard"
+      ? (locale === "zh" ? "硬" : "hard")
+      : (locale === "zh" ? "软" : "soft");
+    return `- ${strength} · ${rule.summary}`;
+  });
   return `[${title}]\n${lines.join("\n")}`;
 }
 

@@ -47,6 +47,30 @@ describe("fetchAmbientPriorsFromThronglets", () => {
     assert.deepEqual(priors, []);
   });
 
+  it("rejects incompatible ambient prior schema versions", async () => {
+    const priors = await fetchAmbientPriorsFromThronglets("check deployment", {
+      runner: async () => ({
+        ok: true,
+        stdout: JSON.stringify({
+          schema_version: "thronglets.ambient.v999",
+          command: "ambient-priors",
+          data: {
+            priors: [
+              {
+                summary: "stable path: stale schema should not be trusted",
+                confidence: 0.9,
+                kind: "success-prior",
+              },
+            ],
+          },
+        }),
+        stderr: "",
+      }),
+    });
+
+    assert.deepEqual(priors, []);
+  });
+
   it("returns empty for blank input", async () => {
     const priors = await fetchAmbientPriorsFromThronglets("   ", {
       runner: async () => {
@@ -55,5 +79,38 @@ describe("fetchAmbientPriorsFromThronglets", () => {
     });
 
     assert.deepEqual(priors, []);
+  });
+
+  it("passes the current goal through to thronglets and preserves it in the returned prior", async () => {
+    let stdinPayload = "";
+    const priors = await fetchAmbientPriorsFromThronglets("repair the provider path", {
+      goal: "repair",
+      runner: async (_binary, _args, stdin) => {
+        stdinPayload = stdin;
+        return {
+          ok: true,
+          stdout: JSON.stringify({
+            schema_version: "thronglets.ambient.v1",
+            command: "ambient-priors",
+            data: {
+              priors: [
+                {
+                  summary: "failure residue: similar repair path failed recently",
+                  confidence: 0.79,
+                  kind: "failure-residue",
+                  goal: "repair",
+                  provider: "thronglets",
+                },
+              ],
+            },
+          }),
+          stderr: "",
+        };
+      },
+    });
+
+    assert.equal(JSON.parse(stdinPayload).goal, "repair");
+    assert.equal(priors.length, 1);
+    assert.equal(priors[0].goal, "repair");
   });
 });
