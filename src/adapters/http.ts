@@ -18,6 +18,7 @@
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import type { PsycheEngine } from "../core.js";
+import { safeProcessInput, safeProcessOutput } from "./fail-open.js";
 import {
   normalizeCurrentGoal,
   normalizeCurrentTurnCorrection,
@@ -133,7 +134,8 @@ export function createPsycheServer(engine: PsycheEngine, opts?: HttpAdapterOptio
       if (req.method === "POST" && url.pathname === "/process-input") {
         const body = await readBody(req);
         const currentTurnCorrection = parseCurrentTurnCorrection(body);
-        const result = await engine.processInput(
+        const result = await safeProcessInput(
+          engine,
           (body.text as string) ?? "",
           {
             userId: body.userId as string | undefined,
@@ -142,6 +144,7 @@ export function createPsycheServer(engine: PsycheEngine, opts?: HttpAdapterOptio
             activePolicy: resolveRuntimeActivePolicy(body.activePolicy, currentTurnCorrection),
             currentTurnCorrection,
           },
+          "http.processInput",
         );
         json(res, 200, {
           systemContext: result.systemContext,
@@ -171,13 +174,15 @@ export function createPsycheServer(engine: PsycheEngine, opts?: HttpAdapterOptio
       // POST /process-output
       if (req.method === "POST" && url.pathname === "/process-output") {
         const body = await readBody(req);
-        const result = await engine.processOutput(
+        const result = await safeProcessOutput(
+          engine,
           (body.text as string) ?? "",
           {
             userId: body.userId as string | undefined,
             signals: parseSignals(body.signals),
             signalConfidence: typeof body.signalConfidence === "number" ? body.signalConfidence : undefined,
           },
+          "http.processOutput",
         );
         json(res, 200, result);
         return;

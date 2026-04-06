@@ -24,6 +24,7 @@ import {
   resolveAmbientPriorsForTurn,
   type ThrongletsAmbientRuntimeOptions,
 } from "../ambient-runtime.js";
+import { composePsycheContext, safeProcessInput, safeProcessOutput } from "./fail-open.js";
 
 export interface PsycheLangChainOptions {
   ambient?: boolean | ThrongletsAmbientRuntimeOptions;
@@ -119,14 +120,14 @@ export class PsycheLangChain {
     const currentTurnCorrection = normalizeCurrentTurnCorrection(opts?.currentTurnCorrection);
     const currentGoal = normalizeCurrentGoal(opts?.currentGoal);
     const activePolicy = resolveRuntimeActivePolicy(opts?.activePolicy, currentTurnCorrection);
-    const result = await this.engine.processInput(userText, {
+    const result = await safeProcessInput(this.engine, userText, {
       ...opts,
       currentGoal,
       activePolicy,
       currentTurnCorrection,
       ambientPriors: await this.resolveAmbientPriors(userText, currentGoal, activePolicy, currentTurnCorrection),
-    });
-    return result.systemContext + "\n\n" + result.dynamicContext;
+    }, "langchain.processInput");
+    return composePsycheContext(result);
   }
 
   /**
@@ -148,13 +149,13 @@ export class PsycheLangChain {
     const currentTurnCorrection = normalizeCurrentTurnCorrection(opts?.currentTurnCorrection);
     const currentGoal = normalizeCurrentGoal(opts?.currentGoal);
     const activePolicy = resolveRuntimeActivePolicy(opts?.activePolicy, currentTurnCorrection);
-    const result = await this.engine.processInput(userText, {
+    const result = await safeProcessInput(this.engine, userText, {
       ...opts,
       currentGoal,
       activePolicy,
       currentTurnCorrection,
       ambientPriors: await this.resolveAmbientPriors(userText, currentGoal, activePolicy, currentTurnCorrection),
-    });
+    }, "langchain.processInput");
     const generationControls = result.replyEnvelope?.generationControls ?? result.generationControls;
     const controls = {
       ...(generationControls ?? {}),
@@ -163,7 +164,7 @@ export class PsycheLangChain {
         : generationControls?.maxTokens ?? opts?.maxTokens,
     };
     return {
-      systemMessage: result.systemContext + "\n\n" + result.dynamicContext,
+      systemMessage: composePsycheContext(result),
       maxTokens: controls.maxTokens,
       requireConfirmation: controls.requireConfirmation ?? false,
     };
@@ -179,11 +180,11 @@ export class PsycheLangChain {
     text: string,
     opts?: { userId?: string; signals?: string[]; signalConfidence?: number },
   ): Promise<string> {
-    const result = await this.engine.processOutput(text, {
+    const result = await safeProcessOutput(this.engine, text, {
       userId: opts?.userId,
       signals: this.parseSignals(opts?.signals),
       signalConfidence: opts?.signalConfidence,
-    });
+    }, "langchain.processOutput");
     return result.cleanedText;
   }
 }
