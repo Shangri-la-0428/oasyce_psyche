@@ -15,6 +15,10 @@ export function stripPsycheUpdateTags(text: string): string {
     .trim();
 }
 
+export interface FailOpenOutputFallbackOptions {
+  stripUpdateTags?: boolean;
+}
+
 export function composePsycheContext(result: Pick<ProcessInputResult, "systemContext" | "dynamicContext">): string {
   return [result.systemContext, result.dynamicContext].filter(Boolean).join("\n\n");
 }
@@ -67,13 +71,15 @@ export async function safeProcessOutput(
   text: string,
   opts?: ProcessOutputOptions,
   phase = "processOutput",
+  fallback?: FailOpenOutputFallbackOptions,
 ): Promise<ProcessOutputResult> {
   try {
     return await engine.processOutput(text, opts);
   } catch (error) {
     engine.recordDiagnosticError(phase, error);
+    const shouldStripTags = fallback?.stripUpdateTags !== false && text.includes("<psyche_update>");
     return {
-      cleanedText: stripPsycheUpdateTags(text),
+      cleanedText: shouldStripTags ? stripPsycheUpdateTags(text) : text,
       stateChanged: false,
     };
   }

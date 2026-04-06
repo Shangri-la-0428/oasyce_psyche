@@ -578,6 +578,47 @@ describe("adapter fail-open helpers", () => {
     assert.equal(errors.length, 1);
     assert.ok(errors[0].includes("test.processOutput"));
   });
+
+  it("safeProcessOutput preserves untouched text when fallback runs without psyche tags", async () => {
+    const fakeEngine = {
+      async processOutput() {
+        throw new Error("writeback unavailable");
+      },
+      recordDiagnosticError() {},
+    };
+
+    const original = "Normal text\n\nwith spacing kept";
+    const result = await safeProcessOutput(
+      fakeEngine as unknown as PsycheEngine,
+      original,
+      undefined,
+      "test.processOutput",
+    );
+
+    assert.equal(result.cleanedText, original);
+    assert.equal(result.stateChanged, false);
+  });
+
+  it("safeProcessOutput respects stripUpdateTags=false during fail-open fallback", async () => {
+    const fakeEngine = {
+      async processOutput() {
+        throw new Error("writeback unavailable");
+      },
+      recordDiagnosticError() {},
+    };
+
+    const original = "Hi!\n\n<psyche_update>\nDA: 80\n</psyche_update>";
+    const result = await safeProcessOutput(
+      fakeEngine as unknown as PsycheEngine,
+      original,
+      undefined,
+      "test.processOutput",
+      { stripUpdateTags: false },
+    );
+
+    assert.equal(result.cleanedText, original);
+    assert.equal(result.stateChanged, false);
+  });
 });
 
 describe("createPsycheServer (HTTP) fail-open", () => {
