@@ -1,5 +1,11 @@
 # 更新日志 / Changelog
 
+## v11.5.5 — Runtime Current-Turn Correction
+
+- Add a thinner runtime correction path across MCP, HTTP, LangChain, and Claude SDK surfaces.
+- Compile `currentTurnCorrection` into runtime-only task-scoped hard policy without persisting it into self-state.
+- Keep prompt behavior compact while still surfacing active method constraints when they matter.
+
 ## v11.5.4 — Codex TOML Upsert Safety
 
 - Fix `psyche setup` for Codex when re-writing an existing `[mcp_servers.psyche]` block with multiline `args`.
