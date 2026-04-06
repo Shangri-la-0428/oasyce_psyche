@@ -65,6 +65,24 @@ POST /process-output
 }
 ```
 
+## Validation and Fail-Open Behavior
+
+`processOutput()` now owns the writeback signal contract centrally.
+
+- Valid signals are applied normally.
+- Invalid signals are ignored without breaking the turn.
+- Surfaces that expose structured output may return `validationIssues` so hosts can inspect what was dropped.
+- If output processing fails entirely, adapters should preserve the normal response path and fall back quietly instead of blocking the host workflow.
+
+That means host code can safely send the common supported combinations:
+
+- `text`
+- `text + signalConfidence`
+- `text + signals`
+- `text + signalConfidence + signals`
+
+When `signals` contain unsupported values, the engine treats them as calibration noise rather than a fatal error.
+
 ## Why Prefer Structured Writeback
 
 **Prompt protocol** asks the LLM to emit `<psyche_update>` XML tags containing chemistry deltas and metadata. This works but has structural problems:
