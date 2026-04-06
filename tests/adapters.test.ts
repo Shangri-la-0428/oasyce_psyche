@@ -290,6 +290,20 @@ describe("PsycheLangChain", () => {
     assert.ok(prepared.systemMessage.includes("ssh reachability first"));
   });
 
+  it("accepts current-turn correction without requiring a structured activePolicy object", async () => {
+    const msg = await lc.getSystemMessage("修 dashboard 页面。", {
+      currentGoal: "build",
+      currentTurnCorrection: "reuse existing shared components",
+    });
+    assert.ok(msg.includes("reuse existing shared components"), `got ${msg}`);
+
+    const prepared = await lc.prepareInvocation("修 dashboard 页面。", {
+      currentGoal: "build",
+      currentTurnCorrection: "reuse existing shared components",
+    });
+    assert.ok(prepared.systemMessage.includes("reuse existing shared components"), `got ${prepared.systemMessage}`);
+  });
+
   it("prepareInvocation returns system message and mechanical hints", async () => {
     const prepared = await lc.prepareInvocation("你好", { maxTokens: 2000 });
     assert.ok(prepared.systemMessage.length > 0);
@@ -471,12 +485,34 @@ describe("createPsycheServer (HTTP)", () => {
     assert.equal(data.activePolicy[0].id, "task:reuse-components");
     assert.ok(data.policyContext.includes("reuse existing shared components"), `got ${data.policyContext}`);
     assert.ok(data.dynamicContext.includes("stable path"), `got ${data.dynamicContext}`);
-    assert.ok(!data.dynamicContext.includes("reuse existing shared components"), `got ${data.dynamicContext}`);
+    assert.ok(data.dynamicContext.includes("reuse existing shared components"), `got ${data.dynamicContext}`);
 
     const next = await req("POST", "/process-input", { text: "continue" });
     assert.equal(next.status, 200);
     assert.equal(next.data.activePolicy.length, 0);
     assert.ok(!(next.data.policyContext ?? "").includes("reuse existing shared components"), `got ${next.data.policyContext}`);
+  });
+
+  it("POST /process-input accepts current-turn correction and compiles it into runtime active policy", async () => {
+    const { status, data } = await req("POST", "/process-input", {
+      text: "fix the dashboard layout",
+      currentGoal: "build",
+      currentTurnCorrection: "reuse existing shared components",
+      ambientPriors: [{
+        summary: "policy conflict: duplicate UI edits remain unsettled under the current correction",
+        confidence: 0.84,
+        provider: "thronglets",
+        kind: "mixed-residue",
+        goal: "build",
+        policyState: "policy-conflict",
+      }],
+    });
+
+    assert.equal(status, 200);
+    assert.equal(data.activePolicy.length, 1);
+    assert.equal(data.activePolicy[0].id, "task:current-turn-correction");
+    assert.ok(data.policyContext.includes("reuse existing shared components"), `got ${data.policyContext}`);
+    assert.ok(data.dynamicContext.includes("policy conflict"), `got ${data.dynamicContext}`);
   });
 });
 
@@ -961,6 +997,30 @@ describe("PsycheClaudeSDK", () => {
     assert.ok(inputResult);
     assert.equal(inputResult!.ambientPriors?.length, 1);
     assert.ok(inputResult!.ambientPriorContext?.includes("ssh reachability first"));
+  });
+
+  it("UserPromptSubmit hook compiles current-turn correction from runtime input", async () => {
+    const hooks = psyche.getHooks();
+    const callback = hooks.UserPromptSubmit![0].hooks[0];
+    await callback(
+      {
+        hook_event_name: "UserPromptSubmit",
+        user_message: "修 dashboard 页面。",
+        session_id: "policy-test",
+        cwd: "/tmp",
+        current_turn_correction: "reuse existing shared components",
+        current_goal: "build",
+      },
+      undefined,
+      { signal: AbortSignal.timeout(5000) },
+    );
+
+    const inputResult = psyche.getLastInputResult();
+    assert.ok(inputResult);
+    assert.equal(inputResult!.activePolicy?.length, 1);
+    assert.equal(inputResult!.activePolicy?.[0].id, "task:current-turn-correction");
+    assert.equal(inputResult!.currentGoal, "build");
+    assert.ok(inputResult!.policyContext.includes("reuse existing shared components"), `got ${inputResult!.policyContext}`);
   });
 
   it("defaults relationship tracking to the shared internal bucket", async () => {

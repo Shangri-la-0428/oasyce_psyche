@@ -13,7 +13,7 @@
 // ============================================================
 
 import type { ActivePolicyRule, AmbientPriorView, CurrentGoal, PsycheState, StimulusType, Locale, MBTIType, SelfState, OutcomeScore, PsycheMode, PersonalityTraits, PolicyModifiers, ClassifierProvider, SubjectivityKernel, ResponseContract, GenerationControls, SessionBridgeState, ThrongletsExport, TurnObservability, WritebackCalibrationFeedback, WritebackSignalType, ExternalContinuityEnvelope, AppraisalAxes } from "./types.js";
-import { normalizeActivePolicyRules, normalizeCurrentGoal } from "./types.js";
+import { normalizeCurrentGoal, resolveRuntimeActivePolicy } from "./types.js";
 import { DEFAULT_RELATIONSHIP, DEFAULT_DRIVES, DEFAULT_LEARNING_STATE, DEFAULT_METACOGNITIVE_STATE, DEFAULT_PERSONHOOD_STATE, DEFAULT_ENERGY_BUDGETS, DEFAULT_TRAIT_DRIFT, DEFAULT_SUBJECT_RESIDUE, DEFAULT_DYADIC_FIELD, MODE_PROFILES } from "./types.js";
 import type { StorageAdapter } from "./storage.js";
 import { MemoryStorageAdapter } from "./storage.js";
@@ -149,6 +149,7 @@ export interface ProcessInputOptions {
   ambientPriors?: AmbientPriorView[];
   currentGoal?: CurrentGoal;
   activePolicy?: ActivePolicyRule[];
+  currentTurnCorrection?: string;
 }
 
 export interface ProcessOutputResult {
@@ -709,7 +710,10 @@ export class PsycheEngine {
 
     const writebackNote = formatWritebackFeedbackNote(writebackFeedback, locale);
     const ambientPriors = normalizeAmbientPriors(opts?.ambientPriors);
-    const activePolicy = normalizeActivePolicyRules(opts?.activePolicy) ?? [];
+    const activePolicy = resolveRuntimeActivePolicy(
+      opts?.activePolicy,
+      opts?.currentTurnCorrection,
+    ) ?? [];
     const currentGoal =
       normalizeCurrentGoal(opts?.currentGoal)
       ?? ambientPriors.find((prior) => prior.goal)?.goal;

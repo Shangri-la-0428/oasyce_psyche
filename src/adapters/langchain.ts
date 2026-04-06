@@ -14,7 +14,12 @@
 // ============================================================
 
 import type { PsycheEngine } from "../core.js";
-import type { AmbientPriorView, WritebackSignalType } from "../types.js";
+import type { ActivePolicyRule, AmbientPriorView, CurrentGoal, WritebackSignalType } from "../types.js";
+import {
+  normalizeCurrentGoal,
+  normalizeCurrentTurnCorrection,
+  resolveRuntimeActivePolicy,
+} from "../types.js";
 import {
   resolveAmbientPriorsForTurn,
   type ThrongletsAmbientRuntimeOptions,
@@ -75,10 +80,18 @@ export class PsycheLangChain {
     return parsed.length > 0 ? [...new Set(parsed)] : undefined;
   }
 
-  private async resolveAmbientPriors(userText: string): Promise<AmbientPriorView[] | undefined> {
+  private async resolveAmbientPriors(
+    userText: string,
+    currentGoal?: CurrentGoal,
+    activePolicy?: ActivePolicyRule[],
+    currentTurnCorrection?: string,
+  ): Promise<AmbientPriorView[] | undefined> {
     const ambient = this.opts.ambient;
     return resolveAmbientPriorsForTurn(userText, {
       enabled: Boolean(ambient),
+      currentGoal,
+      activePolicy,
+      currentTurnCorrection,
       thronglets: ambient
         ? {
             ...(ambient === true ? {} : ambient),
@@ -94,10 +107,24 @@ export class PsycheLangChain {
    *
    * Call this BEFORE the LLM invocation.
    */
-  async getSystemMessage(userText: string, opts?: { userId?: string }): Promise<string> {
+  async getSystemMessage(
+    userText: string,
+    opts?: {
+      userId?: string;
+      currentGoal?: CurrentGoal;
+      activePolicy?: ActivePolicyRule[];
+      currentTurnCorrection?: string;
+    },
+  ): Promise<string> {
+    const currentTurnCorrection = normalizeCurrentTurnCorrection(opts?.currentTurnCorrection);
+    const currentGoal = normalizeCurrentGoal(opts?.currentGoal);
+    const activePolicy = resolveRuntimeActivePolicy(opts?.activePolicy, currentTurnCorrection);
     const result = await this.engine.processInput(userText, {
       ...opts,
-      ambientPriors: await this.resolveAmbientPriors(userText),
+      currentGoal,
+      activePolicy,
+      currentTurnCorrection,
+      ambientPriors: await this.resolveAmbientPriors(userText, currentGoal, activePolicy, currentTurnCorrection),
     });
     return result.systemContext + "\n\n" + result.dynamicContext;
   }
@@ -110,11 +137,23 @@ export class PsycheLangChain {
    */
   async prepareInvocation(
     userText: string,
-    opts?: { userId?: string; maxTokens?: number },
+    opts?: {
+      userId?: string;
+      maxTokens?: number;
+      currentGoal?: CurrentGoal;
+      activePolicy?: ActivePolicyRule[];
+      currentTurnCorrection?: string;
+    },
   ): Promise<{ systemMessage: string; maxTokens?: number; requireConfirmation: boolean }> {
+    const currentTurnCorrection = normalizeCurrentTurnCorrection(opts?.currentTurnCorrection);
+    const currentGoal = normalizeCurrentGoal(opts?.currentGoal);
+    const activePolicy = resolveRuntimeActivePolicy(opts?.activePolicy, currentTurnCorrection);
     const result = await this.engine.processInput(userText, {
       ...opts,
-      ambientPriors: await this.resolveAmbientPriors(userText),
+      currentGoal,
+      activePolicy,
+      currentTurnCorrection,
+      ambientPriors: await this.resolveAmbientPriors(userText, currentGoal, activePolicy, currentTurnCorrection),
     });
     const generationControls = result.replyEnvelope?.generationControls ?? result.generationControls;
     const controls = {
