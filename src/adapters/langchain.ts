@@ -14,7 +14,7 @@
 // ============================================================
 
 import type { PsycheEngine } from "../core.js";
-import type { ActivePolicyRule, AmbientPriorView, CurrentGoal, WritebackSignalType } from "../types.js";
+import type { ActivePolicyRule, AmbientPriorView, CurrentGoal } from "../types.js";
 import {
   normalizeCurrentGoal,
   normalizeCurrentTurnCorrection,
@@ -25,6 +25,7 @@ import {
   type ThrongletsAmbientRuntimeOptions,
 } from "../ambient-runtime.js";
 import { composePsycheContext, safeProcessInput, safeProcessOutput } from "./fail-open.js";
+import { coerceWritebackSignalInput } from "../writeback-signals.js";
 
 export interface PsycheLangChainOptions {
   ambient?: boolean | ThrongletsAmbientRuntimeOptions;
@@ -61,25 +62,6 @@ export class PsycheLangChain {
     private readonly engine: PsycheEngine,
     private readonly opts: PsycheLangChainOptions = {},
   ) {}
-
-  private readonly validSignals = new Set<WritebackSignalType>([
-    "trust_up",
-    "trust_down",
-    "boundary_set",
-    "boundary_soften",
-    "repair_attempt",
-    "repair_landed",
-    "closeness_invite",
-    "withdrawal_mark",
-    "self_assertion",
-    "task_recenter",
-  ]);
-
-  private parseSignals(signals?: string[]): WritebackSignalType[] | undefined {
-    if (!signals) return undefined;
-    const parsed = signals.filter((signal): signal is WritebackSignalType => this.validSignals.has(signal as WritebackSignalType));
-    return parsed.length > 0 ? [...new Set(parsed)] : undefined;
-  }
 
   private async resolveAmbientPriors(
     userText: string,
@@ -182,7 +164,7 @@ export class PsycheLangChain {
   ): Promise<string> {
     const result = await safeProcessOutput(this.engine, text, {
       userId: opts?.userId,
-      signals: this.parseSignals(opts?.signals),
+      signals: coerceWritebackSignalInput(opts?.signals),
       signalConfidence: opts?.signalConfidence,
     }, "langchain.processOutput");
     return result.cleanedText;

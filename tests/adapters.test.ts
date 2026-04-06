@@ -413,6 +413,18 @@ describe("createPsycheServer (HTTP)", () => {
     assert.equal(data.cleanedText, "Normal text");
   });
 
+  it("POST /process-output surfaces structured validation issues for invalid signals without breaking", async () => {
+    const { status, data } = await req("POST", "/process-output", {
+      text: "Normal text",
+      signals: ["trust_up", "invalid_signal"],
+      signalConfidence: 0.8,
+    });
+    assert.equal(status, 200);
+    assert.equal(data.cleanedText, "Normal text");
+    assert.ok(Array.isArray(data.validationIssues));
+    assert.deepEqual(data.validationIssues[0].ignoredSignals, ["invalid_signal"]);
+  });
+
   it("returns 404 for unknown routes", async () => {
     const { status } = await req("GET", "/unknown");
     assert.equal(status, 404);

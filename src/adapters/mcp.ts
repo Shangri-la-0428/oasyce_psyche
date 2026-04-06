@@ -354,6 +354,7 @@ server.tool(
         text: JSON.stringify({
           cleanedText: result.cleanedText,
           stateChanged: result.stateChanged,
+          validationIssues: result.validationIssues ?? [],
         }, null, 2),
       }],
     };

@@ -24,37 +24,16 @@ import {
   normalizeCurrentTurnCorrection,
   resolveRuntimeActivePolicy,
   type AmbientPriorView,
-  type WritebackSignalType,
 } from "../types.js";
 import { parseAmbientPriorsInput } from "../ambient-runtime.js";
 import { computeOverlay } from "../overlay.js";
+import { coerceWritebackSignalInput } from "../writeback-signals.js";
 
 // ── Types ────────────────────────────────────────────────────
 
 export interface HttpAdapterOptions {
   port?: number;
   host?: string;
-}
-
-const VALID_WRITEBACK_SIGNALS = new Set<WritebackSignalType>([
-  "trust_up",
-  "trust_down",
-  "boundary_set",
-  "boundary_soften",
-  "repair_attempt",
-  "repair_landed",
-  "closeness_invite",
-  "withdrawal_mark",
-  "self_assertion",
-  "task_recenter",
-]);
-
-function parseSignals(value: unknown): WritebackSignalType[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const parsed = value.filter((item): item is WritebackSignalType => (
-    typeof item === "string" && VALID_WRITEBACK_SIGNALS.has(item as WritebackSignalType)
-  ));
-  return parsed.length > 0 ? [...new Set(parsed)] : undefined;
 }
 
 function parseAmbientPriors(value: unknown): AmbientPriorView[] | undefined {
@@ -179,7 +158,7 @@ export function createPsycheServer(engine: PsycheEngine, opts?: HttpAdapterOptio
           (body.text as string) ?? "",
           {
             userId: body.userId as string | undefined,
-            signals: parseSignals(body.signals),
+            signals: coerceWritebackSignalInput(body.signals),
             signalConfidence: typeof body.signalConfidence === "number" ? body.signalConfidence : undefined,
           },
           "http.processOutput",
