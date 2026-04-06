@@ -1,5 +1,19 @@
 # 更新日志 / Changelog
 
+## v11.5.3 — Runtime Policy Boundary
+
+### Changed
+- `activePolicy`、`currentGoal` 和 compliance-aware ambient priors 现在明确是 runtime-only view，不写入 `PsycheState`
+- 当前轮的 goal / policy 归一化收束为单一路径，避免不同 adapter 各自解释一套语义
+- README 和 host-facing 文档现在把 `Psyche` 的边界明确成“读取执行边界，不把执行边界误当成自我本体”
+
+### Fixed
+- 修复 ambient prior 消费侧缺少 schema compatibility 校验的问题，machine-facing guidance 现在必须显式匹配兼容 schema
+- 修复 host/runtime 在没有 goal-tagged ambient priors 时可能丢失 `currentGoal` 行为引导的问题
+- 修复原子写路径在 Windows 下使用 POSIX 分隔符切 basename 的问题
+
+---
+
 ## v11.5.2 — Appraisal-First Ambient Runtime
 
 ### Changed
