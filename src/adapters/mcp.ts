@@ -105,6 +105,12 @@ function parseCLIArgs(): Partial<PsycheEngineConfig> {
   return overrides;
 }
 
+// ── Turn cache for on-demand resource access ──────────────
+// Single-client assumption: MCP stdio transport serves one host at a time.
+// If this ever becomes multi-client, turn cache must be keyed per session.
+
+let lastTurnResult: ProcessInputResult | null = null;
+
 // ── Engine singleton ───────────────────────────────────────
 
 let engine: PsycheEngine | null = null;
@@ -244,16 +250,61 @@ server.resource(
   },
 );
 
+// Helper: register a turn-scoped resource backed by lastTurnResult.
+// Returns empty JSON when no turn has been processed yet (fail-open).
+function turnResource(
+  name: string,
+  uri: string,
+  description: string,
+  pick: (r: ProcessInputResult) => Record<string, unknown>,
+): void {
+  server.resource(name, uri, { description, mimeType: "application/json" }, async (u: URL) => ({
+    contents: [{
+      uri: u.href,
+      mimeType: "application/json",
+      text: lastTurnResult ? JSON.stringify(pick(lastTurnResult)) : "{}",
+    }],
+  }));
+}
+
+turnResource(
+  "turn-envelope",
+  "psyche://turn/envelope",
+  "Full ReplyEnvelope from the last process_input call — " +
+  "SubjectivityKernel, ResponseContract, GenerationControls, " +
+  "appraisal axes, policyModifiers, and writebackFeedback. " +
+  "Use this when you need the structured ABI data (non-LLM substrates, debugging, analytics).",
+  (r) => ({
+    replyEnvelope: r.replyEnvelope,
+    appraisal: r.appraisal,
+    policyModifiers: r.policyModifiers,
+    writebackFeedback: r.writebackFeedback,
+    externalContinuity: r.externalContinuity,
+  }),
+);
+
+turnResource(
+  "turn-observability",
+  "psyche://turn/observability",
+  "Diagnostic metadata from the last process_input call — " +
+  "control boundary, state layers, decision rationale, causal chain. " +
+  "Use for debugging and auditing only.",
+  (r) => ({
+    observability: r.observability,
+    stimulus: r.stimulus,
+    stimulusConfidence: r.stimulusConfidence,
+    policyContext: r.policyContext,
+  }),
+);
+
 // ── Tools ──────────────────────────────────────────────────
 
 server.tool(
   "process_input",
-  "Process user input through the emotional engine. Returns emotional " +
-  "context to inject into the LLM system prompt (systemContext + dynamicContext), " +
-  "an appraisal-first semantic reading, optional runtime ambient priors, an optional legacy stimulus hint, a canonical replyEnvelope, compatibility aliases " +
-  "(policyModifiers + subjectivityKernel + responseContract + generationControls), an optional " +
-  "externalContinuity envelope, and sparse low-frequency throngletsExports " +
-  "suitable for additive external continuity layers. " +
+  "Process user input through the emotional engine. Returns a directive " +
+  "(text to inject into system prompt), stimulus classification, generation controls, " +
+  "and optional sparse continuity signals. " +
+  "Full structured state (ReplyEnvelope, appraisal) available via psyche://turn/envelope resource. " +
   "Call this BEFORE generating a response to the user.",
   {
     text: z.string().describe("The user's message text"),
@@ -300,30 +351,31 @@ server.tool(
       activePolicy: resolvedActivePolicy,
       currentTurnCorrection,
     }, "mcp.processInput");
+
+    // Cache full result for turn-scoped resources
+    lastTurnResult = result;
+
+    // Build slim response: only what the LLM host actually needs.
+    // Full structured state available via psyche://turn/envelope resource.
+    const slim: Record<string, unknown> = {
+      directive: result.dynamicContext,
+      stimulus: result.stimulus,
+      maxTokens: result.generationControls?.maxTokens,
+      requireConfirmation: result.generationControls?.requireConfirmation ?? false,
+    };
+
+    // Sparse signals — only when non-empty to keep payload minimal
+    if (result.throngletsExports?.length) {
+      slim.throngletsExports = result.throngletsExports;
+    }
+    if (result.sessionBridge) {
+      slim.sessionBridge = result.sessionBridge;
+    }
+
     return {
       content: [{
         type: "text" as const,
-        text: JSON.stringify({
-          systemContext: result.systemContext,
-          dynamicContext: result.dynamicContext,
-          ambientPriors: result.ambientPriors ?? [],
-          activePolicy: result.activePolicy ?? [],
-          currentGoal: result.currentGoal ?? null,
-          ambientPriorContext: result.ambientPriorContext ?? null,
-          appraisal: result.appraisal,
-          legacyStimulus: result.legacyStimulus,
-          stimulus: result.stimulus,
-          replyEnvelope: result.replyEnvelope ?? null,
-          policyModifiers: result.policyModifiers ?? null,
-          subjectivityKernel: result.subjectivityKernel ?? null,
-          responseContract: result.responseContract ?? null,
-          generationControls: result.generationControls ?? null,
-          sessionBridge: result.sessionBridge ?? null,
-          writebackFeedback: result.writebackFeedback ?? null,
-          externalContinuity: result.externalContinuity ?? null,
-          throngletsExports: result.throngletsExports ?? null,
-          policyContext: result.policyContext,
-        }, null, 2),
+        text: JSON.stringify(slim),
       }],
     };
   },
@@ -354,8 +406,8 @@ server.tool(
         text: JSON.stringify({
           cleanedText: result.cleanedText,
           stateChanged: result.stateChanged,
-          validationIssues: result.validationIssues ?? [],
-        }, null, 2),
+          ...(result.validationIssues?.length ? { validationIssues: result.validationIssues } : {}),
+        }),
       }],
     };
   },
