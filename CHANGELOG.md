@@ -1,5 +1,13 @@
 # 更新日志 / Changelog
 
+## v11.7.0 — Proprioception
+
+- **Self-trajectory awareness (proprioception)** — the system can now perceive its own state trajectory and respond to it.
+- **Decline/spiral detection** — when dimensions decline monotonically for 4+ turns, a gentle stabilization nudge is applied (awareness, not correction).
+- **Growth detection** — when dimensions show sustained increase above baseline, the baseline shifts upward (anti-fragility).
+- **Trajectory signals in status summary** — surfaces a compass indicator when anomaly detected.
+- **Zero overhead when healthy** — no extra tokens in normal operation; ~30 chars added to status only when trajectory anomaly is active.
+
 ## v11.6.1 — Slim MCP Response
 
 - **Slim process_input response** — MCP tool returns only what the LLM host needs: `directive`, `stimulus`, `maxTokens`, `requireConfirmation`. Full structured state (ReplyEnvelope, appraisal, observability) available on demand via `psyche://turn/envelope` and `psyche://turn/observability` resources.
