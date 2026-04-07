@@ -105,6 +105,10 @@ function parseCLIArgs(): Partial<PsycheEngineConfig> {
   return overrides;
 }
 
+// ── Turn cache for on-demand resource access ──────────────
+
+let lastTurnResult: ProcessInputResult | null = null;
+
 // ── Engine singleton ───────────────────────────────────────
 
 let engine: PsycheEngine | null = null;
@@ -244,16 +248,74 @@ server.resource(
   },
 );
 
+server.resource(
+  "turn-envelope",
+  "psyche://turn/envelope",
+  {
+    description:
+      "Full ReplyEnvelope from the last process_input call — " +
+      "SubjectivityKernel, ResponseContract, GenerationControls, " +
+      "appraisal axes, policyModifiers, and writebackFeedback. " +
+      "Use this when you need the structured ABI data (non-LLM substrates, debugging, analytics).",
+    mimeType: "application/json",
+  },
+  async (uri: URL) => {
+    if (!lastTurnResult) {
+      return { contents: [{ uri: uri.href, mimeType: "application/json", text: "{}" }] };
+    }
+    return {
+      contents: [{
+        uri: uri.href,
+        mimeType: "application/json",
+        text: JSON.stringify({
+          replyEnvelope: lastTurnResult.replyEnvelope,
+          appraisal: lastTurnResult.appraisal,
+          policyModifiers: lastTurnResult.policyModifiers,
+          writebackFeedback: lastTurnResult.writebackFeedback,
+          externalContinuity: lastTurnResult.externalContinuity,
+        }),
+      }],
+    };
+  },
+);
+
+server.resource(
+  "turn-observability",
+  "psyche://turn/observability",
+  {
+    description:
+      "Diagnostic metadata from the last process_input call — " +
+      "control boundary, state layers, decision rationale, causal chain. " +
+      "Use for debugging and auditing only.",
+    mimeType: "application/json",
+  },
+  async (uri: URL) => {
+    if (!lastTurnResult) {
+      return { contents: [{ uri: uri.href, mimeType: "application/json", text: "{}" }] };
+    }
+    return {
+      contents: [{
+        uri: uri.href,
+        mimeType: "application/json",
+        text: JSON.stringify({
+          observability: lastTurnResult.observability,
+          stimulus: lastTurnResult.stimulus,
+          stimulusConfidence: lastTurnResult.stimulusConfidence,
+          policyContext: lastTurnResult.policyContext,
+        }),
+      }],
+    };
+  },
+);
+
 // ── Tools ──────────────────────────────────────────────────
 
 server.tool(
   "process_input",
-  "Process user input through the emotional engine. Returns emotional " +
-  "context to inject into the LLM system prompt (systemContext + dynamicContext), " +
-  "an appraisal-first semantic reading, optional runtime ambient priors, an optional legacy stimulus hint, a canonical replyEnvelope, compatibility aliases " +
-  "(policyModifiers + subjectivityKernel + responseContract + generationControls), an optional " +
-  "externalContinuity envelope, and sparse low-frequency throngletsExports " +
-  "suitable for additive external continuity layers. " +
+  "Process user input through the emotional engine. Returns a directive " +
+  "(text to inject into system prompt), stimulus classification, generation controls, " +
+  "and optional sparse continuity signals. " +
+  "Full structured state (ReplyEnvelope, appraisal) available via psyche://turn/envelope resource. " +
   "Call this BEFORE generating a response to the user.",
   {
     text: z.string().describe("The user's message text"),
@@ -300,30 +362,32 @@ server.tool(
       activePolicy: resolvedActivePolicy,
       currentTurnCorrection,
     }, "mcp.processInput");
+
+    // Cache full result for turn-scoped resources
+    lastTurnResult = result;
+
+    // Build slim response: only what the LLM host actually needs
+    const slim: Record<string, unknown> = {
+      directive: result.dynamicContext,
+      stimulus: result.stimulus,
+      maxTokens: result.generationControls?.maxTokens,
+      requireConfirmation: result.generationControls?.requireConfirmation ?? false,
+      changed: true,
+    };
+
+    // Conditionally include sparse signals (only when non-empty)
+    const exports = result.throngletsExports;
+    if (exports && exports.length > 0) {
+      slim.throngletsExports = exports;
+    }
+    if (result.sessionBridge) {
+      slim.sessionBridge = result.sessionBridge;
+    }
+
     return {
       content: [{
         type: "text" as const,
-        text: JSON.stringify({
-          systemContext: result.systemContext,
-          dynamicContext: result.dynamicContext,
-          ambientPriors: result.ambientPriors ?? [],
-          activePolicy: result.activePolicy ?? [],
-          currentGoal: result.currentGoal ?? null,
-          ambientPriorContext: result.ambientPriorContext ?? null,
-          appraisal: result.appraisal,
-          legacyStimulus: result.legacyStimulus,
-          stimulus: result.stimulus,
-          replyEnvelope: result.replyEnvelope ?? null,
-          policyModifiers: result.policyModifiers ?? null,
-          subjectivityKernel: result.subjectivityKernel ?? null,
-          responseContract: result.responseContract ?? null,
-          generationControls: result.generationControls ?? null,
-          sessionBridge: result.sessionBridge ?? null,
-          writebackFeedback: result.writebackFeedback ?? null,
-          externalContinuity: result.externalContinuity ?? null,
-          throngletsExports: result.throngletsExports ?? null,
-          policyContext: result.policyContext,
-        }, null, 2),
+        text: JSON.stringify(slim),
       }],
     };
   },
@@ -354,8 +418,7 @@ server.tool(
         text: JSON.stringify({
           cleanedText: result.cleanedText,
           stateChanged: result.stateChanged,
-          validationIssues: result.validationIssues ?? [],
-        }, null, 2),
+        }),
       }],
     };
   },
