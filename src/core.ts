@@ -52,6 +52,8 @@ import { buildTurnObservability } from "./observability.js";
 import { DEFAULT_RELATIONSHIP_USER_ID, resolveRelationshipUserId } from "./relationship-key.js";
 import { normalizeAmbientPriors } from "./ambient-priors.js";
 import { normalizeWritebackSignals } from "./writeback-signals.js";
+import { detectTrajectory } from "./proprioception.js";
+import type { TrajectorySignal } from "./proprioception.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -331,6 +333,10 @@ export class PsycheEngine {
     confidence: number;
     overrideWindow: ResponseContract["overrideWindow"];
   } | null = null;
+  /** Proprioception cooldown — turns remaining before next trajectory check */
+  private proprioceptionCooldown = 0;
+  /** Last detected trajectory signal (in-memory only, for status summary) */
+  private lastTrajectory: TrajectorySignal | null = null;
 
   constructor(config: PsycheEngineConfig = {}, storage: StorageAdapter) {
     this.traits = config.traits;
@@ -608,6 +614,45 @@ export class PsycheEngine {
       if (appliedStimulus) {
         state = applyRelationshipDrift(state, appliedStimulus, opts?.userId);
       }
+
+      // ── Proprioception: self-trajectory awareness ──────────
+      if (this.proprioceptionCooldown > 0) {
+        this.proprioceptionCooldown--;
+      } else {
+        const trajectory = detectTrajectory(state.stateHistory ?? [], state.baseline);
+        this.lastTrajectory = trajectory;
+
+        if (trajectory.kind === "decline" || trajectory.kind === "spiral") {
+          // Gentle awareness nudge — not correction, just noticing
+          if (trajectory.stabilize) {
+            state = {
+              ...state,
+              current: {
+                ...state.current,
+                order: clamp(state.current.order + (trajectory.stabilize.order ?? 0)),
+                flow: clamp(state.current.flow + (trajectory.stabilize.flow ?? 0)),
+                boundary: clamp(state.current.boundary + (trajectory.stabilize.boundary ?? 0)),
+                resonance: clamp(state.current.resonance + (trajectory.stabilize.resonance ?? 0)),
+              },
+            };
+          }
+          this.proprioceptionCooldown = 3;
+        } else if (trajectory.kind === "growth" && trajectory.baselineShift) {
+          // Growth detected — shift baseline upward
+          const shift = trajectory.baselineShift;
+          state = {
+            ...state,
+            baseline: {
+              order: clamp(state.baseline.order + (shift.order ?? 0)),
+              flow: clamp(state.baseline.flow + (shift.flow ?? 0)),
+              boundary: clamp(state.baseline.boundary + (shift.boundary ?? 0)),
+              resonance: clamp(state.baseline.resonance + (shift.resonance ?? 0)),
+            },
+          };
+          this.proprioceptionCooldown = 3;
+        }
+      }
+
       this.lastCompatibilityAssessment = {
         legacyStimulus: appliedStimulus,
         confidence: perception.confidence,
@@ -1310,7 +1355,13 @@ export class PsycheEngine {
       ? ` | \u26A0\uFE0F${hungryDrives.join(",")}`
       : "";
 
+    // Proprioception: surface trajectory awareness
+    const trajectory = this.lastTrajectory ?? detectTrajectory(state.stateHistory ?? [], state.baseline);
+    const trajectoryNote = trajectory.description
+      ? ` | \u{1F9ED}${trajectory.description}`
+      : "";
+
     const sigilTag = state.meta.sigilId ? ` | sigil:${state.meta.sigilId}` : "";
-    return `${emoji} ${emotion} | flow:${Math.round(flow)} order:${Math.round(order)}${driveWarning}${sigilTag}`;
+    return `${emoji} ${emotion} | flow:${Math.round(flow)} order:${Math.round(order)}${driveWarning}${trajectoryNote}${sigilTag}`;
   }
 }
