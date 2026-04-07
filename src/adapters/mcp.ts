@@ -106,6 +106,8 @@ function parseCLIArgs(): Partial<PsycheEngineConfig> {
 }
 
 // ── Turn cache for on-demand resource access ──────────────
+// Single-client assumption: MCP stdio transport serves one host at a time.
+// If this ever becomes multi-client, turn cache must be keyed per session.
 
 let lastTurnResult: ProcessInputResult | null = null;
 
@@ -248,64 +250,51 @@ server.resource(
   },
 );
 
-server.resource(
+// Helper: register a turn-scoped resource backed by lastTurnResult.
+// Returns empty JSON when no turn has been processed yet (fail-open).
+function turnResource(
+  name: string,
+  uri: string,
+  description: string,
+  pick: (r: ProcessInputResult) => Record<string, unknown>,
+): void {
+  server.resource(name, uri, { description, mimeType: "application/json" }, async (u: URL) => ({
+    contents: [{
+      uri: u.href,
+      mimeType: "application/json",
+      text: lastTurnResult ? JSON.stringify(pick(lastTurnResult)) : "{}",
+    }],
+  }));
+}
+
+turnResource(
   "turn-envelope",
   "psyche://turn/envelope",
-  {
-    description:
-      "Full ReplyEnvelope from the last process_input call — " +
-      "SubjectivityKernel, ResponseContract, GenerationControls, " +
-      "appraisal axes, policyModifiers, and writebackFeedback. " +
-      "Use this when you need the structured ABI data (non-LLM substrates, debugging, analytics).",
-    mimeType: "application/json",
-  },
-  async (uri: URL) => {
-    if (!lastTurnResult) {
-      return { contents: [{ uri: uri.href, mimeType: "application/json", text: "{}" }] };
-    }
-    return {
-      contents: [{
-        uri: uri.href,
-        mimeType: "application/json",
-        text: JSON.stringify({
-          replyEnvelope: lastTurnResult.replyEnvelope,
-          appraisal: lastTurnResult.appraisal,
-          policyModifiers: lastTurnResult.policyModifiers,
-          writebackFeedback: lastTurnResult.writebackFeedback,
-          externalContinuity: lastTurnResult.externalContinuity,
-        }),
-      }],
-    };
-  },
+  "Full ReplyEnvelope from the last process_input call — " +
+  "SubjectivityKernel, ResponseContract, GenerationControls, " +
+  "appraisal axes, policyModifiers, and writebackFeedback. " +
+  "Use this when you need the structured ABI data (non-LLM substrates, debugging, analytics).",
+  (r) => ({
+    replyEnvelope: r.replyEnvelope,
+    appraisal: r.appraisal,
+    policyModifiers: r.policyModifiers,
+    writebackFeedback: r.writebackFeedback,
+    externalContinuity: r.externalContinuity,
+  }),
 );
 
-server.resource(
+turnResource(
   "turn-observability",
   "psyche://turn/observability",
-  {
-    description:
-      "Diagnostic metadata from the last process_input call — " +
-      "control boundary, state layers, decision rationale, causal chain. " +
-      "Use for debugging and auditing only.",
-    mimeType: "application/json",
-  },
-  async (uri: URL) => {
-    if (!lastTurnResult) {
-      return { contents: [{ uri: uri.href, mimeType: "application/json", text: "{}" }] };
-    }
-    return {
-      contents: [{
-        uri: uri.href,
-        mimeType: "application/json",
-        text: JSON.stringify({
-          observability: lastTurnResult.observability,
-          stimulus: lastTurnResult.stimulus,
-          stimulusConfidence: lastTurnResult.stimulusConfidence,
-          policyContext: lastTurnResult.policyContext,
-        }),
-      }],
-    };
-  },
+  "Diagnostic metadata from the last process_input call — " +
+  "control boundary, state layers, decision rationale, causal chain. " +
+  "Use for debugging and auditing only.",
+  (r) => ({
+    observability: r.observability,
+    stimulus: r.stimulus,
+    stimulusConfidence: r.stimulusConfidence,
+    policyContext: r.policyContext,
+  }),
 );
 
 // ── Tools ──────────────────────────────────────────────────
@@ -366,19 +355,18 @@ server.tool(
     // Cache full result for turn-scoped resources
     lastTurnResult = result;
 
-    // Build slim response: only what the LLM host actually needs
+    // Build slim response: only what the LLM host actually needs.
+    // Full structured state available via psyche://turn/envelope resource.
     const slim: Record<string, unknown> = {
       directive: result.dynamicContext,
       stimulus: result.stimulus,
       maxTokens: result.generationControls?.maxTokens,
       requireConfirmation: result.generationControls?.requireConfirmation ?? false,
-      changed: true,
     };
 
-    // Conditionally include sparse signals (only when non-empty)
-    const exports = result.throngletsExports;
-    if (exports && exports.length > 0) {
-      slim.throngletsExports = exports;
+    // Sparse signals — only when non-empty to keep payload minimal
+    if (result.throngletsExports?.length) {
+      slim.throngletsExports = result.throngletsExports;
     }
     if (result.sessionBridge) {
       slim.sessionBridge = result.sessionBridge;
