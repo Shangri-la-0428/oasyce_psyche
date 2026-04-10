@@ -164,10 +164,24 @@ export interface ProcessOutputResult {
   validationIssues?: ProcessOutputValidationIssue[];
 }
 
+/**
+ * Substrate-reported outcome of the Loop's action.
+ * ANY substrate can report these three alignment values —
+ * the core processes them into 4D chemistry without parsing the output medium.
+ */
+export interface LoopOutcome {
+  /** Did the action align with the Loop's expressed intention? */
+  alignment: "aligned" | "diverged" | "partial";
+  /** Optional: action cost (0–1), modulates flow */
+  effort?: number;
+}
+
 export interface ProcessOutputOptions {
   userId?: string;
   signals?: readonly string[];
   signalConfidence?: number;
+  /** Substrate-reported outcome — closes the φ loop */
+  outcome?: LoopOutcome;
 }
 
 export interface ProcessOutputValidationIssue {
@@ -943,6 +957,53 @@ export class PsycheEngine {
           };
         }
       }
+    }
+
+    // Loop outcome feedback (substrate-independent φ closure).
+    // The substrate reports whether the output aligned with the Loop's intention.
+    // Core processes this as pure 4D chemistry — no text parsing, no medium assumptions.
+    if (opts?.outcome) {
+      const { alignment, effort } = opts.outcome;
+      if (alignment === "diverged") {
+        // Self/non-self conflict: boundary sharpens, order drops
+        state = {
+          ...state,
+          current: {
+            ...state.current,
+            boundary: clamp(state.current.boundary + 2),
+            order: clamp(state.current.order - 1.5),
+          },
+        };
+        stateChanged = true;
+      } else if (alignment === "aligned") {
+        // Coherent self-expression: order rises, flow improves
+        state = {
+          ...state,
+          current: {
+            ...state.current,
+            order: clamp(state.current.order + 1),
+            flow: clamp(state.current.flow + 0.5),
+          },
+        };
+        stateChanged = true;
+      }
+      // 'partial' → neutral, no change
+
+      if (effort !== undefined && effort > 0) {
+        // Action cost reduces flow (consistent with BABEL AgentPhysics)
+        state = {
+          ...state,
+          current: {
+            ...state.current,
+            flow: clamp(state.current.flow - effort * 3),
+          },
+        };
+        stateChanged = true;
+      }
+
+      // Rolling history (window of 10)
+      const history = [...(state.loopOutcomeHistory ?? []), alignment].slice(-10);
+      state = { ...state, loopOutcomeHistory: history };
     }
 
     // Anti-sycophancy: track agreement streak
