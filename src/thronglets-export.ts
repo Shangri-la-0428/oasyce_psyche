@@ -18,9 +18,12 @@ import type {
   SessionBridgeState,
   ThrongletsExport,
   ThrongletsExportState,
+  ViabilityExport,
   WritebackCalibrationExport,
   WritebackCalibrationFeedback,
 } from "./types.js";
+import { DRIVE_KEYS } from "./types.js";
+import { deriveDriveSatisfaction, hasCriticalDrive } from "./drives.js";
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
@@ -170,6 +173,21 @@ function sanitizeThrongletsExport(event: ThrongletsExport): ThrongletsExport {
       };
       return sanitized;
     }
+    case "viability": {
+      const sanitized: ViabilityExport = {
+        kind: "viability",
+        subject: "session",
+        primitive: "signal",
+        userKey: event.userKey,
+        strength: event.strength,
+        ttlTurns: event.ttlTurns,
+        key: event.key,
+        viable: event.viable,
+        minDrive: event.minDrive,
+        minDriveType: event.minDriveType,
+      };
+      return sanitized;
+    }
   }
 }
 
@@ -256,6 +274,28 @@ export function deriveThrongletsExports(
     order, flow, boundary, resonance,
     summary: selfStateSummary(order, flow, boundary, resonance),
   });
+
+  // Viability — Psyche's self-assessment of aliveness for field pulse
+  if (state.baseline) {
+    const drives = deriveDriveSatisfaction(state.current, state.baseline);
+    const driveEntries = DRIVE_KEYS.map((k) => ({ type: k, value: drives[k] }));
+    const min = driveEntries.reduce((a, b) => (a.value < b.value ? a : b));
+    const viable = !hasCriticalDrive(drives);
+    const driveBucket = Math.round(min.value / 10) * 10;
+    const viabilityKey = `viability:${viable ? "viable" : "critical"}:${min.type}:${driveBucket}`;
+    candidates.push({
+      kind: "viability",
+      subject: "session",
+      primitive: "signal",
+      userKey,
+      strength: viable ? 0.5 : 0.9,
+      ttlTurns: 12,
+      key: viabilityKey,
+      viable,
+      minDrive: min.value,
+      minDriveType: min.type,
+    });
+  }
 
   for (const feedback of writebackFeedback) {
     if (feedback.effect === "holding") continue;

@@ -980,7 +980,7 @@ export type ThrongletsExportSubject = "delegate" | "session";
 export type ThrongletsExportPrimitive = "signal" | "trace";
 
 export interface ThrongletsExportBase {
-  kind: "relation-milestone" | "open-loop-anchor" | "writeback-calibration" | "continuity-anchor" | "self-state";
+  kind: "relation-milestone" | "open-loop-anchor" | "writeback-calibration" | "continuity-anchor" | "self-state" | "viability";
   subject: ThrongletsExportSubject;
   primitive: ThrongletsExportPrimitive;
   userKey: string;
@@ -1037,12 +1037,22 @@ export interface SelfStateExport extends ThrongletsExportBase {
   summary: string;
 }
 
+export interface ViabilityExport extends ThrongletsExportBase {
+  kind: "viability";
+  subject: "session";
+  primitive: "signal";
+  viable: boolean;
+  minDrive: number;
+  minDriveType: DriveType;
+}
+
 export type ThrongletsExport =
   | RelationMilestoneExport
   | OpenLoopAnchorExport
   | WritebackCalibrationExport
   | ContinuityAnchorExport
-  | SelfStateExport;
+  | SelfStateExport
+  | ViabilityExport;
 
 export interface ThrongletsExportState {
   lastKeys: string[];

@@ -15,6 +15,7 @@ const TAXONOMY_BY_EVENT: Record<ThrongletsExport["kind"], ThrongletsTraceTaxonom
   "continuity-anchor": "continuity",
   "writeback-calibration": "calibration",
   "self-state": "state",
+  "viability": "state",
 };
 
 function summarizeLoopTypes(loopTypes: OpenLoopType[]): string {
@@ -35,6 +36,8 @@ function summarizeThrongletsExport(event: ThrongletsExport): string {
     }
     case "self-state":
       return event.summary;
+    case "viability":
+      return `viability: ${event.viable ? "viable" : "critical"} (min drive: ${event.minDriveType} at ${Math.round(event.minDrive)})`;
   }
 }
 
