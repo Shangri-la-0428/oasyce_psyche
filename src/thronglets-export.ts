@@ -281,7 +281,8 @@ export function deriveThrongletsExports(
     const driveEntries = DRIVE_KEYS.map((k) => ({ type: k, value: drives[k] }));
     const min = driveEntries.reduce((a, b) => (a.value < b.value ? a : b));
     const viable = !hasCriticalDrive(drives);
-    const viabilityKey = `viability:${viable ? "viable" : "critical"}:${min.type}`;
+    const driveBucket = Math.round(min.value / 10) * 10;
+    const viabilityKey = `viability:${viable ? "viable" : "critical"}:${min.type}:${driveBucket}`;
     candidates.push({
       kind: "viability",
       subject: "session",
