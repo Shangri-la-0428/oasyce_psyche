@@ -14,8 +14,8 @@ const TAXONOMY_BY_EVENT: Record<ThrongletsExport["kind"], ThrongletsTraceTaxonom
   "open-loop-anchor": "coordination",
   "continuity-anchor": "continuity",
   "writeback-calibration": "calibration",
-  "self-state": "state",
-  "viability": "state",
+  "self-state": "calibration",
+  "viability": "calibration",
 };
 
 function summarizeLoopTypes(loopTypes: OpenLoopType[]): string {

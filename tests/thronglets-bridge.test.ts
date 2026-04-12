@@ -195,3 +195,75 @@ describe("resolveThrongletsBinary", () => {
     }
   });
 });
+import { serializeThrongletsExportAsTrace, taxonomyForThrongletsExport } from "../src/thronglets-runtime.js";
+function assertTracePayloadShape(payload: ReturnType<typeof serializeThrongletsExportAsTrace>) {
+  assert.deepEqual(
+    Object.keys(payload).sort(),
+    ["external_continuity", "model", "outcome", "session_id"],
+  );
+  assert.deepEqual(
+    Object.keys(payload.external_continuity).sort(),
+    ["audit_ref", "event", "mode", "provider", "space", "summary", "taxonomy", "version"],
+  );
+}
+
+  it("keeps viability exports on the viability kind and maps only the frozen taxonomy set", () => {
+    const events: ThrongletsExport[] = [
+      {
+        kind: "relation-milestone",
+        subject: "delegate",
+        primitive: "signal",
+        userKey: "alice",
+        strength: 0.8,
+        ttlTurns: 8,
+        key: "milestone:alice:familiar",
+        phase: "familiar",
+        trust: 61,
+        intimacy: 44,
+      },
+      {
+        kind: "continuity-anchor",
+        subject: "session",
+        primitive: "trace",
+        userKey: "alice",
+        strength: 0.76,
+        ttlTurns: 3,
+        key: "continuity:alice:guarded-resume",
+        continuityMode: "guarded-resume",
+        activeLoopTypes: ["existence-test"],
+        continuityFloor: 0.58,
+      },
+      {
+        kind: "viability",
+        subject: "session",
+        primitive: "signal",
+        userKey: "alice",
+        strength: 0.5,
+        ttlTurns: 12,
+        key: "viability:viable:survival:40",
+        viable: true,
+        minDrive: 42,
+        minDriveType: "survival",
+      },
+    ];
+
+    const viability = events.find((event) => event.kind === "viability");
+    assert.ok(viability, "expected a viability export in the frozen sample set");
+    assert.equal(viability.kind, "viability");
+
+    const taxonomies = new Set(
+      events.map((event) => taxonomyForThrongletsExport(event)),
+    );
+    assert.deepEqual([...taxonomies].sort(), ["calibration", "continuity", "coordination"]);
+
+    const payload = serializeThrongletsExportAsTrace(viability, {
+      model: "psyche",
+      sessionId: "psyche-bridge",
+      space: "psyche",
+      outcome: "succeeded",
+    });
+    assert.equal(payload.external_continuity.event, "viability");
+    assert.equal(payload.external_continuity.taxonomy, "calibration");
+    assertTracePayloadShape(payload);
+  });
+

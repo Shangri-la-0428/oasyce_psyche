@@ -183,6 +183,8 @@ function sanitizeThrongletsExport(event: ThrongletsExport): ThrongletsExport {
       return sanitized;
     }
     case "viability": {
+      // Viability stays a sparse export, but its meaning is defined by the
+      // protocol-layer dimension registry. Keep the kind/payload stable here.
       const sanitized: ViabilityExport = {
         kind: "viability",
         subject: "session",
