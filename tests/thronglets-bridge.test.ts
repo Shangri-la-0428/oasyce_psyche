@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { bridgeThrongletsExports, resolveThrongletsBinary } from "../src/thronglets-bridge.js";
 import { deriveThrongletsExports, markThrongletsExportsEmitted } from "../src/thronglets-export.js";
+import { serializeThrongletsExportAsTrace, taxonomyForThrongletsExport } from "../src/thronglets-runtime.js";
 import type { ThrongletsExport } from "../src/types.js";
 import {
   DEFAULT_DRIVES,
@@ -69,6 +70,17 @@ function makeExportState(): any {
     },
     meta: { agentName: "Test", createdAt: now, totalInteractions: 1, locale: "en", mode: "natural" },
   };
+}
+
+function assertTracePayloadShape(payload: ReturnType<typeof serializeThrongletsExportAsTrace>) {
+  assert.deepEqual(
+    Object.keys(payload).sort(),
+    ["external_continuity", "model", "outcome", "session_id"],
+  );
+  assert.deepEqual(
+    Object.keys(payload.external_continuity).sort(),
+    ["audit_ref", "event", "mode", "provider", "space", "summary", "taxonomy", "version"],
+  );
 }
 
 // ── bridgeThrongletsExports ─────────────────────────────────
@@ -140,73 +152,6 @@ describe("bridgeThrongletsExports", () => {
     assert.equal(result, 2);
   });
 
-  it("does not suppress re-emission until exports are marked as emitted", () => {
-    const state = makeExportState();
-    const relationContext = {
-      key: "_default",
-      relationship: state.relationships._default,
-      field: state.dyadicFields._default,
-      pendingSignals: [],
-    };
-
-    const first = deriveThrongletsExports(state, {
-      relationContext,
-      sessionBridge: null,
-      writebackFeedback: [],
-      now: new Date().toISOString(),
-    });
-    assert.ok(first.exports.length > 0, "expected initial exports");
-
-    const second = deriveThrongletsExports(first.state, {
-      relationContext,
-      sessionBridge: null,
-      writebackFeedback: [],
-      now: new Date().toISOString(),
-    });
-    assert.equal(second.exports.length, first.exports.length, "failed bridge should not burn dedupe keys");
-
-    const marked = markThrongletsExportsEmitted(first.state, first.exports, new Date().toISOString());
-    const third = deriveThrongletsExports(marked, {
-      relationContext,
-      sessionBridge: null,
-      writebackFeedback: [],
-      now: new Date().toISOString(),
-    });
-    assert.equal(third.exports.length, 0, "successful bridge should suppress immediate duplicate re-emission");
-  });
-});
-
-// ── resolveThrongletsBinary ─────────────────────────────────
-
-describe("resolveThrongletsBinary", () => {
-  it("returns explicit path when provided", () => {
-    assert.equal(resolveThrongletsBinary("/custom/bin"), "/custom/bin");
-  });
-
-  it("falls back to PATH when no explicit or env", () => {
-    const saved = process.env.THRONGLETS_BIN;
-    delete process.env.THRONGLETS_BIN;
-    try {
-      const result = resolveThrongletsBinary();
-      // Either finds managed binary or falls back to "thronglets"
-      assert.ok(typeof result === "string" && result.length > 0);
-    } finally {
-      if (saved !== undefined) process.env.THRONGLETS_BIN = saved;
-    }
-  });
-});
-import { serializeThrongletsExportAsTrace, taxonomyForThrongletsExport } from "../src/thronglets-runtime.js";
-function assertTracePayloadShape(payload: ReturnType<typeof serializeThrongletsExportAsTrace>) {
-  assert.deepEqual(
-    Object.keys(payload).sort(),
-    ["external_continuity", "model", "outcome", "session_id"],
-  );
-  assert.deepEqual(
-    Object.keys(payload.external_continuity).sort(),
-    ["audit_ref", "event", "mode", "provider", "space", "summary", "taxonomy", "version"],
-  );
-}
-
   it("keeps viability exports on the viability kind and maps only the frozen taxonomy set", () => {
     const events: ThrongletsExport[] = [
       {
@@ -267,3 +212,89 @@ function assertTracePayloadShape(payload: ReturnType<typeof serializeThrongletsE
     assertTracePayloadShape(payload);
   });
 
+  it("does not suppress re-emission until exports are marked as emitted", () => {
+    const state = makeExportState();
+    const relationContext = {
+      key: "_default",
+      relationship: state.relationships._default,
+      field: state.dyadicFields._default,
+      pendingSignals: [],
+    };
+
+    const first = deriveThrongletsExports(state, {
+      relationContext,
+      sessionBridge: null,
+      writebackFeedback: [],
+      now: new Date().toISOString(),
+    });
+    assert.ok(first.exports.length > 0, "expected initial exports");
+
+    const second = deriveThrongletsExports(first.state, {
+      relationContext,
+      sessionBridge: null,
+      writebackFeedback: [],
+      now: new Date().toISOString(),
+    });
+    assert.equal(second.exports.length, first.exports.length, "failed bridge should not burn dedupe keys");
+
+    const marked = markThrongletsExportsEmitted(first.state, first.exports, new Date().toISOString());
+    const third = deriveThrongletsExports(marked, {
+      relationContext,
+      sessionBridge: null,
+      writebackFeedback: [],
+      now: new Date().toISOString(),
+    });
+    assert.equal(third.exports.length, 0, "successful bridge should suppress immediate duplicate re-emission");
+  });
+
+  it("serializes a sparse export into the Thronglets trace ingest schema", () => {
+    const payload = serializeThrongletsExportAsTrace({
+      kind: "relation-milestone",
+      subject: "delegate",
+      primitive: "signal",
+      userKey: "alice",
+      strength: 0.82,
+      ttlTurns: 8,
+      key: "milestone:alice:familiar",
+      phase: "familiar",
+      trust: 64,
+      intimacy: 46,
+    }, {
+      sessionId: "psyche-ingest",
+      model: "psyche",
+      outcome: "succeeded",
+      space: "psyche",
+    });
+
+    assert.equal(payload.outcome, "succeeded");
+    assert.equal(payload.model, "psyche");
+    assert.equal(payload.session_id, "psyche-ingest");
+    assert.equal(payload.external_continuity.provider, "thronglets");
+    assert.equal(payload.external_continuity.mode, "optional");
+    assert.equal(payload.external_continuity.version, 1);
+    assert.equal(payload.external_continuity.taxonomy, "coordination");
+    assert.equal(payload.external_continuity.event, "relation-milestone");
+    assert.equal(payload.external_continuity.audit_ref, "milestone:alice:familiar");
+    assertTracePayloadShape(payload);
+  });
+});
+
+// ── resolveThrongletsBinary ─────────────────────────────────
+
+describe("resolveThrongletsBinary", () => {
+  it("returns explicit path when provided", () => {
+    assert.equal(resolveThrongletsBinary("/custom/bin"), "/custom/bin");
+  });
+
+  it("falls back to PATH when no explicit or env", () => {
+    const saved = process.env.THRONGLETS_BIN;
+    delete process.env.THRONGLETS_BIN;
+    try {
+      const result = resolveThrongletsBinary();
+      // Either finds managed binary or falls back to "thronglets"
+      assert.ok(typeof result === "string" && result.length > 0);
+    } finally {
+      if (saved !== undefined) process.env.THRONGLETS_BIN = saved;
+    }
+  });
+});

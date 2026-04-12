@@ -166,8 +166,8 @@ describe("PsycheEngine", () => {
     const firstFlowDrop = 60 - afterFirst.flow;
     const secondOrderDrop = afterFirst.order - afterSecond.order;
     const secondFlowDrop = afterFirst.flow - afterSecond.flow;
-    assert.ok(secondOrderDrop < firstOrderDrop * 0.5, `expected incremental order drop to stay much smaller than first turn (${firstOrderDrop} vs ${secondOrderDrop})`);
-    assert.ok(secondFlowDrop < firstFlowDrop * 0.5, `expected incremental flow drop to stay much smaller than first turn (${firstFlowDrop} vs ${secondFlowDrop})`);
+    assert.ok(Math.abs(secondOrderDrop) < Math.abs(firstOrderDrop) * 0.5, `expected incremental order movement to stay much smaller than first turn (${firstOrderDrop} vs ${secondOrderDrop})`);
+    assert.ok(Math.abs(secondFlowDrop) < Math.abs(firstFlowDrop) * 0.5, `expected incremental flow movement to stay much smaller than first turn (${firstFlowDrop} vs ${secondFlowDrop})`);
   });
 
   it("does not instantly reset to baseline after praise in a stressed state", async () => {
