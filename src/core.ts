@@ -47,7 +47,7 @@ import { applyRelationalTurn, applySessionBridge, applyWritebackSignals, createW
 import type { DerivedReplyEnvelope, ReplyEnvelope } from "./reply-envelope.js";
 import { deriveReplyEnvelope } from "./reply-envelope.js";
 import { buildExternalContinuityEnvelope } from "./external-continuity.js";
-import { deriveThrongletsExports } from "./thronglets-export.js";
+import { deriveThrongletsExports, markThrongletsExportsEmitted } from "./thronglets-export.js";
 import { buildTurnObservability } from "./observability.js";
 import { DEFAULT_RELATIONSHIP_USER_ID, resolveRelationshipUserId } from "./relationship-key.js";
 import { normalizeAmbientPriors } from "./ambient-priors.js";
@@ -152,6 +152,7 @@ export interface ProcessInputResult {
 
 export interface ProcessInputOptions {
   userId?: string;
+  sessionId?: string;
   ambientPriors?: AmbientPriorView[];
   currentGoal?: CurrentGoal;
   activePolicy?: ActivePolicyRule[];
@@ -181,6 +182,7 @@ export interface LoopOutcome {
 
 export interface ProcessOutputOptions {
   userId?: string;
+  sessionId?: string;
   signals?: readonly string[];
   signalConfidence?: number;
   /** Substrate-reported outcome — closes the φ loop */
@@ -207,6 +209,8 @@ interface PendingPrediction {
   preInteractionState: PsycheState;
   appliedStimulus: StimulusType | null;
   contextHash: string;
+  userId: string;
+  sessionId?: string;
 }
 
 function formatWritebackFeedbackNote(
@@ -333,11 +337,14 @@ export class PsycheEngine {
     personalityIntensity: number;
     llmClassifierThreshold: number;
   };
+  private readonly modeOverride?: PsycheMode;
   private readonly classifier: ClassifierProvider;
   private readonly llmClassifier?: (prompt: string) => Promise<string>;
   private readonly protocolCache = new Map<Locale, string>();
-  /** Pending prediction from last processInput for auto-learning */
-  private pendingPrediction: PendingPrediction | null = null;
+  /** Pending predictions keyed by relationship/session scope for auto-learning */
+  private readonly pendingPredictions = new Map<string, PendingPrediction>();
+  /** Most recent response contract keyed by relationship/session scope for implicit loop closure */
+  private readonly pendingResponseContracts = new Map<string, ResponseContract>();
   /** Built-in diagnostics collector — auto-records every processInput/processOutput */
   private readonly diagnosticCollector: DiagnosticCollector | null;
   /** Last generated diagnostic report (from endSession or explicit call) */
@@ -361,6 +368,7 @@ export class PsycheEngine {
     this.traits = config.traits;
     this.classifier = config.classifier ?? new BuiltInClassifier();
     this.llmClassifier = config.llmClassifier;
+    this.modeOverride = config.mode;
     this.cfg = {
       mbti: config.mbti ?? "INFJ",
       name: config.name ?? "agent",
@@ -449,6 +457,13 @@ export class PsycheEngine {
       if (!loaded.lastWritebackFeedback) {
         loaded.lastWritebackFeedback = [];
       }
+      if (this.modeOverride) {
+        loaded.meta = { ...loaded.meta, mode: this.modeOverride };
+      } else if (loaded.meta.mode) {
+        this.cfg.mode = loaded.meta.mode;
+      } else {
+        loaded.meta = { ...loaded.meta, mode: this.cfg.mode };
+      }
       // Update sigilId if config provides one (Sigil may be assigned after first run)
       if (this.cfg.sigilId && loaded.meta.sigilId !== this.cfg.sigilId) {
         loaded.meta = { ...loaded.meta, sigilId: this.cfg.sigilId };
@@ -473,19 +488,24 @@ export class PsycheEngine {
     let sessionBridge: SessionBridgeState | null = null;
     let writebackFeedback: WritebackCalibrationFeedback[] = [];
     let throngletsExports: ThrongletsExport[] = [];
+    const now = new Date();
+    const runtimeMode = this.resolveMode(state);
+    const pendingKey = this.resolvePendingPredictionKey(opts);
 
     // ── Auto-learning: evaluate previous turn's outcome ──────
-    if (this.pendingPrediction && text.length > 0) {
+    const pendingPrediction = this.pendingPredictions.get(pendingKey);
+    if (pendingPrediction && text.length > 0) {
       const nextClassifications = classifyLegacyStimulus(text);
       const nextStimulus = (nextClassifications[0]?.confidence ?? 0) >= 0.5
         ? nextClassifications[0].type
         : null;
 
       const outcome = evaluateOutcome(
-        this.pendingPrediction.preInteractionState,
+        pendingPrediction.preInteractionState,
         state,
         nextStimulus,
-        this.pendingPrediction.appliedStimulus,
+        pendingPrediction.appliedStimulus,
+        pendingPrediction.userId,
       );
 
       // Record prediction accuracy
@@ -493,20 +513,20 @@ export class PsycheEngine {
         ...state,
         learning: recordPrediction(
           state.learning,
-          this.pendingPrediction.predictedState,
+          pendingPrediction.predictedState,
           state.current,
-          this.pendingPrediction.appliedStimulus,
+          pendingPrediction.appliedStimulus,
         ),
       };
 
       // Update learned vectors based on outcome
-      if (this.pendingPrediction.appliedStimulus) {
+      if (pendingPrediction.appliedStimulus) {
         state = {
           ...state,
           learning: updateLearnedVector(
             state.learning,
-            this.pendingPrediction.appliedStimulus,
-            this.pendingPrediction.contextHash,
+            pendingPrediction.appliedStimulus,
+            pendingPrediction.contextHash,
             outcome.adaptiveScore,
             state.current,
             state.baseline,
@@ -514,14 +534,13 @@ export class PsycheEngine {
         };
       }
 
-      this.pendingPrediction = null;
+      this.pendingPredictions.delete(pendingKey);
     }
 
     // ── Snapshot pre-interaction state for next turn's outcome evaluation
     const preInteractionState = { ...state };
 
     // Time decay toward baseline (chemistry + drives)
-    const now = new Date();
     const minutesElapsed = (now.getTime() - new Date(state.updatedAt).getTime()) / 60000;
     if (minutesElapsed >= 1) {
       // Compute effective baseline from current 4D position (drives are derived, not stored)
@@ -547,15 +566,26 @@ export class PsycheEngine {
     }
     // Apply homeostatic pressure (fatigue from extended sessions)
     const sessionMinutes = (now.getTime() - new Date(state.sessionStartedAt!).getTime()) / 60000;
+    const previousSessionMinutes = Math.max(0, sessionMinutes - Math.max(minutesElapsed, 0));
     const pressure = computeHomeostaticPressure(sessionMinutes);
-    if (pressure.orderDepletion > 0 || pressure.flowDepletion > 0 || pressure.boundaryStiffening > 0) {
+    const previousPressure = computeHomeostaticPressure(previousSessionMinutes);
+    const incrementalPressure = {
+      orderDepletion: Math.max(0, pressure.orderDepletion - previousPressure.orderDepletion),
+      flowDepletion: Math.max(0, pressure.flowDepletion - previousPressure.flowDepletion),
+      boundaryStiffening: Math.max(0, pressure.boundaryStiffening - previousPressure.boundaryStiffening),
+    };
+    if (
+      incrementalPressure.orderDepletion > 0
+      || incrementalPressure.flowDepletion > 0
+      || incrementalPressure.boundaryStiffening > 0
+    ) {
       state = {
         ...state,
         current: {
           ...state.current,
-          order: clamp(state.current.order - pressure.orderDepletion * 0.1),
-          flow: clamp(state.current.flow - pressure.flowDepletion * 0.1),
-          boundary: clamp(state.current.boundary + pressure.boundaryStiffening * 0.1),
+          order: clamp(state.current.order - incrementalPressure.orderDepletion * 0.1),
+          flow: clamp(state.current.flow - incrementalPressure.flowDepletion * 0.1),
+          boundary: clamp(state.current.boundary + incrementalPressure.boundaryStiffening * 0.1),
         },
       };
     }
@@ -610,7 +640,7 @@ export class PsycheEngine {
         baseline: state.baseline,
         sensitivity: state.sensitivity ?? 1.0,
         personalityIntensity: this.cfg.personalityIntensity,
-        mode: this.cfg.mode,
+        mode: runtimeMode,
         maxDimensionDelta: this.cfg.maxDimensionDelta,
         drives,
         previousAppraisal: state.subjectResidue?.axes,
@@ -698,7 +728,7 @@ export class PsycheEngine {
       state,
       text,
       {
-        mode: this.cfg.mode,
+        mode: runtimeMode,
         now: now.toISOString(),
         stimulus: appliedStimulus,
         userId: opts?.userId,
@@ -737,11 +767,6 @@ export class PsycheEngine {
     state = throngletsExportResult.state;
     throngletsExports = throngletsExportResult.exports;
 
-    // Constitutive bridge: emit to Thronglets directly (substrate-independent)
-    if (throngletsExports.length > 0) {
-      bridgeThrongletsExports(throngletsExports, this.bridgeOpts).catch(() => {});
-    }
-
     // ── Locale (used by multiple subsystems below) ──────────
     const locale = state.meta.locale ?? this.cfg.locale;
 
@@ -769,7 +794,7 @@ export class PsycheEngine {
 
     // ── Generate prediction for next turn's auto-learning ────
     if (appliedStimulus) {
-      const ctxHash = computeContextHash(state, opts?.userId);
+      const ctxHash = computeContextHash(state, opts?.userId, opts?.sessionId);
       const effectiveSensitivity = computeEffectiveSensitivity(
         (state.sensitivity ?? 1.0), state.current, state.baseline, appliedStimulus, state.traitDrift,
       );
@@ -781,14 +806,16 @@ export class PsycheEngine {
         effectiveSensitivity,
         this.cfg.maxDimensionDelta,
       );
-      this.pendingPrediction = {
+      this.pendingPredictions.set(pendingKey, {
         predictedState: predicted,
         preInteractionState,
         appliedStimulus,
         contextHash: ctxHash,
-      };
+        userId: resolveRelationshipUserId(opts?.userId),
+        sessionId: opts?.sessionId?.trim() || undefined,
+      });
     } else {
-      this.pendingPrediction = null;
+      this.pendingPredictions.delete(pendingKey);
     }
 
     const writebackNote = formatWritebackFeedbackNote(writebackFeedback, locale);
@@ -821,6 +848,20 @@ export class PsycheEngine {
     // Persist
     this.state = state;
     await this.storage.save(state);
+
+    // Constitutive bridge: emit to Thronglets directly (substrate-independent)
+    if (throngletsExports.length > 0) {
+      bridgeThrongletsExports(throngletsExports, {
+        ...this.bridgeOpts,
+        sessionId: opts?.sessionId ?? this.bridgeOpts.sessionId,
+      }).then(async (ingested) => {
+        if (ingested <= 0) return;
+        const latestState = this.ensureInitialized();
+        const markedState = markThrongletsExportsEmitted(latestState, throngletsExports, new Date().toISOString());
+        this.state = markedState;
+        await this.storage.save(markedState);
+      }).catch(() => {});
+    }
 
     // Auto-diagnostics: record this input
     if (this.diagnosticCollector) {
@@ -875,6 +916,7 @@ export class PsycheEngine {
 
     // v10: compact mode is always on. Legacy buildDynamicContext removed from engine path.
     const externalContinuity = buildExternalContinuityEnvelope(throngletsExports);
+    this.pendingResponseContracts.set(pendingKey, replyEnvelope.responseContract);
     return {
       systemContext: "",
       dynamicContext: buildCompactContext(state, opts?.userId, promptRenderInputs),
@@ -911,6 +953,7 @@ export class PsycheEngine {
     let state = this.ensureInitialized();
     let stateChanged = false;
     const validationIssues: ProcessOutputValidationIssue[] = [];
+    const pendingKey = this.resolvePendingPredictionKey(opts);
 
     // Emotional contagion from empathy log
     if (state.empathyLog?.userState && this.cfg.emotionalContagionRate > 0) {
@@ -976,8 +1019,9 @@ export class PsycheEngine {
     // Loop outcome feedback (substrate-independent φ closure).
     // The substrate reports whether the output aligned with the Loop's intention.
     // Core processes this as pure 4D chemistry — no text parsing, no medium assumptions.
-    if (opts?.outcome) {
-      const { alignment, effort } = opts.outcome;
+    const outcome = opts?.outcome ?? this.inferLoopOutcome(text, pendingKey);
+    if (outcome) {
+      const { alignment, effort } = outcome;
       if (alignment === "diverged") {
         // Self/non-self conflict: boundary sharpens, order drops
         state = {
@@ -1153,19 +1197,20 @@ export class PsycheEngine {
    */
   async processOutcome(
     nextUserStimulus: StimulusType | null,
-    _opts?: { userId?: string },
+    opts?: { userId?: string; sessionId?: string },
   ): Promise<ProcessOutcomeResult | null> {
-    if (!this.pendingPrediction) return null;
-
     let state = this.ensureInitialized();
-    const pending = this.pendingPrediction;
-    this.pendingPrediction = null;
+    const pendingKey = this.resolvePendingPredictionKey(opts);
+    const pending = this.pendingPredictions.get(pendingKey);
+    if (!pending) return null;
+    this.pendingPredictions.delete(pendingKey);
 
     const outcome = evaluateOutcome(
       pending.preInteractionState,
       state,
       nextUserStimulus,
       pending.appliedStimulus,
+      pending.userId,
     );
 
     // Record prediction
@@ -1272,6 +1317,23 @@ export class PsycheEngine {
     return this.lastReport;
   }
 
+  getMode(): PsycheMode {
+    return this.resolveMode(this.ensureInitialized());
+  }
+
+  async setMode(mode: PsycheMode): Promise<void> {
+    const state = this.ensureInitialized();
+    this.cfg.mode = mode;
+    this.state = {
+      ...state,
+      meta: {
+        ...state.meta,
+        mode,
+      },
+    };
+    await this.storage.save(this.state);
+  }
+
   /**
    * Get current session diagnostic metrics (live, before endSession).
    */
@@ -1309,6 +1371,30 @@ export class PsycheEngine {
       throw new Error("PsycheEngine not initialized. Call initialize() first.");
     }
     return this.state;
+  }
+
+  private resolveMode(state: PsycheState): PsycheMode {
+    const mode = state.meta.mode;
+    if (mode) {
+      this.cfg.mode = mode;
+      return mode;
+    }
+    return this.cfg.mode;
+  }
+
+  private resolvePendingPredictionKey(opts?: { userId?: string; sessionId?: string }): string {
+    const userKey = resolveRelationshipUserId(opts?.userId);
+    const sessionId = opts?.sessionId?.trim();
+    return sessionId ? `${userKey}::${sessionId}` : userKey;
+  }
+
+  private inferLoopOutcome(text: string, pendingKey: string): LoopOutcome | undefined {
+    const contract = this.pendingResponseContracts.get(pendingKey);
+    this.pendingResponseContracts.delete(pendingKey);
+    if (!contract) return undefined;
+
+    const maxLen = (contract.maxChars ?? 500) * 2;
+    return { alignment: text.length > maxLen ? "diverged" : "aligned" };
   }
 
   private createDefaultState(): PsycheState {

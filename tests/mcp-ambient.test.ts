@@ -1,7 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { AmbientPriorView } from "../src/types.js";
-import { resolveRuntimeAmbientPriors } from "../src/adapters/mcp.js";
+import {
+  cacheMcpTurnResult,
+  getCachedMcpTurnResult,
+  resetMcpTurnCacheForTests,
+  resolveRuntimeAmbientPriors,
+} from "../src/adapters/mcp.js";
 
 describe("resolveRuntimeAmbientPriors", () => {
   it("keeps explicit ambient priors ahead of auto-fetch", async () => {
@@ -49,5 +54,16 @@ describe("resolveRuntimeAmbientPriors", () => {
 
     assert.equal(seenGoal, "repair");
     assert.equal(resolved?.[0].goal, "repair");
+  });
+});
+
+describe("MCP turn cache", () => {
+  it("keeps overlapping sessions isolated", () => {
+    resetMcpTurnCacheForTests();
+    cacheMcpTurnResult({ systemContext: "", dynamicContext: "one", appraisal: null, legacyStimulus: null, stimulus: null, policyContext: "" } as any, "session-a");
+    cacheMcpTurnResult({ systemContext: "", dynamicContext: "two", appraisal: null, legacyStimulus: null, stimulus: null, policyContext: "" } as any, "session-b");
+
+    assert.equal(getCachedMcpTurnResult("session-a")?.dynamicContext, "one");
+    assert.equal(getCachedMcpTurnResult("session-b")?.dynamicContext, "two");
   });
 });

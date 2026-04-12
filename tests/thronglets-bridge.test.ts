@@ -1,7 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { bridgeThrongletsExports, resolveThrongletsBinary } from "../src/thronglets-bridge.js";
+import { deriveThrongletsExports, markThrongletsExportsEmitted } from "../src/thronglets-export.js";
 import type { ThrongletsExport } from "../src/types.js";
+import {
+  DEFAULT_DRIVES,
+  DEFAULT_DYADIC_FIELD,
+  DEFAULT_LEARNING_STATE,
+  DEFAULT_METACOGNITIVE_STATE,
+  DEFAULT_PERSONHOOD_STATE,
+  DEFAULT_RELATIONSHIP,
+} from "../src/types.js";
 
 // ── Mock runner ──────────────────────────────────────────────
 
@@ -28,6 +37,39 @@ const SAMPLE_EXPORT: ThrongletsExport = {
   resonance: 50,
   summary: "neutral",
 };
+
+function makeExportState(): any {
+  const now = new Date().toISOString();
+  return {
+    version: 10,
+    sensitivity: 1,
+    baseline: { order: 50, flow: 50, boundary: 50, resonance: 50 },
+    current: { order: 50, flow: 50, boundary: 50, resonance: 50 },
+    drives: { ...DEFAULT_DRIVES },
+    updatedAt: now,
+    relationships: {
+      _default: { ...DEFAULT_RELATIONSHIP, trust: 82, intimacy: 74, phase: "close" },
+    },
+    empathyLog: null,
+    selfModel: { values: [], preferences: [], boundaries: [], currentInterests: [] },
+    stateHistory: [],
+    agreementStreak: 0,
+    lastDisagreement: null,
+    learning: { ...DEFAULT_LEARNING_STATE },
+    metacognition: { ...DEFAULT_METACOGNITIVE_STATE },
+    personhood: { ...DEFAULT_PERSONHOOD_STATE },
+    dyadicFields: {
+      _default: {
+        ...DEFAULT_DYADIC_FIELD,
+        openLoops: [{ type: "existence-test", intensity: 0.7, ageTurns: 1 }],
+        unfinishedTension: 0.7,
+        silentCarry: 0.6,
+        updatedAt: now,
+      },
+    },
+    meta: { agentName: "Test", createdAt: now, totalInteractions: 1, locale: "en", mode: "natural" },
+  };
+}
 
 // ── bridgeThrongletsExports ─────────────────────────────────
 
@@ -96,6 +138,41 @@ describe("bridgeThrongletsExports", () => {
       runner, binaryPath: "t",
     });
     assert.equal(result, 2);
+  });
+
+  it("does not suppress re-emission until exports are marked as emitted", () => {
+    const state = makeExportState();
+    const relationContext = {
+      key: "_default",
+      relationship: state.relationships._default,
+      field: state.dyadicFields._default,
+      pendingSignals: [],
+    };
+
+    const first = deriveThrongletsExports(state, {
+      relationContext,
+      sessionBridge: null,
+      writebackFeedback: [],
+      now: new Date().toISOString(),
+    });
+    assert.ok(first.exports.length > 0, "expected initial exports");
+
+    const second = deriveThrongletsExports(first.state, {
+      relationContext,
+      sessionBridge: null,
+      writebackFeedback: [],
+      now: new Date().toISOString(),
+    });
+    assert.equal(second.exports.length, first.exports.length, "failed bridge should not burn dedupe keys");
+
+    const marked = markThrongletsExportsEmitted(first.state, first.exports, new Date().toISOString());
+    const third = deriveThrongletsExports(marked, {
+      relationContext,
+      sessionBridge: null,
+      writebackFeedback: [],
+      now: new Date().toISOString(),
+    });
+    assert.equal(third.exports.length, 0, "successful bridge should suppress immediate duplicate re-emission");
   });
 });
 

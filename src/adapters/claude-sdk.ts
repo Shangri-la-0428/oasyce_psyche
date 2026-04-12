@@ -166,7 +166,10 @@ function stripPsycheTags(text: string): string {
 export interface ThrongletsSignalPayload {
   kind: "psyche_state";
   agent_id: string;
+  context: string;
   message: string;
+  model: "psyche";
+  session_id: string;
 }
 
 export interface PsycheClaudeSdkOptions {
@@ -344,6 +347,7 @@ export class PsycheClaudeSDK {
               );
               const result = await safeProcessInput(self.engine, userMessage, {
                 userId: self.opts.userId,
+                sessionId: runtimeContext.sessionId ?? self.lastRuntimeContext.sessionId,
                 ambientPriors,
                 currentGoal,
                 activePolicy,
@@ -381,6 +385,7 @@ export class PsycheClaudeSDK {
   ): Promise<string> {
     const result = await safeProcessOutput(this.engine, text, {
       userId: this.opts.userId,
+      sessionId: this.resolveSessionId(),
       signals: opts?.signals,
       signalConfidence: opts?.signalConfidence,
     }, "claude-sdk.processOutput");
@@ -420,10 +425,14 @@ export class PsycheClaudeSDK {
     if (!this.opts.thronglets) return null;
     const state = this.engine.getState();
     const s = state.current;
+    const sessionId = this.resolveSessionId();
     return {
       kind: "psyche_state",
       agent_id: this.resolveAgentId(),
+      context: `psyche:session:${sessionId}:user:${this.opts.userId}`,
       message: `order:${s.order} flow:${s.flow} boundary:${s.boundary} resonance:${s.resonance}`,
+      model: "psyche",
+      session_id: sessionId,
     };
   }
 

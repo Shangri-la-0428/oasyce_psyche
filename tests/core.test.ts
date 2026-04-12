@@ -72,6 +72,17 @@ describe("PsycheEngine", () => {
     assert.equal(state.current.flow, 60);
   });
 
+  it("syncs runtime mode through setMode", async () => {
+    const s2 = new MemoryStorageAdapter();
+    const e2 = new PsycheEngine({ mbti: "ENFP", name: "Bot", locale: "en" }, s2);
+    await e2.initialize();
+    await e2.setMode("work");
+    const result = await e2.processInput("write a function");
+    assert.equal(e2.getMode(), "work");
+    assert.equal(e2.getState().meta.mode, "work");
+    assert.ok(result.dynamicContext.includes("work mode"), `Expected work mode context, got: ${result.dynamicContext}`);
+  });
+
   it("throws if not initialized", () => {
     const s = new MemoryStorageAdapter();
     const e = new PsycheEngine({}, s);
@@ -114,6 +125,49 @@ describe("PsycheEngine", () => {
     const after = engine.getState().current;
     // Praise increases DA
     assert.ok(after.flow >= before.flow, `DA should increase: ${before.flow} → ${after.flow}`);
+  });
+
+  it("keeps pending predictions isolated by session", async () => {
+    const s2 = new MemoryStorageAdapter();
+    const e2 = new PsycheEngine({ mbti: "ENFP", name: "Bot", locale: "en" }, s2);
+    await e2.initialize();
+
+    await e2.processInput("你太棒了！", { userId: "alice", sessionId: "session-a" });
+    assert.equal(e2.getState().learning.predictionHistory.length, 0);
+
+    await e2.processInput("hello from the overlapping tab", { userId: "alice", sessionId: "session-b" });
+    assert.equal(e2.getState().learning.predictionHistory.length, 0, "other session should not consume alice/session-a pending prediction");
+
+    await e2.processInput("Thanks for staying with me.", { userId: "alice", sessionId: "session-a" });
+    assert.equal(e2.getState().learning.predictionHistory.length, 1, "original session should resolve its own pending prediction");
+  });
+
+  it("applies homeostatic pressure incrementally across turns", async () => {
+    const startedAt = new Date(Date.now() - 120 * 60_000).toISOString();
+    const updatedAt = new Date(Date.now() - 120 * 60_000).toISOString();
+    const s2 = new MemoryStorageAdapter();
+    await s2.save(makeExistingState({
+      sessionStartedAt: startedAt,
+      updatedAt,
+      current: { flow: 60, order: 60, boundary: 40, resonance: 50 },
+      baseline: { flow: 60, order: 60, boundary: 40, resonance: 50 },
+    }));
+    const e2 = new PsycheEngine({ mbti: "ENFP", name: "Bot", locale: "en" }, s2);
+    await e2.initialize();
+
+    await e2.processInput("");
+    const afterFirst = { ...e2.getState().current };
+
+    e2.getState().updatedAt = new Date(Date.now() - 10 * 60_000).toISOString();
+    await e2.processInput("");
+    const afterSecond = e2.getState().current;
+
+    const firstOrderDrop = 60 - afterFirst.order;
+    const firstFlowDrop = 60 - afterFirst.flow;
+    const secondOrderDrop = afterFirst.order - afterSecond.order;
+    const secondFlowDrop = afterFirst.flow - afterSecond.flow;
+    assert.ok(secondOrderDrop < firstOrderDrop * 0.5, `expected incremental order drop to stay much smaller than first turn (${firstOrderDrop} vs ${secondOrderDrop})`);
+    assert.ok(secondFlowDrop < firstFlowDrop * 0.5, `expected incremental flow drop to stay much smaller than first turn (${firstFlowDrop} vs ${secondFlowDrop})`);
   });
 
   it("does not instantly reset to baseline after praise in a stressed state", async () => {
@@ -602,6 +656,30 @@ resonance: 75 (happy)
     const after = engine.getState().current;
     // aligned gives +0.5 flow, effort 0.8 drains 0.8*3=2.4 → net negative
     assert.ok(after.flow < before.flow, `flow should drop from effort: ${before.flow} → ${after.flow}`);
+  });
+
+  it("processOutput infers aligned outcome from the prior response contract when none is supplied", async () => {
+    const input = await engine.processInput("请用一句话回答：今天怎么样？", { sessionId: "phi-auto-aligned" });
+    assert.ok(input.responseContract, "expected response contract from processInput");
+    const before = { ...engine.getState().current };
+
+    await engine.processOutput("还不错。", { sessionId: "phi-auto-aligned" });
+    const after = engine.getState().current;
+
+    assert.ok(after.order > before.order, `order should rise from inferred aligned outcome: ${before.order} → ${after.order}`);
+    assert.ok(after.flow > before.flow, `flow should rise from inferred aligned outcome: ${before.flow} → ${after.flow}`);
+  });
+
+  it("processOutput infers diverged outcome when output blows past the prior contract", async () => {
+    const input = await engine.processInput("请简短答复。", { sessionId: "phi-auto-diverged" });
+    const maxChars = input.responseContract?.maxChars ?? 80;
+    const before = { ...engine.getState().current };
+
+    await engine.processOutput("x".repeat(maxChars * 2 + 20), { sessionId: "phi-auto-diverged" });
+    const after = engine.getState().current;
+
+    assert.ok(after.boundary > before.boundary, `boundary should rise from inferred diverged outcome: ${before.boundary} → ${after.boundary}`);
+    assert.ok(after.order < before.order, `order should drop from inferred diverged outcome: ${before.order} → ${after.order}`);
   });
 
   it("processOutput accumulates loopOutcomeHistory", async () => {

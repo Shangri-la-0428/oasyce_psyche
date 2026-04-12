@@ -1,0 +1,5 @@
+- [ ] src/adapters/proxy.ts:147 — Proxy 仍通过 `deriveBehavioralBias()` 做较粗粒度的 system prompt 注入，而不是和其他 adapter 一样围绕完整 reply-envelope 调制，导致同一 Psyche 状态下的输出调制不完全等价。
+- [ ] src/adapters/openclaw.ts:252 — OpenClaw 仍以 `appendSystemContext` 方式注入动态上下文，和 proxy / langchain / vercel-ai 的调制面不一致，adapter 间行为还不完全收敛。
+- [ ] src/thronglets-export.ts:287 — [cross-project] viability 导出仍是 Psyche 自定义 `kind: "viability"` 会话信号，没有直接对齐 chain `MsgPulse` 的 `dimension_pulses` 载荷形状。
+- [ ] src/thronglets-runtime.ts:13 — [cross-project] `self-state` / `viability` 仍会序列化成 taxonomy `"state"`，超出了当前冻结的 Thronglets `coordination / continuity / calibration` 边界。
+- [ ] tests/thronglets-bridge.test.ts:1 — 当前 bridge 覆盖了降级与去重，但还没有直接断言 viability export 的 schema、pulse 维度命名和 chain 对齐格式。

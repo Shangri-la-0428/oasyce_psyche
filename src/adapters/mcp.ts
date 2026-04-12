@@ -106,10 +106,34 @@ function parseCLIArgs(): Partial<PsycheEngineConfig> {
 }
 
 // ── Turn cache for on-demand resource access ──────────────
-// Single-client assumption: MCP stdio transport serves one host at a time.
-// If this ever becomes multi-client, turn cache must be keyed per session.
+// Hosts may overlap sessions on one MCP transport, so cache per session key.
 
-let lastTurnResult: ProcessInputResult | null = null;
+const DEFAULT_TURN_CACHE_SESSION = "__default__";
+const turnResultsBySession = new Map<string, ProcessInputResult>();
+let lastTurnCacheSession = DEFAULT_TURN_CACHE_SESSION;
+
+export function resolveMcpTurnCacheSession(sessionId?: string): string {
+  const normalized = sessionId?.trim();
+  return normalized ? normalized : DEFAULT_TURN_CACHE_SESSION;
+}
+
+export function cacheMcpTurnResult(result: ProcessInputResult, sessionId?: string): void {
+  const key = resolveMcpTurnCacheSession(sessionId);
+  turnResultsBySession.set(key, result);
+  lastTurnCacheSession = key;
+}
+
+export function getCachedMcpTurnResult(sessionId?: string): ProcessInputResult | null {
+  if (sessionId) {
+    return turnResultsBySession.get(resolveMcpTurnCacheSession(sessionId)) ?? null;
+  }
+  return turnResultsBySession.get(lastTurnCacheSession) ?? null;
+}
+
+export function resetMcpTurnCacheForTests(): void {
+  turnResultsBySession.clear();
+  lastTurnCacheSession = DEFAULT_TURN_CACHE_SESSION;
+}
 
 // ── Engine singleton ───────────────────────────────────────
 
@@ -254,7 +278,7 @@ server.resource(
   },
 );
 
-// Helper: register a turn-scoped resource backed by lastTurnResult.
+// Helper: register a turn-scoped resource backed by the per-session turn cache.
 // Returns empty JSON when no turn has been processed yet (fail-open).
 function turnResource(
   name: string,
@@ -266,7 +290,10 @@ function turnResource(
     contents: [{
       uri: u.href,
       mimeType: "application/json",
-      text: lastTurnResult ? JSON.stringify(pick(lastTurnResult)) : "{}",
+      text: (() => {
+        const cached = getCachedMcpTurnResult(u.searchParams.get("session") ?? undefined);
+        return cached ? JSON.stringify(pick(cached)) : "{}";
+      })(),
     }],
   }));
 }
@@ -313,6 +340,7 @@ server.tool(
   {
     text: z.string().describe("The user's message text"),
     userId: z.string().optional().describe("Optional user ID for multi-user relationship tracking"),
+    sessionId: z.string().optional().describe("Optional session ID for overlapping host sessions and turn-scoped resource lookup"),
     ambientPriors: z.array(z.object({
       summary: z.string(),
       confidence: z.number().min(0).max(1),
@@ -331,9 +359,10 @@ server.tool(
     })).optional().describe("Optional explicit current-turn method policy view. Runtime-only; not persisted as self-state."),
     currentTurnCorrection: z.string().optional().describe("Optional explicit current-turn correction. Compiles into a task-scoped hard policy for this turn only."),
   },
-  async ({ text, userId, ambientPriors, currentGoal, activePolicy, currentTurnCorrection }: {
+  async ({ text, userId, sessionId, ambientPriors, currentGoal, activePolicy, currentTurnCorrection }: {
     text: string;
     userId?: string;
+    sessionId?: string;
     ambientPriors?: AmbientPriorView[];
     currentGoal?: CurrentGoal;
     activePolicy?: ActivePolicyRule[];
@@ -350,6 +379,7 @@ server.tool(
     );
     const result: ProcessInputResult = await safeProcessInput(eng, text, {
       userId,
+      sessionId,
       ambientPriors: resolvedAmbientPriors,
       currentGoal,
       activePolicy: resolvedActivePolicy,
@@ -357,7 +387,7 @@ server.tool(
     }, "mcp.processInput");
 
     // Cache full result for turn-scoped resources
-    lastTurnResult = result;
+    cacheMcpTurnResult(result, sessionId);
 
     // Build slim response: only what the LLM host actually needs.
     // Full structured state available via psyche://turn/envelope resource.
@@ -393,24 +423,32 @@ server.tool(
   {
     text: z.string().describe("The LLM's response text"),
     userId: z.string().optional().describe("Optional user ID"),
+    sessionId: z.string().optional().describe("Optional session ID to match the corresponding process_input turn"),
     signals: z.array(z.string()).optional().describe("Optional sparse writeback signals from the host"),
     signalConfidence: z.number().min(0).max(1).optional().describe("Optional confidence for the supplied signals"),
   },
-  async ({ text, userId, signals, signalConfidence }: { text: string; userId?: string; signals?: string[]; signalConfidence?: number }) => {
+  async ({ text, userId, sessionId, signals, signalConfidence }: {
+    text: string;
+    userId?: string;
+    sessionId?: string;
+    signals?: string[];
+    signalConfidence?: number;
+  }) => {
     const eng = await getEngine();
+    const turnResult = getCachedMcpTurnResult(sessionId);
 
     // LLM-specific alignment inference (adapter layer — the ONLY text-specific code).
     // Compare output length against last contract's maxChars to detect divergence.
     let outcome: LoopOutcome | undefined;
-    if (lastTurnResult?.responseContract) {
-      const maxLen = (lastTurnResult.responseContract.maxChars ?? 500) * 2;
+    if (turnResult?.responseContract) {
+      const maxLen = (turnResult.responseContract.maxChars ?? 500) * 2;
       outcome = { alignment: text.length > maxLen ? "diverged" : "aligned" };
     }
 
     const result = await safeProcessOutput(
       eng,
       text,
-      { userId, signals: signals as never, signalConfidence, outcome },
+      { userId, sessionId, signals: signals as never, signalConfidence, outcome },
       "mcp.processOutput",
     );
     return {
@@ -447,7 +485,7 @@ server.tool(
           overlay,
           drives: state.drives,
           mbti: state.mbti,
-          mode: state.meta?.mode,
+          mode: eng.getMode(),
           totalInteractions: state.meta?.totalInteractions,
           traitDrift: state.traitDrift,
           energyBudgets: state.energyBudgets,
@@ -467,12 +505,7 @@ server.tool(
   },
   async ({ mode }: { mode: string }) => {
     const eng = await getEngine();
-    // PsycheEngine stores mode in config, we need to reinitialize
-    // For now, update via state manipulation
-    const state = eng.getState();
-    if (state.meta) {
-      state.meta.mode = mode as PsycheMode;
-    }
+    await eng.setMode(mode as PsycheMode);
     return {
       content: [{
         type: "text" as const,
