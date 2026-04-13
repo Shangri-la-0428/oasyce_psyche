@@ -53,6 +53,7 @@ import {
   type ThrongletsAmbientRuntimeOptions,
 } from "../ambient-runtime.js";
 import { safeProcessInput, safeProcessOutput } from "./fail-open.js";
+import { deriveThrongletsSpace } from "../thronglets-bridge.js";
 
 // ── Minimal Claude Agent SDK types (inlined to avoid peer dependency) ──
 
@@ -270,7 +271,7 @@ export class PsycheClaudeSDK {
       thronglets: this.opts.ambient
         ? {
             ...this.opts.ambient,
-            space: this.opts.ambient.space ?? "psyche",
+            space: this.opts.ambient.space ?? deriveThrongletsSpace(),
           }
         : undefined,
     });

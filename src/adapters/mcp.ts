@@ -52,6 +52,7 @@ import {
 import { getPackageVersion } from "../update.js";
 import { runDemo } from "../demo.js";
 import { safeProcessInput, safeProcessOutput } from "./fail-open.js";
+import { deriveThrongletsSpace } from "../thronglets-bridge.js";
 
 const PACKAGE_VERSION = await getPackageVersion();
 
@@ -80,7 +81,7 @@ const DEFAULT_MCP_AMBIENT_OPTIONS: McpAmbientRuntimeOptions = {
   thronglets: {
     binaryPath: process.env.THRONGLETS_BIN,
     dataDir: process.env.THRONGLETS_DATA_DIR,
-    space: process.env.THRONGLETS_SPACE ?? "psyche",
+    space: process.env.THRONGLETS_SPACE ?? deriveThrongletsSpace(),
   },
 };
 
@@ -156,7 +157,7 @@ async function getEngine(): Promise<PsycheEngine> {
     diagnostics: true,
     throngletsBridge: {
       dataDir: process.env.THRONGLETS_DATA_DIR,
-      space: process.env.THRONGLETS_SPACE ?? "psyche",
+      space: process.env.THRONGLETS_SPACE ?? deriveThrongletsSpace(),
     },
   };
 

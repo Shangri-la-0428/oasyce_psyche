@@ -16,6 +16,7 @@ import { FileStorageAdapter, MemoryStorageAdapter } from "../storage.js";
 import { detectMBTI, extractAgentName, loadState } from "../psyche-file.js";
 import type { Logger } from "../psyche-file.js";
 import { resolveAmbientPriorsForTurn } from "../ambient-runtime.js";
+import { deriveThrongletsSpace } from "../thronglets-bridge.js";
 import { buildResponseContractContext } from "../response-contract.js";
 import {
   resolveCanonicalResponseContract,
@@ -252,7 +253,7 @@ export function register(api: PluginApi) {
 
         const engine = await getEngine(workspaceDir);
         const ambientPriors = await resolveAmbientPriorsForTurn(inputText, {
-          thronglets: { space: "psyche" },
+          thronglets: { space: deriveThrongletsSpace() },
         });
         const result = await engine.processInput(
           inputText,

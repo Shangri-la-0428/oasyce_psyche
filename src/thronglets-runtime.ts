@@ -8,6 +8,7 @@ import type {
   ThrongletsTraceTaxonomy,
   WritebackCalibrationExport,
 } from "./types.js";
+import { deriveThrongletsSpace } from "./thronglets-bridge.js";
 
 const TAXONOMY_BY_EVENT: Record<ThrongletsExport["kind"], ThrongletsTraceTaxonomy> = {
   "relation-milestone": "coordination",
@@ -58,7 +59,7 @@ export function serializeThrongletsExportAsTrace(
     taxonomy: taxonomyForThrongletsExport(event),
     event: event.kind,
     summary: summarizeThrongletsExport(event),
-    space: opts?.space ?? "psyche",
+    space: opts?.space ?? deriveThrongletsSpace(),
     audit_ref: event.key,
   };
 
