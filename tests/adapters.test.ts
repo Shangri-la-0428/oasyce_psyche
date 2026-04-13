@@ -1346,6 +1346,9 @@ describe("PsycheClaudeSDK (with thronglets)", () => {
     assert.ok(signal);
     assert.equal(signal!.kind, "psyche_state");
     assert.equal(signal!.agent_id, "ENFP-TestBot");
+    assert.equal(signal!.model, "psyche");
+    assert.equal(signal!.session_id, "test-session");
+    assert.equal(signal!.context, "psyche:session:test-session:user:alice");
     assert.ok(signal!.message.includes("flow:"));
     assert.ok(signal!.message.includes("boundary:"));
     assert.ok(signal!.message.includes("resonance:"));
@@ -1427,6 +1430,8 @@ describe("PsycheClaudeSDK (with thronglets)", () => {
     const signal = p2.getThrongletsSignal();
     assert.ok(signal);
     assert.equal(signal!.agent_id, "runtime-delegate");
+    assert.equal(signal!.session_id, "runtime-session");
+    assert.equal(signal!.context, "psyche:session:runtime-session:user:_default");
 
     (p2 as any).lastThrongletsExports = [{
       kind: "continuity-anchor",
@@ -1483,6 +1488,8 @@ describe("PsycheClaudeSDK (with thronglets)", () => {
     const signal = p2.getThrongletsSignal();
     assert.ok(signal);
     assert.equal(signal!.agent_id, "runtime-delegate");
+    assert.equal(signal!.session_id, "runtime-session-2");
+    assert.equal(signal!.context, "psyche:session:runtime-session-2:user:_default");
 
     (p2 as any).lastThrongletsExports = [{
       kind: "continuity-anchor",

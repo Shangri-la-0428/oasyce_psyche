@@ -7,6 +7,7 @@ import {
 } from "../src/thronglets-runtime.js";
 import { buildExternalContinuityEnvelope } from "../src/external-continuity.js";
 import type { ThrongletsExport } from "../src/types.js";
+import { deriveThrongletsSpace } from "../src/thronglets-bridge.js";
 
 function collectObjectKeys(value: unknown, keys = new Set<string>()): Set<string> {
   if (Array.isArray(value)) {
@@ -99,7 +100,7 @@ describe("thronglets runtime adapter", () => {
         taxonomy: "continuity",
         event: "continuity-anchor",
         summary: "continuity stayed externally legible across guarded-resume",
-        space: "psyche",
+        space: deriveThrongletsSpace(),
         audit_ref: "anchor-42",
       },
     });
@@ -196,7 +197,7 @@ describe("thronglets runtime adapter", () => {
       sessionId: "psyche-4",
       model: "psyche",
       outcome: "succeeded",
-      space: "psyche",
+      space: deriveThrongletsSpace(),
     });
 
     assert.deepEqual(payload, {
@@ -210,7 +211,7 @@ describe("thronglets runtime adapter", () => {
         taxonomy: "coordination",
         event: "relation-milestone",
         summary: "relation milestone shifted to familiar (trust 64, intimacy 46)",
-        space: "psyche",
+        space: deriveThrongletsSpace(),
         audit_ref: "milestone:alice:familiar",
       },
     });

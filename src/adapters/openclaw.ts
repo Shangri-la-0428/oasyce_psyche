@@ -9,13 +9,19 @@
 //   agent_end            — log final state
 // ============================================================
 
-import type { PsycheMode } from "../types.js";
+import type { Locale, PsycheMode } from "../types.js";
 import { PsycheEngine } from "../core.js";
 import type { ProcessInputResult } from "../core.js";
 import { FileStorageAdapter, MemoryStorageAdapter } from "../storage.js";
 import { detectMBTI, extractAgentName, loadState } from "../psyche-file.js";
 import type { Logger } from "../psyche-file.js";
 import { resolveAmbientPriorsForTurn } from "../ambient-runtime.js";
+import { deriveThrongletsSpace } from "../thronglets-bridge.js";
+import { buildResponseContractContext } from "../response-contract.js";
+import {
+  resolveCanonicalResponseContract,
+  renderOpenClawBehavioralSurface,
+} from "./response-contract-surface.js";
 // Diagnostics are handled engine-level — no adapter imports needed
 
 // ── OpenClaw Plugin API Types (matching plugin-sdk) ──────────
@@ -247,7 +253,7 @@ export function register(api: PluginApi) {
 
         const engine = await getEngine(workspaceDir);
         const ambientPriors = await resolveAmbientPriorsForTurn(inputText, {
-          thronglets: { space: "psyche" },
+          thronglets: { space: deriveThrongletsSpace() },
         });
         const result = await engine.processInput(
           inputText,
@@ -256,6 +262,8 @@ export function register(api: PluginApi) {
             ambientPriors: ambientPriors ?? [],
           },
         );
+        const responseContract = resolveCanonicalResponseContract(result);
+        const locale = (engine.getState().meta.locale ?? "zh") as Locale;
         const controls = result.replyEnvelope?.generationControls ?? result.generationControls;
         const dominantAppraisal = getDominantAppraisalLabel(result);
 
@@ -274,6 +282,12 @@ export function register(api: PluginApi) {
         );
 
         const systemParts = [result.systemContext, result.dynamicContext].filter(Boolean);
+        if (responseContract) {
+          const responseSurface = buildResponseContractContext(responseContract, locale);
+          if (!result.dynamicContext.includes(responseSurface)) {
+            systemParts.push(renderOpenClawBehavioralSurface(responseContract, locale));
+          }
+        }
         return {
           appendSystemContext: systemParts.join("\n\n"),
         };

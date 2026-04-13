@@ -76,6 +76,15 @@ function updateExportState(
   };
 }
 
+export function markThrongletsExportsEmitted(
+  state: PsycheState,
+  exports: ThrongletsExport[],
+  now: string,
+): PsycheState {
+  if (exports.length === 0) return state;
+  return updateExportState(state, exports.map((event) => event.key), now);
+}
+
 function quantize(v: number, step: number = 10): number {
   return Math.round(v / step) * step;
 }
@@ -174,6 +183,8 @@ function sanitizeThrongletsExport(event: ThrongletsExport): ThrongletsExport {
       return sanitized;
     }
     case "viability": {
+      // Viability stays a sparse export, but its meaning is defined by the
+      // protocol-layer dimension registry. Keep the kind/payload stable here.
       const sanitized: ViabilityExport = {
         kind: "viability",
         subject: "session",
@@ -325,7 +336,5 @@ export function deriveThrongletsExports(
   const exports = deduped
     .filter((event) => !previousKeys.includes(event.key))
     .map((event) => sanitizeThrongletsExport(event));
-  const nextState = updateExportState(state, deduped.map((event) => event.key), now);
-
-  return { state: nextState, exports };
+  return { state, exports };
 }

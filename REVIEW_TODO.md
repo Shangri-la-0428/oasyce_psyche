@@ -1,0 +1,1 @@
+- [ ] /Users/wutongcheng/Desktop/Oasyce-Sigil/DIMENSION_REGISTRY_V1.md:29 — [cross-project] Psyche still exports `viability` as a sparse local continuity event; a direct Psyche -> chain `dimension_pulses` carrier is explicitly deferred in the spec.

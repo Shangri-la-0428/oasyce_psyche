@@ -7,6 +7,7 @@ import {
   type CurrentGoal,
 } from "./types.js";
 import { normalizeAmbientPriors } from "./ambient-priors.js";
+import { deriveThrongletsSpace } from "./thronglets-bridge.js";
 
 const DEFAULT_AMBIENT_LIMIT = 3;
 const DEFAULT_TIMEOUT_MS = 800;
@@ -117,7 +118,7 @@ export async function fetchAmbientPriorsFromThronglets(
 
   const binaryPath = opts.binaryPath ?? process.env.THRONGLETS_BIN ?? "thronglets";
   const dataDir = opts.dataDir ?? process.env.THRONGLETS_DATA_DIR;
-  const space = opts.space ?? process.env.THRONGLETS_SPACE ?? "psyche";
+  const space = opts.space ?? process.env.THRONGLETS_SPACE ?? deriveThrongletsSpace();
   const goal = opts.goal;
   const limit = Math.max(1, Math.min(5, opts.limit ?? DEFAULT_AMBIENT_LIMIT));
   const timeoutMs = Math.max(100, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);

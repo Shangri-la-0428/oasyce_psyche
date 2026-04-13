@@ -8,14 +8,15 @@ import type {
   ThrongletsTraceTaxonomy,
   WritebackCalibrationExport,
 } from "./types.js";
+import { deriveThrongletsSpace } from "./thronglets-bridge.js";
 
 const TAXONOMY_BY_EVENT: Record<ThrongletsExport["kind"], ThrongletsTraceTaxonomy> = {
   "relation-milestone": "coordination",
   "open-loop-anchor": "coordination",
   "continuity-anchor": "continuity",
   "writeback-calibration": "calibration",
-  "self-state": "state",
-  "viability": "state",
+  "self-state": "calibration",
+  "viability": "calibration",
 };
 
 function summarizeLoopTypes(loopTypes: OpenLoopType[]): string {
@@ -58,7 +59,7 @@ export function serializeThrongletsExportAsTrace(
     taxonomy: taxonomyForThrongletsExport(event),
     event: event.kind,
     summary: summarizeThrongletsExport(event),
-    space: opts?.space ?? "psyche",
+    space: opts?.space ?? deriveThrongletsSpace(),
     audit_ref: event.key,
   };
 

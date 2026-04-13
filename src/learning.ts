@@ -26,6 +26,7 @@ import {
   derivePrimarySnapshotMarker,
   markerFromLegacyStimulus,
 } from "./appraisal-markers.js";
+import { resolveRelationshipUserId } from "./relationship-key.js";
 
 // ── 1. OutcomeEvaluator ─────────────────────────────────────
 
@@ -64,9 +65,11 @@ export function evaluateOutcome(
   currentState: PsycheState,
   nextUserStimulus: StimulusType | null,
   appliedStimulus: StimulusType | null,
+  userId?: string,
 ): OutcomeScore {
   const nextUserMarker = learningMarkerFromStimulus(nextUserStimulus);
   const appliedMarker = learningMarkerFromStimulus(appliedStimulus);
+  const relationKey = resolveRelationshipUserId(userId);
 
   // Drive delta: sum of all drive changes, normalized
   let driveSum = 0;
@@ -76,8 +79,8 @@ export function evaluateOutcome(
   const driveDelta = Math.max(-1, Math.min(1, driveSum / 50));
 
   // Relationship delta: change in trust + intimacy of _default relationship
-  const prevRel = prevState.relationships._default ?? { trust: 50, intimacy: 30 };
-  const curRel = currentState.relationships._default ?? { trust: 50, intimacy: 30 };
+  const prevRel = prevState.relationships[relationKey] ?? { trust: 50, intimacy: 30 };
+  const curRel = currentState.relationships[relationKey] ?? { trust: 50, intimacy: 30 };
   const relChange = (curRel.trust - prevRel.trust) + (curRel.intimacy - prevRel.intimacy);
   const relationshipDelta = Math.max(-1, Math.min(1, relChange / 20));
 
@@ -257,10 +260,12 @@ export function updateLearnedVector(
  */
 export function computeContextHash(
   state: PsycheState,
-  _userId?: string,
+  userId?: string,
+  sessionId?: string,
 ): string {
   // Relationship phase
-  const rel = state.relationships._default ?? { phase: "stranger" as const };
+  const relationKey = resolveRelationshipUserId(userId);
+  const rel = state.relationships[relationKey] ?? { phase: "stranger" as const };
   const phase = rel.phase;
 
   // Last 3 canonical residues from emotional history
@@ -283,7 +288,10 @@ export function computeContextHash(
   // survival_safety_connection_esteem_curiosity
   const driveStr = driveLevels.join("");
 
-  return `${phase}:${recentMarkers || "none"}:${driveStr}`;
+  const scope = sessionId?.trim();
+  return scope
+    ? `${phase}:${recentMarkers || "none"}:${driveStr}:session=${scope}`
+    : `${phase}:${recentMarkers || "none"}:${driveStr}`;
 }
 
 // ── 3. PredictionEngine ─────────────────────────────────────

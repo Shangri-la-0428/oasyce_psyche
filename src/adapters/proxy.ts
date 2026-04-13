@@ -23,8 +23,12 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { PsycheEngine } from "../core.js";
 import type { PsycheEngineConfig } from "../core.js";
 import { MemoryStorageAdapter, FileStorageAdapter } from "../storage.js";
-import { isNearBaseline, deriveBehavioralBias } from "../prompt.js";
+import { isNearBaseline } from "../prompt.js";
 import type { Locale, MBTIType, PsycheMode } from "../types.js";
+import {
+  resolveCanonicalResponseContract,
+  renderProxyBehavioralSurface,
+} from "./response-contract-surface.js";
 
 // ── Types ───────────────────────────────────────────────────
 
@@ -141,21 +145,20 @@ export function createPsycheProxy(engine: PsycheEngine, opts: ProxyOptions): Ser
       const parsed: ChatRequest = JSON.parse(rawBody.toString("utf-8"));
       const userMsg = lastUserMessage(parsed.messages);
       const userId = parsed.user ?? undefined;
+      let messages = parsed.messages;
 
       // ── 1. Observe input ────────────────────────────
+      let result: Awaited<ReturnType<typeof engine.processInput>> | null = null;
       if (userMsg) {
-        await engine.processInput(userMsg, { userId });
+        result = await engine.processInput(userMsg, { userId });
       }
 
       // ── 2. Inject behavioral bias (silent when near baseline) ──
       const state = engine.getState();
-      let messages = parsed.messages;
+      const responseContract = result ? resolveCanonicalResponseContract(result) : null;
 
-      if (!isNearBaseline(state)) {
-        const bias = deriveBehavioralBias(state, locale);
-        if (bias) {
-          messages = injectBias(parsed.messages, bias);
-        }
+      if (responseContract && !isNearBaseline(state)) {
+        messages = injectBias(parsed.messages, renderProxyBehavioralSurface(responseContract, locale));
       }
 
       const modifiedBody = JSON.stringify({ ...parsed, messages });

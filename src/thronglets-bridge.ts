@@ -12,6 +12,17 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import type { ThrongletsExport } from "./types.js";
 
+// ── Space derivation ────────────────────────────────────────
+// Same logic as Thronglets' Rust derive_space(): last 2 path components of cwd.
+// Ensures Psyche exports land in the calling project's space, not a global one.
+
+export function deriveThrongletsSpace(): string {
+  const parts = process.cwd().split(/[\\/]/).filter(Boolean);
+  return parts.length >= 2
+    ? parts.slice(-2).join("/")
+    : parts.join("/") || "psyche";
+}
+
 // ── Types ────────────────────────────────────────────────────
 
 interface CommandResult {
@@ -106,7 +117,7 @@ export async function bridgeThrongletsExports(
   const dataDir = opts.dataDir ?? process.env.THRONGLETS_DATA_DIR;
   if (dataDir?.trim()) args.push("--data-dir", dataDir.trim());
   args.push("ingest", "--json");
-  const space = opts.space ?? process.env.THRONGLETS_SPACE ?? "psyche";
+  const space = opts.space ?? process.env.THRONGLETS_SPACE ?? deriveThrongletsSpace();
   if (space) args.push("--space", space);
   if (opts.sessionId) args.push("--session", opts.sessionId);
 

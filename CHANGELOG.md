@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+## v11.9.1 — Space-Aware Thronglets Bridge
+
+- **Derive space from cwd** — all 7 Thronglets bridge entry points now call `deriveThrongletsSpace()` instead of hardcoding `"psyche"`. Psyche exports land in the calling project's space, preventing cross-project signal pollution. Same logic as Thronglets' Rust `derive_space()` (last 2 path components of cwd).
+- Affected adapters: MCP, LangChain, Claude SDK, OpenClaw, ambient-runtime, thronglets-bridge, thronglets-runtime.
+
+## v11.9.0 — Convergence Release
+
+- Convergence release — unified bridge surfaces across adapters, aligned dimension registry usage.
+
 ## v11.8.0 — φ Closure + Constitutive Bridge
 
 - **LoopOutcome feedback** — substrate-independent outcome signal (`aligned`/`diverged`/`partial`) processed into 4D chemistry. Any substrate can report whether its action matched the Loop's intention; core updates order, boundary, and flow accordingly.

@@ -26,6 +26,7 @@ import {
 } from "../ambient-runtime.js";
 import { composePsycheContext, safeProcessInput, safeProcessOutput } from "./fail-open.js";
 import { coerceWritebackSignalInput } from "../writeback-signals.js";
+import { deriveThrongletsSpace } from "../thronglets-bridge.js";
 
 export interface PsycheLangChainOptions {
   ambient?: boolean | ThrongletsAmbientRuntimeOptions;
@@ -78,7 +79,7 @@ export class PsycheLangChain {
       thronglets: ambient
         ? {
             ...(ambient === true ? {} : ambient),
-            space: ambient === true ? "psyche" : (ambient.space ?? "psyche"),
+            space: ambient === true ? deriveThrongletsSpace() : (ambient.space ?? deriveThrongletsSpace()),
           }
         : undefined,
     });

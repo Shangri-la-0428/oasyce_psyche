@@ -137,6 +137,23 @@ describe("evaluateOutcome", () => {
     assert.equal(result.marker, "task");
     assert.equal(result.turnIndex, 42);
   });
+
+  it("uses the requested relationship bucket instead of _default", () => {
+    const prev = makeState({
+      relationships: {
+        _default: { trust: 90, intimacy: 90, phase: "deep" },
+        alice: { trust: 40, intimacy: 20, phase: "acquaintance" },
+      },
+    });
+    const cur = makeState({
+      relationships: {
+        _default: { trust: 90, intimacy: 90, phase: "deep" },
+        alice: { trust: 55, intimacy: 35, phase: "familiar" },
+      },
+    });
+    const result = evaluateOutcome(prev, cur, "praise", "casual", "alice");
+    assert.ok(result.signals.relationshipDelta > 0, `expected alice delta, got ${result.signals.relationshipDelta}`);
+  });
 });
 
 // ── getLearnedVector ────────────────────────────────────────
@@ -400,6 +417,25 @@ describe("computeContextHash", () => {
     const state = makeState({ stateHistory: [] });
     const hash = computeContextHash(state);
     assert.ok(hash.includes(":none:"), `hash should contain ':none:', got ${hash}`);
+  });
+
+  it("uses the requested user's relationship phase instead of _default", () => {
+    const state = makeState({
+      relationships: {
+        _default: { trust: 90, intimacy: 90, phase: "deep" },
+        alice: { trust: 35, intimacy: 25, phase: "acquaintance" },
+      },
+    });
+    const hash = computeContextHash(state, "alice");
+    assert.ok(hash.startsWith("acquaintance:"), `expected alice phase, got ${hash}`);
+  });
+
+  it("includes session scope when provided", () => {
+    const state = makeState();
+    const h1 = computeContextHash(state, "alice", "s1");
+    const h2 = computeContextHash(state, "alice", "s2");
+    assert.notEqual(h1, h2, "different sessions should hash separately");
+    assert.ok(h1.endsWith("session=s1"), `expected session suffix, got ${h1}`);
   });
 });
 
