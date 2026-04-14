@@ -13,6 +13,7 @@
 import type {
   SelfState, StimulusType, DriveType, InnateDrives, Locale,
   TraitDriftState, StateSnapshot, LearningState,
+  AmbientPriorView, FieldEvidence,
 } from "./types.js";
 import { DRIVE_KEYS, DIMENSION_KEYS } from "./types.js";
 
@@ -84,14 +85,60 @@ export function computeMaslowWeights(drives: InnateDrives): Record<DriveType, nu
   };
 }
 
+// ── Field Evidence (environmental exteroception) ────────────
+
+const FIELD_THREAT_SCALE = 15;   // max threat drops survival by 15 from 50
+const FIELD_SUPPORT_SCALE = 5;   // subtle comfort (asymmetric: danger louder than comfort)
+
+/**
+ * Derive environmental drive evidence from Thronglets ambient priors.
+ * Uses max (not sum) — strongest signal wins, prevents unbounded stacking.
+ */
+export function deriveFieldEvidence(priors: readonly AmbientPriorView[]): FieldEvidence {
+  let threat = 0;
+  let support = 0;
+  for (const prior of priors) {
+    if (!prior.kind) continue;
+    if (prior.kind === "failure-residue") {
+      threat = Math.max(threat, prior.confidence);
+    } else if (prior.kind === "success-prior") {
+      support = Math.max(support, prior.confidence);
+    } else if (prior.kind === "mixed-residue") {
+      threat = Math.max(threat, prior.confidence * 0.4);
+    }
+  }
+  return { threat: Math.min(1, threat), support: Math.min(1, support) };
+}
+
+/**
+ * Modulate drives by environmental evidence.
+ * Only survival/safety affected — environmental threat isn't about social/growth needs.
+ */
+function applyFieldEvidence(drives: InnateDrives, evidence: FieldEvidence): InnateDrives {
+  if (evidence.threat === 0 && evidence.support === 0) return drives;
+  return {
+    survival:   Math.max(0, drives.survival - evidence.threat * FIELD_THREAT_SCALE),
+    safety:     Math.max(0, Math.min(100,
+                  drives.safety - evidence.threat * FIELD_THREAT_SCALE * 0.7
+                  + evidence.support * FIELD_SUPPORT_SCALE)),
+    connection: drives.connection,
+    esteem:     drives.esteem,
+    curiosity:  drives.curiosity,
+  };
+}
+
 // ── Effective Baseline (4D homeostatic feedback) ────────────
 
 export function computeEffectiveBaseline(
   baseline: SelfState,
   current: SelfState,
   traitDrift?: TraitDriftState,
+  fieldEvidence?: FieldEvidence,
 ): SelfState {
-  const drives = deriveDriveSatisfaction(current, baseline);
+  let drives = deriveDriveSatisfaction(current, baseline);
+  if (fieldEvidence && (fieldEvidence.threat > 0 || fieldEvidence.support > 0)) {
+    drives = applyFieldEvidence(drives, fieldEvidence);
+  }
   const delta = { order: 0, flow: 0, boundary: 0, resonance: 0 };
   const weights = computeMaslowWeights(drives);
 

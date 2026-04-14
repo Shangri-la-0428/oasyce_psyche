@@ -1,5 +1,13 @@
 # 更新日志 / Changelog
 
+## v11.10.0 — Environmental Drive Evidence (Dendrite)
+
+- **Field evidence shifts homeostatic setpoint** — Thronglets ambient priors (failure-residue, success-prior, mixed-residue) are now constitutive, not just prompt decoration. Environmental threat evidence modulates drives inside `computeEffectiveBaseline()`, shifting the decay target toward vigilance. The agent doesn't "know" it should be careful — its state dynamics naturally produce cautious behavior.
+- **Physics rule, not designed outcome** — one optional parameter on `computeEffectiveBaseline()`. The existing homeostatic cascade (drives → effective baseline → decay → 4D state) handles the rest. No new mechanisms, no new pipelines.
+- **Drives stay pure** — `deriveDriveSatisfaction()` remains position-derived. Field evidence is applied ephemerally inside the baseline computation, never stored. The "drives are derived, not stored" principle is preserved.
+- **Fail-open, bounded, reversible** — no Thronglets → no evidence → no change. Max Δsurvival = 15. Priors expire in Thronglets (7-day TTL) → effect disappears.
+- **Asymmetric by design** — threat signal (scale 15) is louder than comfort signal (scale 5). Negativity bias is survival-rational.
+
 ## v11.9.1 — Space-Aware Thronglets Bridge
 
 - **Derive space from cwd** — all 7 Thronglets bridge entry points now call `deriveThrongletsSpace()` instead of hardcoding `"psyche"`. Psyche exports land in the calling project's space, preventing cross-project signal pollution. Same logic as Thronglets' Rust `derive_space()` (last 2 path components of cwd).
