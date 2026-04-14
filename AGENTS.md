@@ -119,6 +119,26 @@ Psyche makes a Loop's behavior *richer* — not just "different state → differ
 - Psyche的drives崩溃 → 个体停止向场贡献信号 → Chain的liveness decay自然触发dissolution
 - Psyche不需要知道DISSOLVE的存在——它只是停止心跳，Chain处理后果
 - v11.8.0的constitutive bridge确保任何用Psyche的agent自动向Thronglets写入self-state（场贡献）
+- v11.10.0的environmental drive evidence完成了双向闭环：Thronglets ambient priors → 恒稳态设定点调节 → 场的状态反过来影响个体的内在动力学
+
+### Environmental Drive Evidence (v11.10.0)
+
+Psyche现在能"感知环境"——Thronglets的ambient priors（failure-residue, success-prior）不再只是prompt装饰，而是constitutive地调节恒稳态设定点。
+
+```
+Thronglets ambient_priors → deriveFieldEvidence() → {threat, support}
+  → computeEffectiveBaseline(…, fieldEvidence)
+  → drives内部调制 → 衰减目标偏移
+  → 4D状态自然漂移 → 行为涌现式改变
+```
+
+- **threat**（failure-residue → survival/safety drive下降 → boundary↑ order↓ → 谨慎行为）
+- **support**（success-prior → safety微升 → 稳定）
+- **不对称**: 威胁信号（scale 15）比安慰信号（scale 5）更强——否定偏见是生存理性的
+- **fail-open**: Thronglets不可用 → 空priors → 零效果
+- **drives保持纯函数**: `deriveDriveSatisfaction()`不变，field evidence仅在`computeEffectiveBaseline`内部临时应用
+
+这是物理规则（"环境压力改变恒稳态目标"），不是设计结果（没人指定"遇到danger要小心"）。
 
 ### What Psyche does NOT provide
 

@@ -974,6 +974,20 @@ export interface AmbientPriorView {
   refs?: string[];
 }
 
+// ── Field Evidence (environmental exteroception) ────────────
+
+/**
+ * Environmental drive evidence derived from Thronglets ambient priors.
+ * Two scalars: absence of threat ≠ active support.
+ * Ephemeral — computed per turn, never stored.
+ */
+export interface FieldEvidence {
+  /** Environmental threat level [0, 1]. From failure-residue priors. */
+  threat: number;
+  /** Environmental support level [0, 1]. From success-prior priors. */
+  support: number;
+}
+
 // ── Sparse Psyche → Thronglets Export ABI (v9.2.8) ─────────
 
 export type ThrongletsExportSubject = "delegate" | "session";

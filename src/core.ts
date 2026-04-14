@@ -32,6 +32,7 @@ import {
 import {
   detectExistentialThreat, deriveDriveSatisfaction,
   computeEffectiveBaseline, computeEffectiveSensitivity,
+  deriveFieldEvidence,
 } from "./drives.js";
 import { mergeAppraisalResidue } from "./appraisal.js";
 import { checkForUpdate, getPackageVersion } from "./update.js";
@@ -540,11 +541,16 @@ export class PsycheEngine {
     // ── Snapshot pre-interaction state for next turn's outcome evaluation
     const preInteractionState = { ...state };
 
+    // ── Early field evidence (before decay) ────────────────
+    const ambientPriors = normalizeAmbientPriors(opts?.ambientPriors);
+    const fieldEvidence = deriveFieldEvidence(ambientPriors);
+
     // Time decay toward baseline (chemistry + drives)
     const minutesElapsed = (now.getTime() - new Date(state.updatedAt).getTime()) / 60000;
     if (minutesElapsed >= 1) {
       // Compute effective baseline from current 4D position (drives are derived, not stored)
-      const effectiveBaseline = computeEffectiveBaseline(state.baseline, state.current, state.traitDrift);
+      // Field evidence shifts the homeostatic setpoint: environmental threat → vigilance target
+      const effectiveBaseline = computeEffectiveBaseline(state.baseline, state.current, state.traitDrift, fieldEvidence);
       // P12: Apply circadian rhythm modulation to effective baseline
       const circadianBaseline = computeCircadianModulation(now, effectiveBaseline);
       // Derive drives from current position for state persistence
@@ -819,7 +825,7 @@ export class PsycheEngine {
     }
 
     const writebackNote = formatWritebackFeedbackNote(writebackFeedback, locale);
-    const ambientPriors = normalizeAmbientPriors(opts?.ambientPriors);
+    // ambientPriors already normalized above (before decay phase)
     const activePolicy = resolveRuntimeActivePolicy(
       opts?.activePolicy,
       opts?.currentTurnCorrection,

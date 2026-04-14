@@ -4,10 +4,10 @@ import {
   detectExistentialThreat,
   computeEffectiveBaseline, computeEffectiveSensitivity,
   computeMaslowWeights, buildDriveContext, hasCriticalDrive,
-  updateTraitDrift, deriveDriveSatisfaction,
+  updateTraitDrift, deriveDriveSatisfaction, deriveFieldEvidence,
 } from "../src/drives.js";
 import { DEFAULT_DRIVES, DEFAULT_TRAIT_DRIFT } from "../src/types.js";
-import type { InnateDrives, SelfState, TraitDriftState, StateSnapshot, LearningState } from "../src/types.js";
+import type { InnateDrives, SelfState, TraitDriftState, StateSnapshot, LearningState, AmbientPriorView } from "../src/types.js";
 
 /**
  * Reverse-map target drive values to a SelfState (current position)
@@ -753,5 +753,85 @@ describe("trait drift accumulator boundaries", () => {
     const result = updateTraitDrift(drift, history, learning);
     assert.ok(result.accumulators.praiseExposure <= 100,
       `praiseExposure should not exceed 100, got ${result.accumulators.praiseExposure}`);
+  });
+});
+
+// ── deriveFieldEvidence ───────────────────────────────────────
+
+function makePrior(overrides: Partial<AmbientPriorView> = {}): AmbientPriorView {
+  return { summary: "test", confidence: 0.5, ...overrides };
+}
+
+describe("deriveFieldEvidence", () => {
+  it("returns zero evidence for empty priors", () => {
+    const e = deriveFieldEvidence([]);
+    assert.equal(e.threat, 0);
+    assert.equal(e.support, 0);
+  });
+
+  it("derives threat from failure-residue confidence", () => {
+    const e = deriveFieldEvidence([makePrior({ kind: "failure-residue", confidence: 0.8 })]);
+    assert.equal(e.threat, 0.8);
+    assert.equal(e.support, 0);
+  });
+
+  it("derives support from success-prior confidence", () => {
+    const e = deriveFieldEvidence([makePrior({ kind: "success-prior", confidence: 0.9 })]);
+    assert.equal(e.threat, 0);
+    assert.equal(e.support, 0.9);
+  });
+
+  it("mixed-residue contributes 40% to threat", () => {
+    const e = deriveFieldEvidence([makePrior({ kind: "mixed-residue", confidence: 0.7 })]);
+    assert.ok(Math.abs(e.threat - 0.28) < 0.001, `threat should be ~0.28, got ${e.threat}`);
+    assert.equal(e.support, 0);
+  });
+
+  it("takes max across multiple priors of same kind", () => {
+    const e = deriveFieldEvidence([
+      makePrior({ kind: "failure-residue", confidence: 0.3 }),
+      makePrior({ kind: "failure-residue", confidence: 0.9 }),
+    ]);
+    assert.equal(e.threat, 0.9);
+  });
+
+  it("ignores priors without kind", () => {
+    const e = deriveFieldEvidence([makePrior({ kind: undefined, confidence: 1.0 })]);
+    assert.equal(e.threat, 0);
+    assert.equal(e.support, 0);
+  });
+});
+
+// ── computeEffectiveBaseline with field evidence ──────────────
+
+describe("computeEffectiveBaseline with field evidence", () => {
+  const BASE: SelfState = { order: 50, flow: 50, boundary: 50, resonance: 50 };
+
+  it("no evidence produces same result as without parameter", () => {
+    const without = computeEffectiveBaseline(BASE, BASE);
+    const withZero = computeEffectiveBaseline(BASE, BASE, undefined, { threat: 0, support: 0 });
+    for (const dim of ["order", "flow", "boundary", "resonance"] as const) {
+      assert.ok(Math.abs(without[dim] - withZero[dim]) < 0.001,
+        `${dim}: ${without[dim]} vs ${withZero[dim]}`);
+    }
+  });
+
+  it("max threat shifts baseline toward vigilance (boundary↑, order↓)", () => {
+    const noThreat = computeEffectiveBaseline(BASE, BASE);
+    const maxThreat = computeEffectiveBaseline(BASE, BASE, undefined, { threat: 1.0, support: 0 });
+    assert.ok(maxThreat.boundary > noThreat.boundary,
+      `boundary should increase under threat: ${maxThreat.boundary} > ${noThreat.boundary}`);
+    assert.ok(maxThreat.order < noThreat.order,
+      `order should decrease under threat: ${maxThreat.order} < ${noThreat.order}`);
+  });
+
+  it("support slightly stabilizes baseline", () => {
+    // Start with slightly depleted position so drives are below 50
+    const depleted: SelfState = { order: 45, flow: 50, boundary: 45, resonance: 50 };
+    const noSupport = computeEffectiveBaseline(BASE, depleted);
+    const withSupport = computeEffectiveBaseline(BASE, depleted, undefined, { threat: 0, support: 1.0 });
+    // Support raises safety → reduces safety deficit → less boundary stiffening
+    assert.ok(withSupport.boundary <= noSupport.boundary,
+      `boundary should not increase further with support: ${withSupport.boundary} <= ${noSupport.boundary}`);
   });
 });

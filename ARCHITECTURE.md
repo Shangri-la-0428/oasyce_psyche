@@ -221,6 +221,19 @@ v9.0 把“反向 baseline test”引入主体性方向。v9.2.9 则进一步把
 
 都属于 `Thronglets` runtime，而不是 `Psyche` core。这样边界才保持单一真相源：`Psyche` 产出稀疏外化痕迹，`Thronglets` 决定这些痕迹如何在共享环境里衰减、降级或上升。
 
+### 2.6 Environmental Drive Evidence (`drives.ts`, v11.10.0)
+
+ambient priors 从 Thronglets 到达 Psyche 后，不再止步于 prompt 文本。`deriveFieldEvidence()` 将 priors 转化为 `FieldEvidence { threat, support }`，传入 `computeEffectiveBaseline()` 内部调制驱力，从而改变恒稳态衰减目标。
+
+关键设计约束：
+- **drives 保持纯导出**：`deriveDriveSatisfaction()` 签名不变，field evidence 仅在 `computeEffectiveBaseline` 内部临时作用于导出的驱力值
+- **不对称**：FIELD_THREAT_SCALE = 15, FIELD_SUPPORT_SCALE = 5. 威胁比安慰更强——否定偏见是生存理性的
+- **只影响 survival/safety**：环境威胁不关社交/成长需求
+- **fail-open**：Thronglets 不可用 → 空 priors → `{0, 0}` → 无效果
+- **不存储**：`FieldEvidence` 是每轮临时计算的，不进入 PsycheState
+
+这是场 → 个体反向通道的实现。v11.8.0 建立了 Psyche → Thronglets（轴突），v11.10.0 建立了 Thronglets → Psyche（树突）。双向闭环完成。
+
 ### 3. AI-first ABI + 双回应 profile (`subjectivity.ts`, `response-contract.ts`, `host-controls.ts`)
 
 `processInput()` 现在除了 prompt 文本，还会直接返回：
